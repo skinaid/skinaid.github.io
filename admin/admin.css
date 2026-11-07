@@ -57,9 +57,9 @@ body.is-admin { overflow-x: auto; }
 .bk[data-status="new"] { border-left-color: var(--gold); }
 .bk[data-status="contacted"] { border-left-color: var(--purple-400); }
 .bk[data-status="confirmed"] { border-left-color: #2f9e6b; }
-.bk[data-status="cancelled"] { border-left-color: #c6c0ce; opacity: .8; }
+.bk[data-status="cancelled"] { border-left-color: #c6c0ce; background: var(--cream-50); } /* opacity биш — текстийн контраст хадгална */
 .bk__who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.bk__who h3 { font-size: 17px; font-weight: 800; color: var(--purple-900); }
+.bk__who h3 { font-size: 17px; font-weight: 800; color: var(--purple-900); overflow-wrap: anywhere; min-width: 0; }
 .bk__who a { color: var(--purple); font-weight: 700; }
 .bk__when { font-size: 12.5px; color: var(--muted); text-align: right; white-space: nowrap; }
 .bk__row { font-size: 14px; color: var(--ink-2); display: grid; gap: 4px; grid-column: 1 / -1; }
@@ -115,6 +115,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width
   .side__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .side__title { display: none; }
   .bk { grid-template-columns: 1fr; }
-  .bk__when { text-align: left; }
+  .bk__when { text-align: left; white-space: normal; }
   .bk__ctl { grid-template-columns: 1fr; }
 }

@@ -547,7 +547,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .promo__gift span { display: block; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--gold); }
 .promo__gift strong { display: block; font-family: var(--font-display); font-size: 32px; line-height: 1.1; margin: 4px 0 6px; font-weight: 800; letter-spacing: -0.02em; }
 .promo__gift small { display: block; font-size: 12.5px; color: rgba(255, 255, 255, .7); line-height: 1.4; }
-.packs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+.packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; } /* admin-аас багц нуухад үлдсэн нь мөрийг дүүргэнэ */
 .pack {
   --pack: #641c25; position: relative; border-radius: var(--r-lg); padding: 26px 22px; min-height: 360px;
   background: var(--pack);
@@ -640,3 +640,4 @@ ul { margin: 0; padding: 0; list-style: none; }
 .hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
 .btn[disabled] { opacity: .65; cursor: progress; transform: none; box-shadow: none; }
 .form__ok--warn { background: var(--gold-100); border-color: var(--gold); }
+[data-site~="hours"] { white-space: pre-line; } /* admin-ийн олон мөрт ажлын цаг */

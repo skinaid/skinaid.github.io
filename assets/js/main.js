@@ -203,13 +203,17 @@
   // Анхдагч утга HTML-тэй ижил; settings/site баримт байвал applySite() шинэчилнэ.
   const SITE = { phone: '7600-0505', email: 'info@skinaid.mn', messenger: 'https://m.me/Skinaid.mn', bookingEnabled: true };
   const telHref = (phone) => {
-    const digits = String(phone || '').replace(/[^0-9+]/g, '');
-    return 'tel:' + (digits.startsWith('+') ? digits : '+976' + digits);
+    const d = String(phone || '').replace(/[^0-9+]/g, '');
+    if (d.startsWith('+')) return 'tel:' + d;
+    if (d.startsWith('976') && d.length === 11) return 'tel:+' + d;   // «976 7600 0505» — улсын код аль хэдийн бий
+    return 'tel:+976' + d;
   };
+  let manualMode = () => {};   // маягтын хэсэгт тодорхойлогдоно: Firestore-гүй «өөрөө дамжуулах» горим
   const hideEl = (el) => { el.style.display = 'none'; };
   const applySite = (site) => {
     if (!site || typeof site !== 'object') return;
     if (typeof site.bookingEnabled === 'boolean') SITE.bookingEnabled = site.bookingEnabled;
+    if (SITE.bookingEnabled === false) manualMode();
     const hours = typeof site.hours === 'string' ? site.hours.trim() : '';
     if (hours) $$('[data-site~="hours"]').forEach(el => { el.textContent = hours; });
     const phone = typeof site.phone === 'string' ? site.phone.trim() : '';
@@ -231,7 +235,7 @@
   };
   const applyCatalog = (cat) => {
     if (!cat || typeof cat !== 'object') return;
-    if (Array.isArray(cat.services) && cat.services.length) {
+    if (Array.isArray(cat.services)) {   // хадгалсан массив байвал тэр нь эцсийн: хоосон бол сайт ч хоосон харуулна
       const list = cat.services
         .filter(sv => sv && typeof sv === 'object' && !sv.hidden && typeof sv.n === 'string' && sv.n.trim())
         .map(sv => ({
@@ -240,7 +244,7 @@
           n: sv.n.trim(), d: typeof sv.d === 'string' ? sv.d : '',
           t: typeof sv.t === 'string' ? sv.t : '', p: typeof sv.p === 'string' ? sv.p : '',
         }));
-      if (list.length) { TREATMENTS = list; renderTreatments(); }
+      TREATMENTS = list; renderTreatments();
     }
     if (Array.isArray(cat.packages)) {
       cat.packages.forEach(pk => {
@@ -257,6 +261,9 @@
           if (rest.length) { const em = document.createElement('em'); em.textContent = rest.join(' '); title.appendChild(em); }
         }
       });
+      const visible = $$('[data-pack]').filter(c => c.style.display !== 'none').length;
+      const cnt = $('[data-pack-count]'); if (cnt) cnt.textContent = visible + ' онцгой багц';
+      if (visible === 0) { const promo = $('#promo'); if (promo) hideEl(promo); $$('a[href="#promo"]').forEach(a => hideEl(a.closest('li') || a)); }
     }
   };
   const applySettings = (s) => { if (!s) return; applySite(s.site); applyCatalog(s.catalog); };
@@ -268,16 +275,27 @@
   if (form) {
     const ok = $('.form__ok', form);
     const submitBtn = $('button[type="submit"]', form);
-    const submitLabel = submitBtn ? submitBtn.textContent : '';
+    const bookStatus = $('#bookStatus');
+    const nameEl = $('#f-name', form), phoneEl = $('#f-phone', form);
+    let submitLabel = submitBtn ? submitBtn.textContent : '';
     let busy = false;
 
     const setBusy = (on) => {
       busy = on;
+      if (bookStatus) bookStatus.textContent = on ? 'Хүсэлт илгээж байна…' : '';
       if (!submitBtn) return;
       submitBtn.disabled = on;
       submitBtn.setAttribute('aria-busy', String(on));
       submitBtn.textContent = on ? 'Илгээж байна…' : submitLabel;
     };
+    // Firestore ашиглахгүй горим (admin унтраасан эсвэл backend.js ачаалагдаагүй): маягтын текст өмнөх «өөрөө дамжуулах» хэлбэрт
+    manualMode = () => {
+      const p = $('p', form); if (p) p.textContent = 'Маягтаа бөглөөд Messenger, и-мэйл эсвэл утсаар бидэнд дамжуулна уу. Зөвлөх тантай холбогдож цагийг баталгаажуулна.';
+      submitLabel = 'Үргэлжлүүлэх';
+      if (submitBtn && !busy) submitBtn.textContent = submitLabel;
+    };
+    document.addEventListener('skinaid:backend-failed', manualMode);
+    [nameEl, phoneEl].forEach(el => { if (el) el.addEventListener('input', () => el.setCustomValidity('')); });
     const withTimeout = (p, ms) => new Promise((res, rej) => {
       const t = setTimeout(() => rej(new Error('timeout')), ms);
       Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, err => { clearTimeout(t); rej(err); });
@@ -298,7 +316,10 @@
     };
     const wireEdit = () => {
       const b = $('[data-edit]', ok);
-      if (b) b.addEventListener('click', () => { form.classList.remove('is-sent'); ok.classList.remove('form__ok--warn'); });
+      if (b) b.addEventListener('click', () => {
+        form.classList.remove('is-sent'); ok.classList.remove('form__ok--warn');
+        if (nameEl) nameEl.focus({ preventScroll: true });   // фокус панелтай хамт алга болохгүй
+      });
     };
 
     // Амжилттай: хүсэлт Firestore-д бүртгэгдсэн
@@ -341,8 +362,13 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (busy) return;
-      if (!form.reportValidity()) return;
       const d = Object.fromEntries(new FormData(form).entries());
+      // Backend-тэй ижил хэвшүүлсэн утгаар шалгана (зөвхөн зай, 1 үсэг гэх мэт) — fallback биш талбарын алдаа харуулна
+      const nameN = String(d.name || '').replace(/\s+/g, ' ').trim();
+      const phoneDigits = String(d.phone || '').replace(/[^0-9]/g, '');
+      if (nameEl) nameEl.setCustomValidity(nameN.length < 2 ? 'Нэрээ дор хаяж 2 тэмдэгтээр бичнэ үү' : '');
+      if (phoneEl) phoneEl.setCustomValidity(phoneDigits.length < 8 ? 'Утасны дугаар дор хаяж 8 оронтой байна' : '');
+      if (!form.reportValidity()) return;
       const text = buildText(d);
 
       // Honeypot: далд талбарыг зөвхөн бот бөглөнө — юу ч бичилгүй "амжилттай" гэж харуулна
@@ -353,11 +379,16 @@
         showFallback(d, text, ''); finish(); return;
       }
       setBusy(true);
+      const pending = backend.submitBooking({ name: d.name, phone: d.phone, service: d.service, date: d.date, message: d.message });
       try {
-        await withTimeout(backend.submitBooking({ name: d.name, phone: d.phone, service: d.service, date: d.date, message: d.message }), 12000);
+        await withTimeout(pending, 12000);
         showSuccess(d);
       } catch (err) {
         showFallback(d, text, 'Автомат бүртгэл түр амжилтгүй боллоо.');
+        // Удаан сүлжээнд бичилт 12с-ийн дараа амжилттай болбол fallback-ийг амжилттай панелаар солино (давхар захиалга гарахгүй)
+        pending.then(() => {
+          if (form.classList.contains('is-sent') && ok.classList.contains('form__ok--warn')) { showSuccess(d); ok.focus({ preventScroll: true }); }
+        }, () => {});
       } finally {
         setBusy(false);
       }

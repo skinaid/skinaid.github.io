@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/css/style.css?v=20261108b">
-  <link rel="stylesheet" href="admin.css?v=20261108b">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20261108c">
+  <link rel="stylesheet" href="admin.css?v=20261108c">
   <link rel="icon" type="image/png" sizes="48x48" href="../assets/img/favicon-48.png">
 </head>
 <body class="is-admin">
@@ -38,7 +38,7 @@
       <a class="side__logo" href="../" aria-label="SkinAid сайт"><img src="../assets/img/logo-white.png" alt="SkinAid" width="480" height="121"></a>
       <div class="side__title">Модулиуд</div>
       <nav class="menu" aria-label="Модулиуд">
-        <button type="button" data-view="bookings" aria-current="page"><span>Захиалга</span><span class="count" id="newCount" aria-label="Шинэ захиалга">0</span></button>
+        <button type="button" data-view="bookings" aria-current="page"><span>Захиалга</span><span class="count" id="newCount"><span class="sr-only">шинэ: </span><span data-n>0</span></span></button>
         <button type="button" data-view="settings"><span>Тохиргоо</span></button>
         <button type="button" data-view="catalog"><span>Үйлчилгээ / Багц</span></button>
       </nav>
@@ -58,8 +58,12 @@
         <div class="toolbar">
           <div class="chips" id="bkChips" role="group" aria-label="Статусаар шүүх"></div>
           <span class="toolbar__meta" id="bkMeta" role="status"></span>
+          <button class="btn btn--ghost btn--sm" type="button" id="bkBulk" hidden>Шүүсэн бүгдийг устгах</button>
         </div>
-        <div class="cards" id="bkList" aria-live="polite"></div>
+        <div class="cards" id="bkList"></div>
+        <div class="actions" style="justify-content:center;margin-top:14px">
+          <button class="btn btn--outline btn--sm" type="button" id="bkMore" hidden>Цааш ачаалах (хуучин захиалгууд)</button>
+        </div>
       </section>
 
       <!-- Модуль: Тохиргоо -->
@@ -139,6 +143,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="../assets/js/catalog-defaults.js?v=20261108a"></script>
-  <script type="module" src="admin.js?v=20261108a"></script>
+  <script type="module" src="admin.js?v=20261108b"></script>
 </body>
 </html>

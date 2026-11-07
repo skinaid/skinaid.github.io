@@ -5,7 +5,7 @@
    ========================================================================== */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_EMAILS } from '../assets/js/firebase-config.js';
 
 const app = initializeApp(firebaseConfig);
@@ -16,7 +16,12 @@ const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => Array.from(c.querySelectorAll(s));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 const str = (v, max) => (typeof v === 'string' ? v : '').trim().slice(0, max);
-const telHref = (phone) => { const d = String(phone || '').replace(/[^0-9+]/g, ''); return 'tel:' + (d.startsWith('+') ? d : '+976' + d); };
+const telHref = (phone) => {
+  const d = String(phone || '').replace(/[^0-9+]/g, '');
+  if (d.startsWith('+')) return 'tel:' + d;
+  if (d.startsWith('976') && d.length === 11) return 'tel:+' + d;
+  return 'tel:+976' + d;
+};
 const DEFAULTS = window.SKINAID_DEFAULTS || { cats: {}, treatments: [], packages: [] };
 const CATS = DEFAULTS.cats || {};
 const STATUS = { new: 'Шинэ', contacted: 'Холбогдсон', confirmed: 'Баталгаажсан', cancelled: 'Цуцалсан' };
@@ -25,8 +30,9 @@ const TITLE = 'SkinAid — Удирдлага';
 const fmtDate = (ts) => {
   const d = ts && typeof ts.toDate === 'function' ? ts.toDate() : (ts instanceof Date ? ts : null);
   if (!d) return '—';
-  try { return new Intl.DateTimeFormat('mn-MN', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d); }
-  catch (_) { return d.toLocaleString(); }
+  // 2026-11-07 18:12 (Улаанбаатарын цаг, 24 цагийн формат) — sv-SE locale ISO маягаар гаргадаг
+  try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d).replace(',', ''); }
+  catch (_) { return d.toISOString().slice(0, 16).replace('T', ' '); }
 };
 const errText = (e) => {
   const code = (e && e.code) || '';
@@ -34,6 +40,7 @@ const errText = (e) => {
     'permission-denied': 'Эрх хүрэхгүй: Firestore дүрэм энэ үйлдлийг татгалзлаа.',
     'unavailable': 'Firestore-той түр холбогдож чадсангүй. Сүлжээгээ шалгаад дахин оролдоно уу.',
     'unauthenticated': 'Нэвтрэлт дууссан байна. Дахин нэвтэрнэ үү.',
+    'resource-exhausted': 'Өдрийн үнэгүй квот (Spark) дууссан байна. Улаанбаатарын цагаар өглөө ~16:00-д шинэчлэгдэнэ — дараа нь «Дахин холбогдох» дарна уу.',
     'auth/popup-closed-by-user': 'Нэвтрэх цонх хаагдлаа.',
     'auth/cancelled-popup-request': 'Нэвтрэх цонх хаагдлаа.',
     'auth/popup-blocked': 'Браузер popup цонхыг блоклосон байна. Энэ сайтад popup зөвшөөрөөд дахин оролдоно уу.',
@@ -110,9 +117,14 @@ $$('.menu button').forEach(b => b.addEventListener('click', () => {
    Модуль 1: Захиалга (realtime)
    ========================================================================== */
 const bkList = $('#bkList'), bkChips = $('#bkChips'), bkMeta = $('#bkMeta'), newCount = $('#newCount'), btnNotify = $('#btnNotify');
+const bkMore = $('#bkMore'), bkBulk = $('#bkBulk');
+const PAGE = 300;
+let pageLimit = PAGE;       // «Цааш» дарахад PAGE-ээр нэмэгдэж дахин бүртгүүлнэ (хуучин захиалга ч харагдана)
 let bookings = [];
 let knownIds = null;        // анхны snapshot-оос хойш шинээр ирснийг таних
+let newestKnownMs = 0;      // хуучин doc цонхонд буцаж орж ирэхэд «шинэ» гэж дуугарахгүй
 let filter = 'all';
+const createdMs = (b) => (b && b.createdAt && typeof b.createdAt.toMillis === 'function') ? b.createdAt.toMillis() : 0;
 
 bkChips.innerHTML = [['all', 'Бүгд'], ...Object.entries(STATUS)].map(([k, v], i) =>
   `<button class="chip${i === 0 ? ' is-active' : ''}" type="button" data-f="${k}" aria-pressed="${i === 0}">${v} <span data-n></span></button>`).join('');
@@ -143,6 +155,7 @@ const cardHTML = (b) => `
   </div>`;
 
 const renderBookings = () => {
+  const focused = document.activeElement;   // бичиж байсан textarea-ийн фокусыг дахин зурсны дараа сэргээнэ
   const existing = new Map($$('.bk', bkList).map(el => [el.dataset.id, el]));
   const frag = document.createDocumentFragment();
   bookings.forEach(b => {
@@ -159,10 +172,11 @@ const renderBookings = () => {
   });
   existing.forEach(el => el.remove());
   bkList.replaceChildren(frag);
+  if (focused && bkList.contains(focused)) focused.focus({ preventScroll: true });
   if (!bookings.length) bkList.innerHTML = '<div class="empty">Одоогоор захиалга байхгүй. Сайтын маягтаар ирсэн хүсэлт энд шууд харагдана.</div>';
   applyFilter();
   const n = bookings.filter(b => b.status === 'new').length;
-  newCount.textContent = String(n); newCount.classList.toggle('is-on', n > 0);
+  $('[data-n]', newCount).textContent = String(n); newCount.classList.toggle('is-on', n > 0);
   document.title = (n ? `(${n}) ` : '') + TITLE;
   const counts = { all: bookings.length };
   bookings.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
@@ -171,26 +185,60 @@ const renderBookings = () => {
 const applyFilter = () => {
   let shown = 0;
   $$('.bk', bkList).forEach(el => { const on = filter === 'all' || el.dataset.status === filter; el.hidden = !on; if (on) shown++; });
-  bkMeta.textContent = bookings.length ? `${shown} захиалга харуулж байна` : '';
+  const capped = bookings.length >= pageLimit;
+  bkMeta.textContent = bookings.length ? `${shown} захиалга харуулж байна${capped ? ` (зөвхөн сүүлийн ${pageLimit} — хуучныг «Цааш ачаалах» дарж татна)` : ''}` : '';
+  bkBulk.hidden = filter === 'all' || shown === 0;
+  bkBulk.textContent = `«${STATUS[filter] || ''}» төлөвтэй ${shown}-ийг устгах`;
 };
 
 const startBookings = () => {
   if (stopBookings) stopBookings();
-  const q = query(collection(db, 'bookings'), orderBy('createdAt', 'desc'), limit(300));
+  const q = query(collection(db, 'bookings'), orderBy('createdAt', 'desc'), limit(pageLimit));
   stopBookings = onSnapshot(q, (snap) => {
     bookings = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (knownIds) {
-      const fresh = snap.docChanges().filter(ch => ch.type === 'added' && !knownIds.has(ch.doc.id));
-      if (fresh.length) notifyNew(fresh.map(ch => ch.doc.data()));
+      // Зөвхөн үнэхээр шинэ (status=new, өмнө мэдэгдэж байснаас хожуу үүссэн) doc-д мэдэгдэнэ;
+      // устгасны дараа цонхонд буцаж орж ирсэн хуучин захиалга эсвэл «Цааш» дарахад татагдсан doc-д биш
+      const fresh = snap.docChanges()
+        .filter(ch => ch.type === 'added' && !knownIds.has(ch.doc.id))
+        .map(ch => ({ id: ch.doc.id, ...ch.doc.data() }))
+        .filter(b => b.status === 'new' && createdMs(b) > newestKnownMs);
+      if (fresh.length) notifyNew(fresh);
     }
     knownIds = new Set(snap.docs.map(d => d.id));
+    newestKnownMs = Math.max(newestKnownMs, ...bookings.map(createdMs));
+    bkMore.hidden = snap.size < pageLimit; bkMore.disabled = false;
     renderBookings();
-  }, (e) => { toast(errText(e)); bkList.innerHTML = `<div class="empty">${esc(errText(e))}</div>`; });
+  }, (e) => {
+    toast(errText(e));
+    bkList.innerHTML = `<div class="empty">${esc(errText(e))}<br><br><button class="btn btn--outline btn--sm" type="button" data-act="retry">Дахин холбогдох</button></div>`;
+  });
 };
+bkMore.addEventListener('click', () => { pageLimit += PAGE; bkMore.disabled = true; startBookings(); });
+
+/* Спам цэвэрлэх: одоогийн шүүлтийн (нэг төлөвийн) бүх захиалгыг багцаар устгана — 2 удаа баталгаажуулна */
+bkBulk.addEventListener('click', async () => {
+  if (filter === 'all') return;
+  const targets = bookings.filter(b => b.status === filter);
+  if (!targets.length) return;
+  if (!confirm(`«${STATUS[filter]}» төлөвтэй ${targets.length} захиалгыг БҮГДИЙГ нь бүр мөсөн устгах уу? Буцаах боломжгүй.`)) return;
+  if (!confirm(`Дахин баталгаажуулна уу: ${targets.length} захиалга устгана.`)) return;
+  bkBulk.disabled = true;
+  try {
+    for (let i = 0; i < targets.length; i += 400) {
+      const batch = writeBatch(db);
+      targets.slice(i, i + 400).forEach(b => batch.delete(doc(db, 'bookings', b.id)));
+      await batch.commit();
+    }
+    toast(`${targets.length} захиалга устгагдлаа`);
+  } catch (e) { toast(errText(e)); }
+  finally { bkBulk.disabled = false; }
+});
 
 bkList.addEventListener('input', (e) => { const card = e.target.closest('.bk'); if (card) card.dataset.dirty = '1'; });
 bkList.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-act]'); if (!btn) return;
+  if (btn.dataset.act === 'retry') { startBookings(); return; }
   const card = btn.closest('.bk'); const id = card.dataset.id;
   const ref = doc(db, 'bookings', id);
   if (btn.dataset.act === 'del') {
@@ -266,7 +314,10 @@ siteForm.addEventListener('submit', async (e) => {
     updatedBy: currentUser.email,
   };
   if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) { setStatus(siteStatus, 'И-мэйл хаяг буруу байна.', 'err'); return; }
-  if (data.phone && !/^[-0-9+ ]+$/.test(data.phone)) { setStatus(siteStatus, 'Утас зөвхөн тоо, +, зай, зураас агуулна.', 'err'); return; }
+  if (data.phone) {
+    const digits = data.phone.replace(/[^0-9]/g, '');
+    if (!/^[-0-9+ ]+$/.test(data.phone) || digits.length < 7 || digits.length > 12) { setStatus(siteStatus, 'Нэг утасны дугаар оруулна уу (7–12 орон, жишээ: 7600-0505). Хоёр дугаар бичиж болохгүй.', 'err'); return; }
+  }
   const btn = $('#btnSaveSite'); btn.disabled = true;
   setStatus(siteStatus, 'Хадгалж байна…', '');
   try { await setDoc(siteRef, data); setStatus(siteStatus, 'Хадгалагдлаа — сайт дээр дараагийн ачааллаас харагдана.', 'ok'); toast('Тохиргоо хадгалагдлаа'); }
@@ -352,6 +403,7 @@ $('#catForm').addEventListener('submit', async (e) => {
   const services = readRows(svcBody, ['c', 'n', 'd', 't', 'p', 'hidden']).map(normSvc).filter(s => s.n);
   const packages = readRows(pkgBody, ['name', 'price', 'hidden']).map(normPkg);
   if (services.length > 200) { setStatus(catStatus, 'Үйлчилгээ 200-аас ихгүй байна.', 'err'); return; }
+  if (!services.some(s => !s.hidden) && !confirm('Нэг ч үйлчилгээ харагдахгүй болно — сайтын жагсаалт хоосон гарна. Үргэлжлүүлэх үү?')) return;
   const btn = $('#btnSaveCat'); btn.disabled = true;
   setStatus(catStatus, 'Хадгалж байна…', '');
   try {
