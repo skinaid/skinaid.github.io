@@ -634,3 +634,8 @@ ul { margin: 0; padding: 0; list-style: none; }
   .trust { flex-direction: column; align-items: flex-start; }
   .cta__pay { justify-content: flex-start; }
 }
+
+/* ---------- Firebase захиалга: honeypot, илгээж буй төлөв, fallback анхааруулга ---------- */
+.hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.btn[disabled] { opacity: .65; cursor: progress; transform: none; box-shadow: none; }
+.form__ok--warn { background: var(--gold-100); border-color: var(--gold); }

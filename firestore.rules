@@ -1,0 +1,80 @@
+rules_version = '2';
+
+// SkinAid — Firestore аюулгүй байдлын дүрэм
+// Нийтлэх: Firebase console → Firestore Database → Rules → энэ файлыг буулгаад Publish
+// (эсвэл `firebase deploy --only firestore:rules`).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Туслах функцууд ----------
+    // Admin = Google-ээр нэвтэрсэн, и-мэйл нь баталгаажсан, доорх жагсаалтад байгаа.
+    // Шинэ admin нэмэх: и-мэйлийг энд нэмээд дүрмийг дахин Publish хийнэ.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['hello@skinaid.mn', 'info@skinaid.mn'];
+    }
+    function isStr(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+    function incoming() { return request.resource.data; }
+
+    // ---------- Захиалга ----------
+    match /bookings/{id} {
+      // Хэн ч үүсгэж болно, гэхдээ яг энэ бүтэцтэй, хязгаартай өгөгдөл л орно.
+      allow create: if
+        incoming().keys().hasOnly(['name', 'phone', 'service', 'date', 'message', 'status', 'source', 'createdAt'])
+        && incoming().keys().hasAll(['name', 'phone', 'service', 'date', 'message', 'status', 'source', 'createdAt'])
+        && isStr(incoming().name, 2, 80)
+        && isStr(incoming().phone, 8, 20)
+        && incoming().phone.matches('^[-0-9+ ]+$')
+        && isStr(incoming()['service'], 1, 120)   // 'service' нь Rules хэлний түлхүүр үг тул [] хэлбэрээр
+        && isStr(incoming().date, 0, 10)
+        && (incoming().date == '' || incoming().date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        && isStr(incoming().message, 0, 1000)
+        && incoming().status == 'new'
+        && incoming().source == 'web'
+        && incoming().createdAt == request.time;
+
+      // Унших, устгах — зөвхөн admin
+      allow read, delete: if isAdmin();
+
+      // Засах — зөвхөн admin, зөвхөн статус/тэмдэглэл (үйлчлүүлэгчийн өгөгдөл хөдлөхгүй)
+      allow update: if isAdmin()
+        && incoming().diff(resource.data).affectedKeys().hasOnly(['status', 'note', 'updatedAt', 'updatedBy'])
+        && incoming().status in ['new', 'contacted', 'confirmed', 'cancelled']
+        && isStr(incoming().get('note', ''), 0, 1000)
+        && incoming().updatedAt == request.time
+        && incoming().updatedBy == request.auth.token.email;
+    }
+
+    // ---------- Тохиргоо (сайт уншина, admin бичнэ) ----------
+    match /settings/{doc} {
+      allow read: if true;
+
+      allow write: if isAdmin()
+        && doc in ['site', 'catalog']
+        && incoming().updatedAt == request.time
+        && incoming().updatedBy == request.auth.token.email
+        && (
+          (doc == 'site'
+            && incoming().keys().hasOnly(['hours', 'phone', 'email', 'promoEnabled', 'bookingEnabled', 'updatedAt', 'updatedBy'])
+            && isStr(incoming().get('hours', ''), 0, 300)
+            && isStr(incoming().get('phone', ''), 0, 30)
+            && isStr(incoming().get('email', ''), 0, 80)
+            && incoming().get('promoEnabled', false) is bool
+            && incoming().get('bookingEnabled', false) is bool)
+          ||
+          (doc == 'catalog'
+            && incoming().keys().hasOnly(['services', 'packages', 'updatedAt', 'updatedBy'])
+            && incoming().services is list && incoming().services.size() <= 200
+            && incoming().packages is list && incoming().packages.size() <= 30)
+        );
+    }
+
+    // Бусад бүх зам: хориотой
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

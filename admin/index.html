@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkinAid — Удирдлага</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#654186">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20261108a">
+  <link rel="stylesheet" href="admin.css?v=20261108a">
+  <link rel="icon" type="image/png" sizes="48x48" href="../assets/img/favicon-48.png">
+</head>
+<body class="is-admin">
+
+  <!-- ===== 1. Нэвтрэх хаалга ===== -->
+  <div class="gate" id="gate">
+    <div class="gate__card">
+      <img src="../assets/img/logo.png" alt="SkinAid" width="480" height="121">
+      <h1>Удирдлагын хэсэг</h1>
+      <p>Зөвхөн эмнэлгийн ажилтны Google бүртгэлээр нэвтэрнэ. Нууц үг энд хэзээ ч асуухгүй.</p>
+      <button class="btn btn--google btn--lg" id="btnLogin" type="button">
+        <svg aria-hidden="true" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.5 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.7-2.1 15.6-5.7l-7.7-6c-2.1 1.4-4.8 2.3-7.9 2.3-6.3 0-11.6-4-13.5-9.7l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+        Google-ээр нэвтрэх
+      </button>
+      <div class="gate__err" id="gateErr" hidden role="alert"></div>
+      <p class="gate__who" id="gateHint">Эрхтэй бүртгэл: hello@skinaid.mn, info@skinaid.mn</p>
+      <p class="gate__who"><a href="../" style="color:var(--purple);font-weight:700">← Сайт руу буцах</a></p>
+    </div>
+  </div>
+
+  <!-- ===== 2. Апп ===== -->
+  <div class="shell" id="shell" hidden>
+    <aside class="side">
+      <a class="side__logo" href="../" aria-label="SkinAid сайт"><img src="../assets/img/logo-white.png" alt="SkinAid" width="480" height="121"></a>
+      <div class="side__title">Модулиуд</div>
+      <nav class="menu" aria-label="Модулиуд">
+        <button type="button" data-view="bookings" aria-current="page"><span>Захиалга</span><span class="count" id="newCount" aria-label="Шинэ захиалга">0</span></button>
+        <button type="button" data-view="settings"><span>Тохиргоо</span></button>
+        <button type="button" data-view="catalog"><span>Үйлчилгээ / Багц</span></button>
+      </nav>
+      <div class="side__foot">
+        <span>Нэвтэрсэн:<br><strong id="whoEmail"></strong></span>
+        <button class="btn btn--outline btn--sm" id="btnLogout" type="button">Гарах</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- Модуль: Захиалга -->
+      <section class="view" id="view-bookings" aria-labelledby="h-bookings">
+        <div class="main__head">
+          <div><h1 id="h-bookings">Захиалга</h1><p>Сайтын маягтаар ирсэн хүсэлтүүд. Жагсаалт бодит цагт шинэчлэгдэнэ.</p></div>
+          <button class="btn btn--outline btn--sm" id="btnNotify" type="button" hidden>Шинэ захиалгын мэдэгдэл асаах</button>
+        </div>
+        <div class="toolbar">
+          <div class="chips" id="bkChips" role="group" aria-label="Статусаар шүүх"></div>
+          <span class="toolbar__meta" id="bkMeta" role="status"></span>
+        </div>
+        <div class="cards" id="bkList" aria-live="polite"></div>
+      </section>
+
+      <!-- Модуль: Тохиргоо -->
+      <section class="view" id="view-settings" aria-labelledby="h-settings" hidden>
+        <div class="main__head"><div><h1 id="h-settings">Тохиргоо</h1><p>Сайтын холбоо барих мэдээлэл, ажлын цаг, модулиудын асаалт. Хадгалмагц сайт дээр шинэчлэгдэнэ.</p></div></div>
+        <form id="siteForm" novalidate>
+          <div class="panel">
+            <h2>Ажлын цаг, холбоо барих</h2>
+            <p>Хоосон үлдээвэл сайт HTML дахь анхны текстээ харуулна.</p>
+            <div class="form__grid">
+              <div class="field field--full">
+                <label for="s-hours">Ажлын цаг (сайтын «Ажлын цаг» мөрөнд харагдана)</label>
+                <textarea id="s-hours" name="hours" maxlength="300" placeholder="Жишээ: Даваа–Баасан 10:00–19:00, Бямба 10:00–16:00, Ням амарна"></textarea>
+              </div>
+              <div class="field">
+                <label for="s-phone">Утас (толгой, холбоо барих, footer, маягт)</label>
+                <input id="s-phone" name="phone" type="text" maxlength="30" placeholder="7600-0505">
+              </div>
+              <div class="field">
+                <label for="s-email">И-мэйл</label>
+                <input id="s-email" name="email" type="email" maxlength="80" placeholder="info@skinaid.mn">
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <h2>Модулиуд</h2>
+            <p>Сайтын хэсгүүдийг асааж/унтраана. Унтраасан модуль сайтаас нуугдана, өгөгдөл устахгүй.</p>
+            <div class="form__grid">
+              <label class="toggle"><span><strong>Онлайн захиалга</strong><small>Унтраавал маягт хүсэлтийг бүртгэхгүй, зөвхөн Messenger / и-мэйл / утас сувгуудыг санал болгоно.</small></span><input type="checkbox" id="s-booking" name="bookingEnabled" checked></label>
+              <label class="toggle"><span><strong>Урамшууллын хэсэг</strong><small>Шинэ жилийн багцын хэсэг болон цэсний «Урамшуулал» холбоосууд.</small></span><input type="checkbox" id="s-promo" name="promoEnabled" checked></label>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn btn--primary" type="submit" id="btnSaveSite">Хадгалах</button>
+            <span class="status" id="siteStatus" role="status"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- Модуль: Үйлчилгээ / Багц -->
+      <section class="view" id="view-catalog" aria-labelledby="h-catalog" hidden>
+        <div class="main__head">
+          <div><h1 id="h-catalog">Үйлчилгээ / Багц</h1><p>Сайтын «Онцлох эмчилгээ» жагсаалт болон Шинэ жилийн багцын нэр, үнэ. «Нуух» сонговол сайтаас харагдахгүй.</p></div>
+          <button class="btn btn--outline btn--sm" type="button" id="btnCatDefaults">Анхны утгаар дүүргэх</button>
+        </div>
+        <form id="catForm" novalidate>
+          <div class="panel">
+            <h2>Үйлчилгээ <span class="badge" id="svcCount">0</span></h2>
+            <p>Үнэ, хугацааг зөвхөн баталгаатай үед бичнэ (хоосон үлдээж болно). Жишээ: ₮50,000 · 1 цаг</p>
+            <div class="tbl-wrap">
+              <table class="tbl" id="svcTable">
+                <thead><tr><th>Ангилал</th><th>Нэр</th><th>Тайлбар</th><th>Хугацаа</th><th>Үнэ</th><th>Нуух</th><th></th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="actions"><button class="btn btn--ghost btn--sm" type="button" id="btnSvcAdd">+ Үйлчилгээ нэмэх</button></div>
+          </div>
+          <div class="panel">
+            <h2>Шинэ жилийн багцууд</h2>
+            <p>Багцын агуулга (жагсаалт) HTML-д; энд нэр, үнэ, нуух эсэхийг засна.</p>
+            <div class="tbl-wrap">
+              <table class="tbl" id="pkgTable">
+                <thead><tr><th>№</th><th>Нэр</th><th>Үнэ</th><th>Нуух</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn btn--primary" type="submit" id="btnSaveCat">Хадгалах</button>
+            <span class="status" id="catStatus" role="status"></span>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/js/catalog-defaults.js?v=20261108a"></script>
+  <script type="module" src="admin.js?v=20261108a"></script>
+</body>
+</html>

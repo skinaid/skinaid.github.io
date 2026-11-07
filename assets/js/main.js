@@ -1,7 +1,8 @@
 /* ==========================================================================
    SKIN AID — main.js
    Header, mobile nav, reveal animations, counters, treatment filter,
-   horizontal scroller, FAQ accordion, booking form.
+   horizontal scroller, FAQ accordion, booking form (Firestore + fallback),
+   settings/catalog from Firebase (assets/js/backend.js, optional).
    ========================================================================== */
 (function () {
   'use strict';
@@ -128,73 +129,12 @@
 
   /* ---------- Treatment list with category filter ---------- */
   const BOOK = '#contact';
-  const TREATMENTS = [
-    // Үзлэг
-    { c: 'exam', n: 'Арьсны үзлэг, оношлогоо', d: 'Батганы үрэвсэл, үрчлээ, арьсны өвчин, нүхжилтийн цогц оношлогоо, эмчилгээний төлөвлөгөө.', t: '1 цаг', p: '₮50,000' },
-    { c: 'exam', n: 'Онлайн оношлогоо', d: 'Арьс, харшил, гоо заслын бүх төрлийн зөвлөгөөг мэргэжлийн эмч онлайнаар өгнө.' },
-    { c: 'exam', n: 'Давтан үзлэг', d: 'Эмчилгээний явц, үр дүнг хянах давтан үзлэг.' },
-    // Батга
-    { c: 'acne', n: 'Үрэвсэлт батганы эмчилгээ', d: 'Нэг удаагийн мэргэжлийн цэвэрлэгээ, үрэвсэл намдаах эмчилгээ.' },
-    { c: 'acne', n: 'Батганы багц эмчилгээ', d: 'Арьсны онцлогт тохирсон 1/1–2/5 хүртэлх хэмнэлттэй, үр дүнтэй багц.' },
-    { c: 'acne', n: 'Цээж, нурууны батганы эмчилгээ', d: 'Цээж, нурууны хэсгийн батгыг цэвэрлэж, эрүүл арьсыг сэргээнэ. Карбоксийн хамт хийх боломжтой.' },
-    { c: 'acne', n: 'IPL батганы багцын урамшуулал', d: 'Гэрлэн эмчилгээг батганы багцтай хослуулсан урамшуулалтай үйлчилгээ.' },
-    { c: 'acne', n: 'Карбокси эмчилгээ', d: 'Арьсанд хүчилтөрөгч бэлэглэж, үрэвсэл, нөсөө багасгах нэг удаагийн эмчилгээ.' },
-    // Сорви, нүхжилт
-    { c: 'scar', n: 'CO₂ Fractional лазер', d: 'Лазерын микро цацрагаар коллаген нийлэгжилтийг өдөөж, сорви, нүхжилтийг тэгшлэнэ.' },
-    { c: 'scar', n: 'VIVACE Needle RF', d: 'Бичил зүү + радио давтамжийн хосолсон эмчилгээ: нүхжилт, сорви, арьсны бүтэц.' },
-    { c: 'scar', n: 'MTS Microneedling', d: 'Бичил зүүн эмчилгээгээр арьсны нөхөн төлжилтийг идэвхжүүлнэ.' },
-    { c: 'scar', n: 'Сорви салгах эмчилгээ', d: 'Сорвийг бүдгэрүүлж, арьсны гадаргууг жигд болгоно.' },
-    { c: 'scar', n: 'Келоид шимэгдүүлэх тарилга', d: 'Келоид сорвийг багасгаж, зөөлрүүлэх тарилга эмчилгээ.' },
-    // Тарилга (PREMIUM)
-    { c: 'inject', n: 'REJURAN 2ml / 4ml', d: '"Тарилгын хатан хаан" — PDRN-д суурилсан арьс нөхөн төлжүүлэх тарилга.' },
-    { c: 'inject', n: 'Juvelook тарилга', d: 'Арьс залуужуулах, чангалах коллаген өдөөгч тарилга.' },
-    { c: 'inject', n: 'Lapuroon Aurora-S / Aurora-V', d: 'PDRN, гиалурон, пептид, амин хүчлийн комплекс skin booster.' },
-    { c: 'inject', n: 'Cellbooster Glow', d: 'Швейцарын SUISSELLE-ийн патентлагдсан гэрэлтүүлэх тарилга.' },
-    { c: 'inject', n: 'Exo one эхэс тарилга', d: 'Эксосом технологиор арьсыг эсийн түвшинд сэргээнэ.' },
-    { c: 'inject', n: 'Загасан тарилга (PDRN)', d: 'Арьсыг нөхөн сэргээх PDRN тарилга.' },
-    { c: 'inject', n: 'Япон гиалуроны тарилга', d: 'Японы технологиор гүн чийгшил, залуу төрхийг сэргээнэ.' },
-    { c: 'inject', n: 'ASCE plus SRLV', d: 'Үүдэл эсийн дэвшилтэт технологийн эсийн нөхөн төлжилт.' },
-    { c: 'inject', n: 'Cellbooster Hair — үсний мезо', d: 'Үсний үндсийг бэхжүүлэх мезотерапи.' },
-    // Хөгшрөлтийн эсрэг, хэлбэр
-    { c: 'anti', n: 'Ботокс (1 тун)', d: 'Үрчлээ арилгах, тэнийлгэх. V-Line, хуян, суганы хөлрөлтийн ботокс.' },
-    { c: 'anti', n: 'Дүүргэгч филлер', d: 'Нүүрний хэлбэр засах, уруулын филлер (1 мл), эзлэхүүн сэргээх.' },
-    { c: 'anti', n: 'Facetem CaHA тарилга', d: 'Коллаген өдөөх дэвшилтэт тарилга: тал / 2 бүтэн / филлертэй.' },
-    { c: 'anti', n: 'Плазма эмчилгээ', d: 'Нүдний цацраг үрчлээ, чихний урд хэсгийн үрчлээнд.' },
-    { c: 'anti', n: 'Филлер хайлуулагч тарилга', d: 'Өмнөх филлерийг аюулгүй хайлуулж, төрөлх төрхийг сэргээнэ.' },
-    // Залуужуулах, гэрэлтүүлэх
-    { c: 'glow', n: 'Glass skin therapy', d: 'Гүний бохирдлын цэвэрлэгээ, чийгшил, тайвшрал — массажтай/массажгүй.' },
-    { c: 'glow', n: 'AHA 70% химийн гуужуулалт', d: 'Арьсыг гүн гуужуулж, толигор гэрэлтсэн төрхийг цогцлооно.' },
-    { c: 'glow', n: 'Хүчилээр арчих / TCA', d: 'Мэргэжлийн химийн пийл, арьсны нөхөн сэргээлт.' },
-    { c: 'glow', n: 'Карбокси + Карбон пийл', d: 'Хүчилтөрөгч + нүүрстөрөгчийн хосолсон гэрэлтүүлэх эмчилгээ.' },
-    { c: 'glow', n: 'Хацрын улайлтын IPL', d: 'Улайлтгүй, жигд өнгөтэй толигор арьсны нууц.' },
-    // Чангалах
-    { c: 'lift', n: 'Ультраформер III (HIFU)', d: 'Мэсгүй, өвдөлтгүй арьс чангалж өргөх, өөх хайлуулах дэвшилтэт технологи.', t: '1ц 30м', p: '₮300,000-с' },
-    { c: 'lift', n: 'Моно Thread утсан эмчилгээ', d: 'Мэс заслын бус аргаар арьсыг өргөж, чангаруулж, залуужуулна.' },
-    { c: 'lift', n: 'Cellbooster Shape өөх хайлуулах', d: 'Илүүдэл өөхийг багасгаж, нүүр, биеийн хэлбэрийг сайжруулна.' },
-    // Лазер
-    { c: 'laser', n: 'Diode лазер үс арилгах', d: 'Нүүр, сахал, суга, бикини, гар, хөл, бүтэн бие — урт хугацааны толигор арьс.' },
-    { c: 'laser', n: 'IPL үсний ургалт зогсоох', d: 'Суга, гар, хөл, бикини, шилбэ.' },
-    { c: 'laser', n: 'IPL гэрлэн эмчилгээ', d: 'Арьсны өнгө жигдрүүлэх, батга, улайлтад.' },
-    { c: 'laser', n: 'Нөсөө лазер (Pigmentation)', d: 'Цэвэрхэн, эрүүл, жигд өнгөтэй арьсны төлөө.' },
-    // Дусал
-    { c: 'iv', n: 'Glutathione 1200', d: 'Антиоксидант, гэрэлтүүлэх, хоргүйжүүлэх премиум дусал.' },
-    { c: 'iv', n: 'Эссенциале дусал', d: 'Элэгний эрүүл мэнд, эрч хүчийг дэмжинэ.' },
-    { c: 'iv', n: 'L-Carnitine тураах дусал', d: 'Бодисын солилцоог идэвхжүүлж, жин хасахад тусална.' },
-    { c: 'iv', n: 'Дархлааны дусал', d: 'Plevita, амин хүчил, сармис, BFLUID, Рингер, Синделла, харшлын эсрэг дусал.' },
-    // Массаж
-    { c: 'massage', n: 'RF нүүр, хүзүүний массаж', d: 'Радио давтамжаар арьсыг чангалж, өнгө зүсийг сэргээнэ.' },
-    { c: 'massage', n: 'RF хүйтэн массаж', d: 'Тайвшруулах, хавдар намдаах хүйтэн RF массаж.' },
-    { c: 'massage', n: 'Карбокситой нүүрний массаж', d: 'Арьсанд хүчилтөрөгч бэлэглэж, залуу төрхийг хадгална.' },
-    { c: 'massage', n: 'Хүзүү, цээж, нуруу, гарын массаж', d: 'Дээд биеийн алжаал тайлах, хөнгөвчлөх массаж.' },
-    // Жижиг ажилбар
-    { c: 'minor', n: 'Үү авах', d: 'Энгийн үү, улны үү, хавтгай үүний эмчилгээ.' },
-    { c: 'minor', n: 'Ургацаг авах', d: 'Эрүүл, булбарай арьсны төлөө мэргэжлийн ажилбар.' },
-    { c: 'minor', n: 'Суганы хөлрөлт арилгах ботокс', d: 'Хэт хөлрөлтийг удаан хугацаанд багасгана.' },
-  ];
-  const CATS = {
-    exam: 'Үзлэг', acne: 'Батга', scar: 'Сорви, нүхжилт', inject: 'Тарилга', anti: 'Хөгшрөлтийн эсрэг',
-    glow: 'Залуужуулах', lift: 'Чангалах', laser: 'Лазер', iv: 'Дусал', massage: 'Массаж', minor: 'Жижиг ажилбар'
-  };
+  // Анхны утга: assets/js/catalog-defaults.js (сайт + admin хоёулаа ашиглана).
+  // Firestore `settings/catalog` байвал applyCatalog() доор TREATMENTS-ийг сольж дахин render хийнэ.
+  const DEFAULTS = window.SKINAID_DEFAULTS || { cats: {}, treatments: [], packages: [] };
+  const CATS = DEFAULTS.cats || {};
+  let TREATMENTS = (DEFAULTS.treatments || []).slice();
+  let renderTreatments = () => {};
 
   const listEl = $('#treatList');
   const chipsEl = $('#treatChips');
@@ -235,6 +175,7 @@
     });
     if (moreBtn) moreBtn.addEventListener('click', () => { expanded = true; render(); const first = listEl.children[LIMIT]; if (first) first.focus(); });
     render();
+    renderTreatments = render;
   }
 
   /* Service cards -> preselect matching filter chip */
@@ -258,46 +199,169 @@
     });
   });
 
-  /* ---------- Booking form (front-end only) ---------- */
+  /* ---------- Site settings (Firestore settings/site, optional) ---------- */
+  // Анхдагч утга HTML-тэй ижил; settings/site баримт байвал applySite() шинэчилнэ.
+  const SITE = { phone: '7600-0505', email: 'info@skinaid.mn', messenger: 'https://m.me/Skinaid.mn', bookingEnabled: true };
+  const telHref = (phone) => {
+    const digits = String(phone || '').replace(/[^0-9+]/g, '');
+    return 'tel:' + (digits.startsWith('+') ? digits : '+976' + digits);
+  };
+  const hideEl = (el) => { el.style.display = 'none'; };
+  const applySite = (site) => {
+    if (!site || typeof site !== 'object') return;
+    if (typeof site.bookingEnabled === 'boolean') SITE.bookingEnabled = site.bookingEnabled;
+    const hours = typeof site.hours === 'string' ? site.hours.trim() : '';
+    if (hours) $$('[data-site~="hours"]').forEach(el => { el.textContent = hours; });
+    const phone = typeof site.phone === 'string' ? site.phone.trim() : '';
+    if (phone) {
+      SITE.phone = phone;
+      $$('[data-site~="phone"]').forEach(el => { el.textContent = phone; });
+      $$('[data-site~="tel"]').forEach(el => { el.href = telHref(phone); });
+    }
+    const email = typeof site.email === 'string' ? site.email.trim() : '';
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      SITE.email = email;
+      $$('[data-site~="email"]').forEach(el => { el.textContent = email; });
+      $$('[data-site~="mailto"]').forEach(el => { el.href = 'mailto:' + email; });
+    }
+    if (site.promoEnabled === false) {
+      const promo = $('#promo'); if (promo) hideEl(promo);
+      $$('a[href="#promo"]').forEach(a => hideEl(a.closest('li') || a));
+    }
+  };
+  const applyCatalog = (cat) => {
+    if (!cat || typeof cat !== 'object') return;
+    if (Array.isArray(cat.services) && cat.services.length) {
+      const list = cat.services
+        .filter(sv => sv && typeof sv === 'object' && !sv.hidden && typeof sv.n === 'string' && sv.n.trim())
+        .map(sv => ({
+          id: String(sv.id || ''),
+          c: Object.prototype.hasOwnProperty.call(CATS, sv.c) ? sv.c : 'minor',
+          n: sv.n.trim(), d: typeof sv.d === 'string' ? sv.d : '',
+          t: typeof sv.t === 'string' ? sv.t : '', p: typeof sv.p === 'string' ? sv.p : '',
+        }));
+      if (list.length) { TREATMENTS = list; renderTreatments(); }
+    }
+    if (Array.isArray(cat.packages)) {
+      cat.packages.forEach(pk => {
+        if (!pk || typeof pk !== 'object' || typeof pk.id !== 'string') return;
+        const card = $(`[data-pack="${CSS.escape(pk.id)}"]`);
+        if (!card) return;
+        if (pk.hidden) { hideEl(card); return; }
+        const price = $('.pack__price strong', card);
+        if (price && typeof pk.price === 'string' && pk.price.trim()) price.textContent = pk.price.trim();
+        const title = $('h3', card);
+        if (title && typeof pk.name === 'string' && pk.name.trim()) {
+          const [first, ...rest] = pk.name.trim().split(' ');
+          title.textContent = first + (rest.length ? ' ' : '');
+          if (rest.length) { const em = document.createElement('em'); em.textContent = rest.join(' '); title.appendChild(em); }
+        }
+      });
+    }
+  };
+  const applySettings = (s) => { if (!s) return; applySite(s.site); applyCatalog(s.catalog); };
+  document.addEventListener('skinaid:settings', (e) => applySettings(e.detail));
+  if (window.SkinAidBackend && window.SkinAidBackend.settings) applySettings(window.SkinAidBackend.settings);
+
+  /* ---------- Booking form: Firestore-д бичнэ, бүтэлгүйтвэл сувгуудын panel ---------- */
   const form = $('#bookForm');
   if (form) {
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      if (!form.reportValidity()) return;
-      const d = Object.fromEntries(new FormData(form).entries());
-      // Статик хостинг (GitHub Pages) тул маягт серверт илгээгдэхгүй: хүсэлтийг бэлтгэж, үйлчлүүлэгч
-      // өөрийн сонгосон сувгаар дамжуулна. Автомат илгээлт хэрэгтэй бол Formspree/Getform зэрэг
-      // үйлчилгээний endpoint-ийг энд fetch POST-оор холбоно (README-г үзнэ үү).
-      const text = [
-        'Цаг захиалах хүсэлт — SkinAid',
-        'Нэр: ' + (d.name || '-'),
-        'Утас: ' + (d.phone || '-'),
-        'Үйлчилгээ: ' + (d.service || '-'),
-        'Хүссэн огноо: ' + (d.date || 'тохиролцоно'),
-        d.message ? 'Нэмэлт: ' + d.message : '',
-      ].filter(Boolean).join('\n');
-      const enc = encodeURIComponent(text);
-      const ok = $('.form__ok', form);
+    const ok = $('.form__ok', form);
+    const submitBtn = $('button[type="submit"]', form);
+    const submitLabel = submitBtn ? submitBtn.textContent : '';
+    let busy = false;
+
+    const setBusy = (on) => {
+      busy = on;
+      if (!submitBtn) return;
+      submitBtn.disabled = on;
+      submitBtn.setAttribute('aria-busy', String(on));
+      submitBtn.textContent = on ? 'Илгээж байна…' : submitLabel;
+    };
+    const withTimeout = (p, ms) => new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('timeout')), ms);
+      Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, err => { clearTimeout(t); rej(err); });
+    });
+    const buildText = (d) => [
+      'Цаг захиалах хүсэлт — SkinAid',
+      'Нэр: ' + (d.name || '-'),
+      'Утас: ' + (d.phone || '-'),
+      'Үйлчилгээ: ' + (d.service || '-'),
+      'Хүссэн огноо: ' + (d.date || 'тохиролцоно'),
+      d.message ? 'Нэмэлт: ' + d.message : '',
+    ].filter(Boolean).join('\n');
+    const finish = () => {
+      form.classList.add('is-sent');
+      ok.tabIndex = -1;
+      ok.focus({ preventScroll: true });
+      form.closest('.form').scrollIntoView({ behavior: smooth, block: 'center' });
+    };
+    const wireEdit = () => {
+      const b = $('[data-edit]', ok);
+      if (b) b.addEventListener('click', () => { form.classList.remove('is-sent'); ok.classList.remove('form__ok--warn'); });
+    };
+
+    // Амжилттай: хүсэлт Firestore-д бүртгэгдсэн
+    const showSuccess = (d) => {
+      ok.classList.remove('form__ok--warn');
       ok.innerHTML = `<strong>Баярлалаа, ${esc(d.name || 'эрхэм үйлчлүүлэгч')}!</strong><br>
-        Хүсэлт тань бэлэн боллоо. Энэ сайт хүсэлтийг автоматаар илгээдэггүй тул доорх сувгуудын аль нэгээр бидэнд дамжуулна уу — зөвлөх тантай холбогдож цагийг баталгаажуулна. Messenger-ээр илгээхдээ текстийг хуулж буулгана уу.
+        Хүсэлт тань бүртгэгдлээ. Зөвлөх <strong>${esc(d.phone || '')}</strong> дугаараар тантай холбогдож цагийг баталгаажуулна.
+        Яаралтай бол <a href="${telHref(SITE.phone)}" style="color:var(--purple);font-weight:700">${esc(SITE.phone)}</a> дугаарт залгаарай.
+        <div class="form__channels">
+          <a class="btn btn--outline btn--sm" href="${esc(SITE.messenger)}" target="_blank" rel="noopener">Messenger-ээр мөн бичих</a>
+          <button class="btn btn--ghost btn--sm" type="button" data-edit>Шинэ хүсэлт</button>
+        </div>`;
+      wireEdit();
+      const b = $('[data-edit]', ok); if (b) b.addEventListener('click', () => form.reset());
+    };
+
+    // Бүтэлгүйтсэн / унтраалттай: хүсэлтийг бэлтгэж, үйлчлүүлэгч өөрөө сувгаар дамжуулна (өмнөх ажиллагаа)
+    const showFallback = (d, text, reason) => {
+      const enc = encodeURIComponent(text);
+      const sms = telHref(SITE.phone).replace('tel:', 'sms:');
+      ok.classList.toggle('form__ok--warn', Boolean(reason));
+      ok.innerHTML = `<strong>Баярлалаа, ${esc(d.name || 'эрхэм үйлчлүүлэгч')}!</strong><br>
+        ${reason ? esc(reason) + ' ' : ''}Хүсэлт тань бэлэн боллоо — доорх сувгуудын аль нэгээр бидэнд дамжуулна уу, зөвлөх тантай холбогдож цагийг баталгаажуулна. Messenger-ээр илгээхдээ текстийг хуулж буулгана уу.
         <div class="form__msg">${esc(text)}</div>
         <div class="form__channels">
-          <a class="btn btn--primary btn--sm" href="https://m.me/Skinaid.mn" target="_blank" rel="noopener">Messenger-ээр илгээх</a>
-          <a class="btn btn--outline btn--sm" href="mailto:info@skinaid.mn?subject=${encodeURIComponent('Цаг захиалах хүсэлт')}&body=${enc}">И-мэйлээр илгээх</a>
-          <a class="btn btn--outline btn--sm" href="sms:+97676000505?&body=${enc}">SMS-ээр илгээх</a>
+          <a class="btn btn--primary btn--sm" href="${esc(SITE.messenger)}" target="_blank" rel="noopener">Messenger-ээр илгээх</a>
+          <a class="btn btn--outline btn--sm" href="mailto:${esc(SITE.email)}?subject=${encodeURIComponent('Цаг захиалах хүсэлт')}&body=${enc}">И-мэйлээр илгээх</a>
+          <a class="btn btn--outline btn--sm" href="${sms}?&body=${enc}">SMS-ээр илгээх</a>
           <button class="btn btn--ghost btn--sm" type="button" data-copy>Текст хуулах</button>
-          <a class="btn btn--ghost btn--sm" href="tel:+97676000505">7600-0505 залгах</a>
+          <a class="btn btn--ghost btn--sm" href="${telHref(SITE.phone)}">${esc(SITE.phone)} залгах</a>
           <button class="btn btn--ghost btn--sm" type="button" data-edit>← Засварлах</button>
         </div>`;
       $('[data-copy]', ok).addEventListener('click', async (ev) => {
         try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = 'Хуулагдлаа ✓'; }
         catch (_) { ev.currentTarget.textContent = 'Хуулж чадсангүй'; }
       });
-      $('[data-edit]', ok).addEventListener('click', () => { form.classList.remove('is-sent'); });
-      form.classList.add('is-sent');
-      ok.tabIndex = -1;
-      ok.focus({ preventScroll: true });
-      form.closest('.form').scrollIntoView({ behavior: smooth, block: 'center' });
+      wireEdit();
+    };
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      if (!form.reportValidity()) return;
+      const d = Object.fromEntries(new FormData(form).entries());
+      const text = buildText(d);
+
+      // Honeypot: далд талбарыг зөвхөн бот бөглөнө — юу ч бичилгүй "амжилттай" гэж харуулна
+      if (d.website) { showSuccess(d); finish(); return; }
+
+      const backend = window.SkinAidBackend;
+      if (SITE.bookingEnabled === false || !backend || typeof backend.submitBooking !== 'function') {
+        showFallback(d, text, ''); finish(); return;
+      }
+      setBusy(true);
+      try {
+        await withTimeout(backend.submitBooking({ name: d.name, phone: d.phone, service: d.service, date: d.date, message: d.message }), 12000);
+        showSuccess(d);
+      } catch (err) {
+        showFallback(d, text, 'Автомат бүртгэл түр амжилтгүй боллоо.');
+      } finally {
+        setBusy(false);
+      }
+      finish();
     });
     // Minimum date = today (local time, not UTC)
     const date = $('input[type="date"]', form);
