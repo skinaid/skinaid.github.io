@@ -128,29 +128,33 @@ metrics дээр Verified 100% ойролцоо. Token-гүй хүсэлт та�
 - Захиалгын өгөгдөл хувийн мэдээлэл тул admin хуудсыг зөвхөн итгэлтэй төхөөрөмжөөс нээж, ажлаа дуусаад "Гарах" дарна.
 - SDK хувилбар (`12.16.0`) `backend.js`, `admin/admin.js`, `app-check.js`, `firebase-config.js` дөрвүүлээ ижил байна; шинэчлэхдээ дөрвүүлэнг нь солино.
 
-## Байршуулалт (GitHub Pages)
+## Байршуулалт
 
-Амьд хаяг: **https://skinaid.github.io/**
-Repo: https://github.com/skinaid/skinaid.github.io (`main` салбарын root-оос шууд нийтлэгдэнэ).
+Нэг repo, хоёр хостинг — хоёулаа `main` салбараас автоматаар шинэчлэгдэнэ (`git push` = deploy, 1–2 минут):
 
-Шинэчлэх алхам — файлаа зассаны дараа:
+| Хостинг | Хаяг | Үүрэг |
+|---|---|---|
+| **Vercel** (төсөл `skinaid.github.io-y1vf`) | https://www.skinaid.mn (үндсэн), https://skinaidgithubio-y1vf.vercel.app | Бодит домэйн, `vercel.json` header/redirect |
+| GitHub Pages | https://skinaid.github.io | Нөөц хувилбар |
+
+Repo: https://github.com/skinaid/skinaid.github.io
 
 ```bash
 git add -A && git commit -m "Өөрчлөлтийн тайлбар" && git push
 ```
 
-Push хийснээс 1–2 минутын дараа сайт шинэчлэгдэнэ (Actions таб дээр "pages build and deployment" ажиллана).
-CSS/JS-ийн өөрчлөлт хэрэглэгчдэд шууд харагдахын тулд `index.html` БОЛОН `admin/index.html` дахь холбогдох `?v=...` дугааруудыг өөрчилнө
-(style.css, main.js, catalog-defaults.js, backend.js, admin.css, admin.js — style.css хоёр HTML-д хоёуланд нь холбогдсон).
-`firebase-config.js`, `app-check.js` нь module import-оор ачаалагддаг тул `?v=` байхгүй — GitHub Pages 10 минутын cache-тэй, тэр хугацаанд шинэчлэгдэнэ.
+CSS/JS-ийн өөрчлөлт хэрэглэгчдэд шууд харагдахын тулд `index.html` дахь `style.css?v=...`, `main.js?v=...` дугаарыг өөрчилнө.
 
-### skinaid.mn домэйныг холбох (бэлэн болсон үед)
+### Домэйн (2026-11-07-нд Wix-ээс Vercel рүү шилжүүлсэн)
 
-1. Repo-ийн root-д `CNAME` файл үүсгэж дотор нь `www.skinaid.mn` гэж бичээд push хийнэ.
-2. Домэйн бүртгэгч (DNS) дээрээ:
-   - `www` → CNAME `skinaid.github.io`
-   - `@` (root) → A бичлэгүүд: `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
-3. GitHub → Settings → Pages → Custom domain-д `www.skinaid.mn` оруулж, "Enforce HTTPS"-ийг идэвхжүүлнэ (сертификат автоматаар гарна).
-4. Wix-ийн DNS бичлэгүүдийг устгана. DNS шинэчлэгдэх хүртэл 1–24 цаг.
+Datacom (manage.datacom.mn) DNS удирдлага дээр:
+- `@` A → `216.198.79.1` (Vercel)
+- `www` CNAME → `234e2deb3344ebce.vercel-dns-017.com` (Vercel, энэ төслийн өвөрмөц утга)
+- `skinaid.mn` → `www.skinaid.mn` руу 308 redirect (Vercel дээр тохируулсан)
+- Мэйл (MX, DKIM), Google Workspace (mail, docs, drive…), `erp` бичлэгүүдэд хүрээгүй.
+
+Хуучин Wix бичлэгүүд (буцаах шаардлага гарвал): `@` A `185.230.63.107`, `@` A `23.236.62.147`, `www` CNAME `balancer.wixdns.net`, `www` CNAME `pointing.wixdns.net`, `www` CNAME `ghs.googlehosted.com`.
+
+Домэйн солигдсоны дараа Firebase Authentication → Authorized domains болон reCAPTCHA (App Check) түлхүүрийн домэйн жагсаалтад `www.skinaid.mn`, `skinaid.mn`, `skinaidgithubio-y1vf.vercel.app`-ийг нэмсэн байх ёстой; үгүй бол маягт болон admin нэвтрэлт тэр домэйн дээр ажиллахгүй.
 
 Нэмэлт мэдээлэл: `robots.txt`, `sitemap.xml`, `404.html` repo-д бий; `admin/index.html` нь `meta robots noindex, nofollow`-той (robots.txt-д Disallow хийвэл Google тэр meta-г уншиж чадахгүй тул зориуд хориглоогүй); `.gitignore`-оор эх лого JPG, `.claude/` нийтлэгдэхгүй.
