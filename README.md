@@ -31,7 +31,27 @@ python3 -m http.server 8765
    `main.js` доторх `#bookForm` submit хэсэгт өөрийн API / Google Sheets / email endpoint-оо `fetch` POST-оор холбоно.
 5. **Өнгө, фонт** — `style.css` дээд хэсгийн `:root` хувьсагчид (`--purple: #654186` брэндийн ягаан).
 
-## Байршуулах (hosting)
+## Байршуулалт (GitHub Pages)
 
-Статик файлууд тул Netlify, Vercel, GitHub Pages, Cloudflare Pages эсвэл ямар ч shared hosting дээр
-`index.html`, `assets/` хавтсыг хуулахад л хангалттай.
+Амьд хаяг: **https://skinaid.github.io/**
+Repo: https://github.com/skinaid/skinaid.github.io (`main` салбарын root-оос шууд нийтлэгдэнэ).
+
+Шинэчлэх алхам — файлаа зассаны дараа:
+
+```bash
+git add -A && git commit -m "Өөрчлөлтийн тайлбар" && git push
+```
+
+Push хийснээс 1–2 минутын дараа сайт шинэчлэгдэнэ (Actions таб дээр "pages build and deployment" ажиллана).
+CSS/JS-ийн өөрчлөлт хэрэглэгчдэд шууд харагдахын тулд `index.html` дахь `style.css?v=...`, `main.js?v=...` дугаарыг өөрчилнө.
+
+### skinaid.mn домэйныг холбох (бэлэн болсон үед)
+
+1. Repo-ийн root-д `CNAME` файл үүсгэж дотор нь `www.skinaid.mn` гэж бичээд push хийнэ.
+2. Домэйн бүртгэгч (DNS) дээрээ:
+   - `www` → CNAME `skinaid.github.io`
+   - `@` (root) → A бичлэгүүд: `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
+3. GitHub → Settings → Pages → Custom domain-д `www.skinaid.mn` оруулж, "Enforce HTTPS"-ийг идэвхжүүлнэ (сертификат автоматаар гарна).
+4. Wix-ийн DNS бичлэгүүдийг устгана. DNS шинэчлэгдэх хүртэл 1–24 цаг.
+
+Нэмэлт мэдээлэл: `robots.txt`, `sitemap.xml`, `404.html` repo-д бий; `.gitignore`-оор эх лого JPG, `.claude/` нийтлэгдэхгүй.
