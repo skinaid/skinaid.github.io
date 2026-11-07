@@ -16,5 +16,9 @@ export const firebaseConfig = {
 // Admin эрхтэй Google бүртгэлүүд — зөвхөн UI-д (цэс харуулах/нуух). Бодит шалгалт: firestore.rules isAdmin()
 export const ADMIN_EMAILS = ['hello@skinaid.mn', 'info@skinaid.mn'];
 
-// SDK хувилбар — backend.js, admin/admin.js доторх import URL-уудтай ижил байх ёстой
+// App Check — reCAPTCHA САЙТЫН түлхүүр (нийтийн, нууц биш; score-based v3, Enterprise түлхүүр, Google Cloud төсөл skinaid-mn,
+// домэйн: skinaid.github.io, localhost). Солих: README → «App Check» (reCAPTCHA admin + Firebase console хоёуланд нь солино).
+export const RECAPTCHA_SITE_KEY = '6LcizBQuAAAAAJkT36c8uRuHoBTcxov-BALLE-qy';
+
+// SDK хувилбар — backend.js, admin/admin.js, app-check.js доторх import URL-уудтай ижил байх ёстой
 export const SDK_VERSION = '12.16.0';

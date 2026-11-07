@@ -17,6 +17,8 @@ body.is-admin { overflow-x: auto; }
 .gate__card .btn { width: 100%; justify-content: center; }
 .gate__err { margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: #fdecec; border: 1px solid #f3b9b9; color: #7a1f1f; font-size: 14px; text-align: left; }
 .gate__who { margin-top: 14px; font-size: 13px; color: var(--muted); }
+.gate__recaptcha { font-size: 12px; opacity: .8; }
+.gate__recaptcha a { color: inherit; text-decoration: underline; }
 .btn--google { background: #fff; border-color: var(--purple-200); color: var(--purple-900); gap: 10px; }
 .btn--google:hover { border-color: var(--purple); background: var(--purple-50); }
 .btn--google svg { width: 20px; height: 20px; }

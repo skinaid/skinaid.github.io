@@ -7,8 +7,10 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { firebaseConfig, ADMIN_EMAILS } from '../assets/js/firebase-config.js';
+import { attachAppCheck } from '../assets/js/app-check.js';
 
 const app = initializeApp(firebaseConfig);
+attachAppCheck(app);   // reCAPTCHA → App Check token (Firestore-д Enforce асаалттай)
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -37,7 +39,7 @@ const fmtDate = (ts) => {
 const errText = (e) => {
   const code = (e && e.code) || '';
   const map = {
-    'permission-denied': 'Эрх хүрэхгүй: Firestore дүрэм энэ үйлдлийг татгалзлаа.',
+    'permission-denied': 'Эрх хүрэхгүй: Firestore дүрэм эсвэл App Check (reCAPTCHA) энэ үйлдлийг татгалзлаа. Хуудсыг дахин ачаалаад оролдоно уу.',
     'unavailable': 'Firestore-той түр холбогдож чадсангүй. Сүлжээгээ шалгаад дахин оролдоно уу.',
     'unauthenticated': 'Нэвтрэлт дууссан байна. Дахин нэвтэрнэ үү.',
     'resource-exhausted': 'Өдрийн үнэгүй квот (Spark) дууссан байна. Улаанбаатарын цагаар өглөө ~16:00-д шинэчлэгдэнэ — дараа нь «Дахин холбогдох» дарна уу.',

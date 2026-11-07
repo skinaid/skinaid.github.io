@@ -3,13 +3,16 @@
    Firestore-lite ашиглан: (1) захиалгыг `bookings`-д бичих, (2) `settings/site`,
    `settings/catalog`-ийг унших. main.js (энгийн script) window.SkinAidBackend-ээр холбогдоно.
    Энэ файл ачаалагдахгүй (CDN блок, offline) бол main.js fallback сувгуудаа харуулна.
+   Firestore хүсэлт бүр App Check (reCAPTCHA) token-той явна — app-check.js.
    ========================================================================== */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp, setLogLevel } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore-lite.js';
 import { firebaseConfig } from './firebase-config.js';
+import { attachAppCheck } from './app-check.js';
 
 setLogLevel('error');   // амжилтгүй хүсэлтийн payload-ыг (захиалгын өгөгдөл) console-д warn хэлбэрээр хэвлэхгүй
 const app = initializeApp(firebaseConfig);
+attachAppCheck(app);    // reCAPTCHA → App Check token; token авч чадахгүй бол Firestore хүсэлт унаж main.js fallback панел харуулна
 const db = getFirestore(app);
 
 const oneLine = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);

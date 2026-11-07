@@ -497,6 +497,8 @@ ul { margin: 0; padding: 0; list-style: none; }
 .footer__contact svg { width: 18px; height: 18px; flex: none; color: var(--gold); margin-top: 3px; }
 .footer__bottom { position: relative; margin-top: 56px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, .12); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: rgba(255, 255, 255, .55); }
 .footer__bottom a:hover { color: #fff; }
+.footer__recaptcha { flex-basis: 100%; font-size: 12px; color: rgba(255, 255, 255, .4); }
+.footer__recaptcha a { text-decoration: underline; }
 
 /* ---------- Mobile bottom bar ---------- */
 .mobile-bar {

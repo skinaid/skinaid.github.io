@@ -11,7 +11,8 @@ index.html                    — Үндсэн хуудас (бүх хэсэг)
 assets/css/style.css          — Загвар (өнгө, фонт, responsive)
 assets/js/main.js             — Цэс, анимаци, үйлчилгээний шүүлтүүр, FAQ, маягт (Firestore + fallback), тохиргоо унших
 assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын АНХНЫ утга (сайт + admin хоёулаа ашиглана)
-assets/js/firebase-config.js  — Firebase төслийн нийтийн тохиргоо, admin и-мэйлийн жагсаалт (UI-д)
+assets/js/firebase-config.js  — Firebase төслийн нийтийн тохиргоо, admin и-мэйлийн жагсаалт (UI-д), reCAPTCHA сайтын түлхүүр
+assets/js/app-check.js        — Firebase App Check (reCAPTCHA): сайт + admin хоёулаа Firestore-оос өмнө дуудна
 assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog унших
 admin/                        — Удирдлагын хэсэг (index.html, admin.js, admin.css): Google нэвтрэлт, 3 модуль
 firestore.rules               — Firestore аюулгүй байдлын дүрэм (console-д нийтэлсэнтэй ижил байлгана)
@@ -48,6 +49,7 @@ python3 -m http.server 8765
 | Firestore | `(default)`, Standard edition, `asia-northeast1` (Tokyo), production mode |
 | Authentication | Google provider; Authorized domains: `localhost`, `skinaid.github.io` (skinaid.mn домэйн холбосны дараа түүнийг мөн нэмнэ) |
 | Admin эрх | `firestore.rules` → `isAdmin()` жагсаалт + `assets/js/firebase-config.js` → `ADMIN_EMAILS` (UI). Одоо: hello@skinaid.mn, info@skinaid.mn |
+| App Check | reCAPTCHA (score-based v3, «Fraud Defense / reCAPTCHA Enterprise» provider, Essentials үнэгүй багц) — Firestore-д **Enforce асаалттай**; доорх «App Check» хэсэг |
 | Удирдлага | https://skinaid.github.io/admin/ — Google-ээр нэвтэрнэ (нууц үг байхгүй) |
 
 ### Өгөгдлийн бүтэц (Firestore)
@@ -63,6 +65,51 @@ python3 -m http.server 8765
 (эсвэл `npm i -g firebase-tools && firebase login && firebase deploy --only firestore:rules`). Repo дахь файл болон console
 дээрх дүрэм үргэлж ижил байх ёстой. Анхаар: Rules хэлэнд `service` түлхүүр үг тул `data.service` биш `data['service']` гэж бичнэ.
 
+### App Check (reCAPTCHA) — бот/флудаас хамгаалалт
+
+Firestore нь зөвхөн **баталгаажсан вэб аппаас** (skinaid.github.io / localhost дээр ажиллаж буй сайт, admin) ирсэн хүсэлтийг
+хүлээн авна. Хуудас ачаалахад `assets/js/app-check.js` reCAPTCHA-аар (хэрэглэгчид харагдахгүй, score-based) App Check token авч,
+Firestore хүсэлт бүрд хавсаргана. Token-гүй хүсэлт (скрипт, REST, өөр сайт) Firestore-оос `permission-denied` авна —
+дүрэм хүртэл ч хүрэхгүй. Энэ нь «бот 20,000 write/өдөр квотыг дуусгах» эрсдэлийг хаана.
+
+| Зүйл | Хаана |
+|---|---|
+| reCAPTCHA түлхүүр «SkinAid Web» | https://www.google.com/recaptcha/admin → SkinAid Web (Google Cloud төсөл `skinaid-mn`, домэйн: `skinaid.github.io`, `localhost`) |
+| Сайтын түлхүүр (нийтийн) | `assets/js/firebase-config.js` → `RECAPTCHA_SITE_KEY` — HTML-д ил байдаг, нууц биш; нууц түлхүүр (secret) хаана ч хэрэглэгдэхгүй |
+| Апп бүртгэл | Firebase console → App Check → Apps → SkinAid Web → provider «Fraud Defense (reCAPTCHA Enterprise)», Token TTL 1 цаг, App risk Medium (0.5) |
+| Enforce | Firebase console → App Check → APIs → Cloud Firestore → **Enforced**. Authentication-д enforce хийгээгүй (нэвтрэлт App Check-гүй ч ажиллана) |
+| Metrics | App Check → APIs → Cloud Firestore: Verified / Unverified (outdated, invalid, missing) хүсэлтийн график |
+
+**Квот.** reCAPTCHA Essentials багц: сард **10,000 assessment** (= шинэ App Check token авах тоо) үнэгүй, кредит карт/Blaze шаардахгүй.
+Нэг зочин нэг нээлтэд 1 token авч 1 цаг (TTL) хадгална (IndexedDB) — дараагийн хуудас нээлтүүд token дахин авахгүй.
+Квот дуусвал token авалт алддаг → сайт fallback (Messenger/и-мэйл/SMS) панел руу, admin «permission-denied» харуулна;
+дараагийн сар автоматаар сэргэнэ. Хэрэглээг reCAPTCHA admin → Analytics-аас харна. Хэт их бол TTL-ийг Firebase console-оос
+уртасгаж (1 цаг → 1 өдөр) token авалтыг цөөлнө (урт TTL = нэг token-оор удаан бичиж болох тул 7 хоногоос хэтрүүлэхгүй).
+
+**Яаралтай унтраах.** Firebase console → App Check → APIs → Cloud Firestore → ⋮ → Unenforce. Сайтын код өөрчлөгдөхгүй
+(token авсаар байна, зөвхөн шаардахаа болино). Дахин асаахдаа Enforce.
+
+**Локал хөгжүүлэлт.** `http://localhost:8765` дээр reCAPTCHA шууд ажиллана (`localhost` домэйн түлхүүрт бүртгэлтэй).
+`127.0.0.1`, өөр хост, эсвэл reCAPTCHA скрипт блоклогдсон (adblock) үед debug token хэрэглэнэ:
+
+1. Браузерын console-д `localStorage.setItem('skinaid:appcheck-debug', 'true')` гээд хуудсыг дахин ачаална — console-д
+   `App Check debug token: xxxxxxxx-...` гэж хэвлэгдэнэ (localhost/127.0.0.1 дээр л идэвхжинэ, `app-check.js`).
+2. Firebase console → App Check → Apps → SkinAid Web → ⋮ → Manage debug tokens → Add → тэр token-ийг нэрлэж хадгална.
+3. Дараа нь уг браузер дээр Firestore хүсэлт баталгаажна. Болих: `localStorage.removeItem('skinaid:appcheck-debug')`.
+   Debug token-ийг хэнтэй ч хуваалцахгүй (App Check-ийг тойрдог); ажлаа дуусаад console-оос устгаж болно.
+
+**Түлхүүр солих / домэйн нэмэх.** skinaid.mn домэйн холбоход reCAPTCHA admin → SkinAid Web → Settings → Domains-д `skinaid.mn`,
+`www.skinaid.mn` нэмнэ (Firebase Authentication → Authorized domains-д мөн). Түлхүүрийг бүхэлд нь солих бол: reCAPTCHA admin-д
+шинэ score-based түлхүүр (төсөл skinaid-mn) үүсгэж → Firebase console → App Check → Apps → SkinAid Web → ⋮ → Edit → шинэ
+сайтын түлхүүр → `firebase-config.js` → `RECAPTCHA_SITE_KEY` солиод `index.html`/`admin/index.html` дахь `?v=` дугаарыг өөрчилж push.
+Хуучин түлхүүрийг хэрэглэгчдийн token (TTL 1 цаг) дуусахыг хүлээгээд устгана.
+
+**Шалгах.** Сайтаас захиалга илгээхэд «Хүсэлт тань бүртгэгдлээ» гарч admin-д орж ирнэ; App Check → APIs → Cloud Firestore
+metrics дээр Verified 100% ойролцоо. Token-гүй хүсэлт татгалзагдаж буйг шалгах: console-д
+`fetch('https://firestore.googleapis.com/v1/projects/skinaid-mn/databases/(default)/documents/settings/site').then(r => r.status)`
+→ `403` (өмнө нь 200 байсан). Google-ийн нөхцөлөөр reCAPTCHA-ийн тэмдэг (badge) нуугдсан тул сайтын footer болон admin нэвтрэх
+картад «Энэ сайт reCAPTCHA-аар хамгаалагдсан…» мэдэгдэл заавал байна — устгаж болохгүй.
+
 ### Admin нэмэх / хасах
 
 1. `firestore.rules` → `isAdmin()` доторх жагсаалтад Google и-мэйлийг нэмж, дүрмийг дахин Publish хийнэ (жинхэнэ хамгаалалт энд).
@@ -75,12 +122,11 @@ python3 -m http.server 8765
   Жагсаалт сүүлийн 300 захиалгыг харуулна, хуучныг «Цааш ачаалах» товчоор татна. Квот дуусвал сайт fallback панел руу, admin «Дахин холбогдох» товчтой мэдэгдэл харуулна.
 - Шинэ захиалгын и-мэйл/SMS мэдэгдэл **байхгүй** (Cloud Functions Blaze шаарддаг). Admin хуудсыг нээлттэй байлгавал бодит цагт
   шинэчлэгдэж, "Шинэ захиалгын мэдэгдэл асаах" дарсан бол браузерын мэдэгдэл + дуу гарна.
-- Захиалга үүсгэх нь нийтэд нээлттэй тул спам ирж болно: дүрмийн хатуу validation + маягтын honeypot талбар хамгаална.
+- Захиалга үүсгэх нь нийтэд нээлттэй тул спам ирж болно: App Check (reCAPTCHA, дээрх хэсэг) + дүрмийн хатуу validation + маягтын honeypot талбар хамгаална.
   Спам ирвэл admin-д тухайн төлөвөөр («Шинэ») шүүгээд «... төлөвтэй N-ийг устгах» товчоор багцаар цэвэрлэнэ (жинхэнэ захиалгаа эхлээд «Холбогдсон» болгоно).
-  Хэрэгтэй бол дараагийн алхам — Firebase App Check (reCAPTCHA) асаах.
 - Firebase web config (`apiKey` гэх мэт) нууц биш, нийтэд ил байх зориулалттай. Аюулгүй байдал нь дүрэм + allowlist.
 - Захиалгын өгөгдөл хувийн мэдээлэл тул admin хуудсыг зөвхөн итгэлтэй төхөөрөмжөөс нээж, ажлаа дуусаад "Гарах" дарна.
-- SDK хувилбар (`12.16.0`) `backend.js`, `admin/admin.js`, `firebase-config.js` гурвуулаа ижил байна; шинэчлэхдээ гурвууланг нь солино.
+- SDK хувилбар (`12.16.0`) `backend.js`, `admin/admin.js`, `app-check.js`, `firebase-config.js` дөрвүүлээ ижил байна; шинэчлэхдээ дөрвүүлэнг нь солино.
 
 ## Байршуулалт (GitHub Pages)
 
@@ -96,6 +142,7 @@ git add -A && git commit -m "Өөрчлөлтийн тайлбар" && git push
 Push хийснээс 1–2 минутын дараа сайт шинэчлэгдэнэ (Actions таб дээр "pages build and deployment" ажиллана).
 CSS/JS-ийн өөрчлөлт хэрэглэгчдэд шууд харагдахын тулд `index.html` БОЛОН `admin/index.html` дахь холбогдох `?v=...` дугааруудыг өөрчилнө
 (style.css, main.js, catalog-defaults.js, backend.js, admin.css, admin.js — style.css хоёр HTML-д хоёуланд нь холбогдсон).
+`firebase-config.js`, `app-check.js` нь module import-оор ачаалагддаг тул `?v=` байхгүй — GitHub Pages 10 минутын cache-тэй, тэр хугацаанд шинэчлэгдэнэ.
 
 ### skinaid.mn домэйныг холбох (бэлэн болсон үед)
 
