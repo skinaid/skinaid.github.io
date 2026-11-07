@@ -3,6 +3,8 @@
    ../assets/css/style.css-ийн токен (--purple, фонт), .btn, .field, .chip-ийг дахин ашиглана.
    ========================================================================== */
 body { background: var(--purple-50); min-height: 100vh; }
+/* hidden атрибут display:grid/flex дүрмээс давуу байна (нэвтрэх карт ↔ апп солигдох) */
+[hidden] { display: none !important; }
 body.is-admin { overflow-x: auto; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
