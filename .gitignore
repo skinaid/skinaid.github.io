@@ -1,0 +1,7 @@
+# Local tooling
+.claude/
+.DS_Store
+
+# Raw source logos kept locally; web versions live in assets/img/
+/skinaid-logo.jpg
+/profile logo new SA.jpg
