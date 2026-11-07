@@ -233,7 +233,7 @@
       $$('.chip', chipsEl).forEach(c => { const on = c === b; c.classList.toggle('is-active', on); c.setAttribute('aria-pressed', String(on)); });
       render();
     });
-    if (moreBtn) moreBtn.addEventListener('click', () => { expanded = true; render(); });
+    if (moreBtn) moreBtn.addEventListener('click', () => { expanded = true; render(); const first = listEl.children[LIMIT]; if (first) first.focus(); });
     render();
   }
 

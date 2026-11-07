@@ -297,7 +297,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .scroller-wrap { position: relative; }
 .scroller {
   display: grid; grid-auto-flow: column; grid-auto-columns: min(310px, 78vw); gap: 20px;
-  overflow-x: auto; scroll-snap-type: x mandatory; padding: 8px var(--gutter) 28px; margin-inline: calc(var(--gutter) * -1);
+  overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: var(--gutter); padding: 8px var(--gutter) 28px; margin-inline: calc(var(--gutter) * -1);
   scrollbar-width: none;
 }
 .scroller::-webkit-scrollbar { display: none; }
