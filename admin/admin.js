@@ -96,6 +96,7 @@ onAuthStateChanged(auth, async (user) => {
   gate.hidden = true; shell.hidden = false;
   startBookings();
   loadSite();
+  renderPages(null);
   loadCatalog();
 });
 const teardown = () => {
@@ -333,12 +334,16 @@ siteForm.addEventListener('submit', async (e) => {
 const catRef = doc(db, 'settings', 'catalog');
 const svcBody = $('#svcTable tbody'), pkgBody = $('#pkgTable tbody'), catStatus = $('#catStatus');
 const catOptions = (sel) => Object.entries(CATS).map(([k, v]) => `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(v)}</option>`).join('');
+// Нийтлэгдсэн эмчилгээний хуудастай холбоотой үйлчилгээ (build: admin/pages-status.js) — зөвхөн харуулна, хадгалахгүй
+const PAGE_BY_ID = {};
+((window.SKINAID_PAGES_STATUS || {}).pages || []).forEach(p => { if (p.url) p.catalogIds.forEach(id => { PAGE_BY_ID[id] = p.url; }); });
 const svcRow = (s) => {
   const tr = document.createElement('tr');
   tr.dataset.id = s.id; if (s.hidden) tr.classList.add('is-hidden');
+  const page = PAGE_BY_ID[s.id];
   tr.innerHTML = `
     <td class="c-cat"><select aria-label="Ангилал" data-k="c">${catOptions(s.c)}</select></td>
-    <td class="c-name"><input type="text" aria-label="Нэр" data-k="n" maxlength="120" value="${esc(s.n)}"></td>
+    <td class="c-name"><input type="text" aria-label="Нэр" data-k="n" maxlength="120" value="${esc(s.n)}">${page ? `<a class="svc-page" href="${esc(page)}" target="_blank" rel="noopener" title="Энэ үйлчилгээний үнэ эмчилгээний хуудсанд ч харагдана — үнэ өөрчилбөл repo-ийн catalog-defaults.js-ийг мөн шинэчилнэ">↗ ${esc(page)}</a>` : ''}</td>
     <td class="c-desc"><input type="text" aria-label="Тайлбар" data-k="d" maxlength="300" value="${esc(s.d)}"></td>
     <td class="c-time"><input type="text" aria-label="Хугацаа" data-k="t" maxlength="30" value="${esc(s.t)}"></td>
     <td class="c-price"><input type="text" aria-label="Үнэ" data-k="p" maxlength="40" value="${esc(s.p)}"></td>
@@ -371,6 +376,7 @@ const loadCatalog = async () => {
     if (snap.exists() && Array.isArray(snap.data().services)) {
       const c = snap.data();
       fillCatalog(c.services, Array.isArray(c.packages) ? c.packages : []);
+      renderPages(c.services);
       setStatus(catStatus, `Сүүлд хадгалсан: ${fmtDate(c.updatedAt)} · ${c.updatedBy || ''}`, '');
     } else {
       fillCatalog(DEFAULTS.treatments, DEFAULTS.packages);
@@ -390,7 +396,9 @@ $('#btnSvcAdd').addEventListener('click', () => {
 });
 svcBody.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act="rm"]'); if (!b) return;
-  b.closest('tr').remove(); $('#svcCount').textContent = String(svcBody.children.length);
+  const tr = b.closest('tr');
+  if (PAGE_BY_ID[tr.dataset.id] && !confirm(`Энэ үйлчилгээ ${PAGE_BY_ID[tr.dataset.id]} хуудастай холбоотой. Устгавал дахин нэмэхэд холбоос сэргэхгүй (шинэ id). Түр нуух бол «Нуух»-ыг сонгоно уу. Устгах уу?`)) return;
+  tr.remove(); $('#svcCount').textContent = String(svcBody.children.length);
 });
 [svcBody, pkgBody].forEach(tb => tb.addEventListener('change', (e) => {
   if (e.target.matches('[data-k="hidden"]')) e.target.closest('tr').classList.toggle('is-hidden', e.target.checked);
@@ -416,3 +424,40 @@ $('#catForm').addEventListener('submit', async (e) => {
   } catch (err) { setStatus(catStatus, errText(err), 'err'); }
   finally { btn.disabled = false; }
 });
+
+/* ==========================================================================
+   Модуль 4: Эмчилгээний хуудас (зөвхөн харах; өгөгдөл: build-ийн admin/pages-status.js)
+   ========================================================================== */
+function renderPages(fsServices) {
+  const tb = $('#pgTable tbody'); if (!tb) return;
+  const ST = (window.SKINAID_PAGES_STATUS || {}).pages || [];
+  const STAGE = { planned: 'Төлөвлөсөн', drafting: 'Ноорог бичиж буй', review: 'Эмч хянаж буй', approved: 'Баталсан', published: 'Нийтэлсэн' };
+  const nameOf = (id) => { const t = (DEFAULTS.treatments || []).find(x => x.id === id); return t ? t.n : id; };
+  tb.replaceChildren(...ST.map(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${esc(p.h1)}</strong><br>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a>` : `<span class="muted">/emchilgee/${esc(p.slug)}</span>`}<br><span class="muted">Түлхүүр үг: ${esc(p.primary)}</span></td>
+      <td>${esc(String(p.week))}<br><span class="muted">${esc(p.weekStart)}</span></td>
+      <td><span class="badge" data-stage="${esc(p.stage)}">${esc(STAGE[p.stage] || p.stage)}</span></td>
+      <td>${p.reviewer ? esc(p.reviewer) + (p.reviewerConsent ? '' : '<br><span class="muted">зөвшөөрөл хүлээгдэж буй</span>') : '<span class="muted">томилоогүй</span>'}</td>
+      <td>${p.lastReviewed ? esc(p.lastReviewed) : '—'}</td>
+      <td>${esc(p.sitePrice)}</td>
+      <td>${p.catalogIds.map(id => esc(nameOf(id))).join('<br>')}</td>`;
+    return tr;
+  }));
+  const count = (st) => ST.filter(p => p.stage === st).length;
+  $('#pgStats').innerHTML = ['published', 'approved', 'review', 'drafting', 'planned']
+    .map(st => `<div class="pg-stat"><strong>${count(st)}</strong><span>${esc(STAGE[st])}</span></div>`).join('');
+  // Анхааруулга: нийтлэгдсэн хуудасны үйлчилгээ admin-д нуугдсан/устсан, эсвэл үнэ сайтын хуудаснаас зөрсөн
+  const warn = [];
+  if (Array.isArray(fsServices)) {
+    const byId = new Map(fsServices.map(s => [s && s.id, s]));
+    ST.filter(p => p.url).forEach(p => p.catalogIds.forEach(id => {
+      const s = byId.get(id), d = (DEFAULTS.treatments || []).find(x => x.id === id) || {};
+      if (!s) warn.push(`${p.url}: «${nameOf(id)}» үйлчилгээ admin-ий жагсаалтад алга (устгагдсан).`);
+      else if (s.hidden) warn.push(`${p.url}: «${nameOf(id)}» admin-д нуугдсан ч эмчилгээний хуудсанд харагдаж байна.`);
+      else if ((s.p || '') !== (d.p || '')) warn.push(`${p.url}: «${nameOf(id)}» үнэ admin-д «${s.p || '—'}», сайтын хуудсанд «${d.p || '—'}» — repo-ийн catalog-defaults.js-ийг шинэчилнэ.`);
+    }));
+  }
+  $('#pgWarn').innerHTML = warn.map(w => `<li>${esc(w)}</li>`).join('');
+}

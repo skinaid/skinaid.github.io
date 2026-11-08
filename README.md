@@ -16,12 +16,22 @@ assets/js/catalog-render.js   — Үйлчилгээний мөрийн HTML з�
 assets/js/firebase-config.js  — Firebase төслийн нийтийн тохиргоо, admin и-мэйлийн жагсаалт (UI-д), reCAPTCHA сайтын түлхүүр
 assets/js/app-check.js        — Firebase App Check (reCAPTCHA): сайт + admin хоёулаа Firestore-оос өмнө дуудна
 assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog унших
-admin/                        — Удирдлагын хэсэг (index.html, admin.js, admin.css): Google нэвтрэлт, 3 модуль
+admin/                        — Удирдлагын хэсэг (index.html, admin.js, admin.css): Google нэвтрэлт, 4 модуль
+admin/pages-status.js         — «Эмчилгээний хуудас» цэсийн өгөгдөл (build үүсгэнэ)
 firestore.rules               — Firestore аюулгүй байдлын дүрэм (console-д нийтэлсэнтэй ижил байлгана)
 firebase.json, .firebaserc    — Firebase CLI хэрэглэх үед (заавал биш)
 assets/img/                   — Лого (logo.png, logo-white.png), favicon, og-image; өөрийн зургуудаа энд хийнэ
-tools/build.mjs (+ tools/lib) — Build: JSON-LD, статик үйлчилгээний жагсаалт, asset хувилбар, sitemap; --check шалгалт
-content/site.mjs              — Эмнэлгийн баталгаатай мэдээлэл (NAP, JSON-LD), индекслэгдэх хуудсын жагсаалт
+tools/build.mjs (+ tools/lib) — Build: header/footer, JSON-LD, статик жагсаалт, эмчилгээний хуудсууд, asset хувилбар,
+                                sitemap, redirect; --check шалгалт, --preview ноорог
+tools/preview.mjs             — Ноорог харах локал сервер (127.0.0.1:8766)
+tools/test/                   — node --test 'tools/test/*.test.mjs'
+emchilgee/                    — Эмчилгээний хуудсууд ба hub (build үүсгэнэ — гараар бүү засаарай)
+content/site.mjs              — Эмнэлгийн баталгаатай мэдээлэл (NAP, JSON-LD), байнгын хуудсууд, footer
+content/pipeline.mjs          — 15 эмчилгээний хуудасны төлөвлөгөө (түлхүүр үг, долоо хоног, үйлчилгээ, хуучин URL)
+content/pages/*.mjs           — ЗӨВХӨН эмчийн баталсан эмчилгээний хуудас (repo нийтэд нээлттэй!)
+content/doctors.mjs           — Хянагч эмч нар (нэр, цол, нэр гаргах зөвшөөрлийн огноо)
+content/hub.mjs               — /emchilgee жагсаалтын текст
+content/drafts/, content/_work/ — Ноорог, судалгаа (.gitignore — commit хийхгүй)
 content/lastmod.json          — Хуудас бүрийн агуулга өөрчлөгдсөн огноо (build бичнэ, sitemap-ийн lastmod)
 ```
 
@@ -46,7 +56,11 @@ node tools/build.mjs --check  # юу ч бичихгүй; хуучирсан э�
 build мартвал хэрэглэгчид хуучин JS/CSS-ээ жилээр ашиглана).
 
 Build юу хийдэг вэ:
-- `index.html` дахь `<!-- build:jsonld -->`, `<!-- build:treat-chips -->`, `<!-- build:treat-list -->` хэсгүүдийг дүүргэнэ (бүх 50 үйлчилгээ статик HTML — Google JS-гүйгээр харна). **Эдгээр хэсгийг гараар бүү засаарай.**
+- `index.html` дахь `<!-- build:jsonld -->`, `treat-chips`, `treat-list`, `pages-index`, `site-header`, `site-footer` хэсгүүдийг
+  дүүргэнэ (бүх 50 үйлчилгээ статик HTML — Google JS-гүйгээр харна). Header/footer-ийн эх нь `tools/lib/layout.mjs`
+  (нүүр, privacy, эмчилгээний хуудас бүгд ижил). **Эдгээр хэсгийг болон `emchilgee/**`-г гараар бүү засаарай.**
+- `content/pages/`-ийн баталсан хуудсуудаас `emchilgee/<slug>/index.html`, hub `emchilgee/index.html`, `admin/pages-status.js`,
+  нүүрний мөр/карт/footer-ийн холбоос, хуучин Wix URL-ийн 308 redirect (`vercel.json`)-ийг үүсгэнэ.
 - `/assets/...` холбоос бүр болон JS module-ийн import-д агуулгын hash (`?v=8тэмдэгт`) тавина → `vercel.json` дахь `/assets/*` нэг жилийн `immutable` cache аюулгүй. `?v=`-г гараар өөрчлөх шаардлагагүй.
 - `sitemap.xml`-ийг `content/site.mjs`-ийн хуудсын жагсаалтаас, `lastmod`-ийг агуулга өөрчлөгдсөн огноогоор бичнэ.
 - Шалгалт: title/description урт ба давхардал, canonical, h1 = 1, JSON-LD зөв (дотроо `<`-гүй), build тэмдэглэгээ нэг удаа,
@@ -57,6 +71,26 @@ Build юу хийдэг вэ:
   ташуугүй URL дээр харьцангуй зам буруу задарна).
 
 Тэмдэглэл: Нүүр хуудас дээр Firestore-ийн `settings/catalog` (admin → Үйлчилгээ / Багц) статик жагсаалтыг хэрэглэгчийн хөтөч дээр дахин зурна. Google статик (catalog-defaults.js) хувилбарыг харна — тиймээс тайлбар засахдаа хоёуланд нь засна (admin-ыг Google-д автоматаар хүргэх синк нь SEO төлөвлөгөөний 7-р үе шат).
+
+## Эмчилгээний хуудас нийтлэх (эмчийн хяналттай)
+
+Эрүүл мэндийн хуудас **эмч хянаж, нэрээ гаргахыг зөвшөөрсний дараа л** нийтлэгдэнэ. Repo нийтэд нээлттэй тул ноорог commit хийхгүй.
+
+1. Ноорог: `content/drafts/<slug>.mjs` (бүтэц: `tools/lib/content.mjs`; жишээ: `tools/test/content.test.mjs`). Эмчээр батлуулах
+   зүйлийг текстэд `[[эмч: асуулт]]` гэж тэмдэглэнэ. Үнэ бичихгүй — `catalog-defaults.js`-ээс автоматаар орно.
+2. `node tools/build.mjs --preview && node tools/preview.mjs` → http://127.0.0.1:8766/emchilgee/<slug> («НООРОГ» тууз, асуудлын жагсаалт).
+3. Эмчид Google Doc-оор хянуулна (шалгах хүснэгт + бүтэн текст). Засварыг ноорогт оруулаад preview-ийн туузан дээрх
+   «Хувилбар» (hash)-ийг эмчээр «Зөвшөөрөв» гэж батлуулна.
+4. `content/doctors.mjs`-д эмчийн цол, `consent: { date, scope: ['reviewer'] }`-ийг бичнэ (бичгээр авсан зөвшөөрөл Drive-д).
+5. Ноорогийг `content/pages/<slug>.mjs` руу зөөж `status: 'published'`, `lastReviewed`, `review: { hash }` бөглөнө.
+   `[[эмч: …]]` тэмдэг үлдэхгүй. Дараа нь `node tools/build.mjs`, `git add -A`, commit, push.
+6. Батлагдсаны дараа текстийг засвал hash зөрж build алдаа өгнө — эмчээр дахин хянуулна (санамсаргүй засвар live хуудсыг
+   эвдэхгүй: build алдаатай хуудасны HTML-ийг хөндөхгүй). Хуудсыг буцаахад `content/pages/<slug>.mjs`-ийг устгаад build хийнэ.
+
+Шалгалт (`tools/lib/content.mjs`, `claims.mjs`, `check.mjs`): хэсэг бүр бөглөгдсөн, FAQ 3–10, эх сурвалж ≥ 2 (https), 500+ үг,
+хориотой мэдэгдэлгүй (хамгийн, шилдэг, баталгаатай, 100%, өвдөлтгүй, аюулгүй, гаж нөлөөгүй, бүрмөсөн …), текстэд үнэгүй,
+дэд хуудсанд Firebase/reCAPTCHA ачаалахгүй, breadcrumb = JSON-LD, хянагч эмч ба огноо харагдана, үнэлгээ/цаг/geo markup-гүй.
+admin → «Эмчилгээний хуудас» цэс төлөв, хуваарь, үнийн зөрүүг харуулна (зөвхөн харах).
 
 ## Засварлах зүйлс
 
@@ -193,7 +227,9 @@ Datacom (manage.datacom.mn) DNS удирдлага дээр:
 
 - `trailingSlash: false` — хуудсууд ташуу зураасгүй хаягтай (`/privacy`, `/admin`). Canonical, sitemap, дотоод холбоос бүгд ташуугүй хэлбэрийг ашиглана.
 - `/index.html` → `/`, `/<хавтас>/index.html` → `/<хавтас>`, `/privacy-policy` → `/privacy`.
-- Хуучин Wix замууд: `/service-page/*` → `/#treatments`, `/post/*`, `/blog/*` → `/#blog`, `/product-page/*` → `/`, `/book-online*` → `/#contact`. Үйлчилгээ/нийтлэлийн тусдаа хуудсууд гармагц эдгээрийг тэр хуудсууд руу байнгын (308) redirect болгоно.
+- Хуучин Wix замууд: `/service-page/*` → `/#treatments`, `/post/*`, `/blog/*` → `/#blog`, `/product-page/*` → `/`, `/book-online*` → `/#contact`.
+  Эмчилгээний хуудас нийтлэгдэхэд `content/pipeline.mjs` / хуудасны `legacy` URL-ууд → тэр хуудас руу 308 redirect-ийг build
+  автоматаар `vercel.json`-д (catch-all-аас өмнө, percent-encoded) нэмнэ. `/emchilgee/` руу заасан дүрмийг гараар бүү засаарай.
 - **Кирилл URL:** Vercel кирилл замыг зөвхөн percent-encoded хэлбэрээр таардаг (2026-11-08 туршсан: `/zz-probe/тест` raw эх 404, `%D1%82%D0%B5%D1%81%D1%82` эх 307). Тиймээс кирилл эхтэй redirect-ийг `encodeURI()` хэлбэрээр (том hex) бичнэ.
 - `/admin` болон доорх бүх файл: `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store`.
 - Шалгах: `curl -sIL -o /dev/null -w '%{num_redirects} %{http_code} %{url_effective}\n' https://www.skinaid.mn/privacy-policy` → `1 200 https://www.skinaid.mn/privacy`.

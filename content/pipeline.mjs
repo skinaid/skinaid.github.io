@@ -3,13 +3,15 @@
 // catalogIds — тэр хуудас руу холбогдох үйлчилгээ (нэг үйлчилгээ нэг хуудсанд); alsoIds — үнийн хүснэгтэд харуулах.
 // legacy — хуучин Wix URL (нийтлэгдэхэд 308 redirect, build удирдана). Хуудасны эцсийн өгөгдөл content/pages/<slug>.mjs-д.
 // admin → «Эмчилгээний хуудас» цэс энэ жагсаалтыг харуулна. Долоо хоног 1 = 2026-11-09-ний долоо хоног.
+// stage: 'planned' | 'drafting' (ноорог бичиж буй) | 'review' (эмчид Google Doc илгээсэн) | 'approved' (эмч баталсан).
+// Нийтлэгдсэн эсэхийг build өөрөө тогтооно (content/pages/<slug>.mjs шалгалтад тэнцсэн бол).
 
 export const pipeline = [
-  { slug: 'batganii-sorvi', week: 1, reviewer: 'onorsaikhan', category: 'scar', h1: 'Батганы сорви арилгах эмчилгээ',
+  { slug: 'batganii-sorvi', week: 1, stage: 'drafting', reviewer: 'onorsaikhan', category: 'scar', h1: 'Батганы сорви арилгах эмчилгээ',
     primary: 'батганы сорви арилгах', secondary: ['батганы сорви', 'сорвины төрөл', 'сорви өөрөө арилдаг уу', 'сорви салгах', 'келоид сорви'],
     catalogIds: ['scar-4', 'scar-5'], alsoIds: ['scar-1', 'scar-2', 'scar-3', 'glow-3'], related: ['nuhjilt', 'co2-lazer', 'vivace-rf'],
     bookingOption: 'Сорви, нүхжилт', legacy: [] },
-  { slug: 'nuhjilt', week: 1, reviewer: 'onorsaikhan', category: 'scar', h1: 'Нүхжилт арилгах эмчилгээ',
+  { slug: 'nuhjilt', week: 1, stage: 'drafting', reviewer: 'onorsaikhan', category: 'scar', h1: 'Нүхжилт арилгах эмчилгээ',
     primary: 'нүхжилт арилгах', secondary: ['сүв томрох', 'нүүрний нүхжилт', 'нүхжилтийн шалтгаан', 'карбон пийл'],
     catalogIds: ['glow-4'], alsoIds: ['scar-1', 'scar-2', 'scar-3', 'glow-2'], related: ['batganii-sorvi', 'vivace-rf', 'nuur-archilgaa'],
     bookingOption: 'Сорви, нүхжилт', legacy: [] },

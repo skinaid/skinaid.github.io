@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=99c2259d">
-  <link rel="stylesheet" href="/admin/admin.css?v=91410ae7">
+  <link rel="stylesheet" href="/admin/admin.css?v=2451cb47">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -42,6 +42,7 @@
         <button type="button" data-view="bookings" aria-current="page"><span>Захиалга</span><span class="count" id="newCount"><span class="sr-only">шинэ: </span><span data-n>0</span></span></button>
         <button type="button" data-view="settings"><span>Тохиргоо</span></button>
         <button type="button" data-view="catalog"><span>Үйлчилгээ / Багц</span></button>
+        <button type="button" data-view="pages"><span>Эмчилгээний хуудас</span></button>
       </nav>
       <div class="side__foot">
         <span>Нэвтэрсэн:<br><strong id="whoEmail"></strong></span>
@@ -138,12 +139,35 @@
           </div>
         </form>
       </section>
+
+      <!-- Модуль: Эмчилгээний хуудас (зөвхөн харах — нийтлэх нь repo-оос, эмч баталсны дараа) -->
+      <section class="view" id="view-pages" aria-labelledby="h-pages" hidden>
+        <div class="main__head">
+          <div><h1 id="h-pages">Эмчилгээний хуудас</h1><p>Сайтын эмчилгээ тус бүрийн хуудас (/emchilgee/…): төлөв, хянагч эмч, хуваарь. Хуудас эмч Google Doc-оор баталсны дараа нийтлэгдэнэ — энд зөвхөн харна.</p></div>
+        </div>
+        <div class="panel">
+          <h2>Товч</h2>
+          <div class="pg-stats" id="pgStats"></div>
+          <ul class="pg-warn" id="pgWarn" aria-live="polite"></ul>
+        </div>
+        <div class="panel">
+          <h2>Хуудсууд</h2>
+          <p>Долоо хоног бүр 2 хуудас. Үнэ нь сайтын хуудсанд харагдах (repo-ийн catalog-defaults.js) үнэ.</p>
+          <div class="tbl-wrap">
+            <table class="tbl tbl--ro" id="pgTable">
+              <thead><tr><th>Хуудас</th><th>Долоо хоног</th><th>Төлөв</th><th>Хянагч эмч</th><th>Хянасан</th><th>Үнэ (сайт)</th><th>Үйлчилгээ</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="/assets/js/catalog-defaults.js?v=cf4cf057"></script>
-  <script type="module" src="/admin/admin.js?v=e9d164a8"></script>
+  <script src="/admin/pages-status.js?v=3b9917e3"></script>
+  <script type="module" src="/admin/admin.js?v=0bdaa6ba"></script>
 </body>
 </html>
