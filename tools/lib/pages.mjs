@@ -130,7 +130,7 @@ export function renderTreatment(page, ctx) {
   const { site, catalog } = ctx;
   const url = site.origin + '/emchilgee/' + page.slug;
   const c = { preview: ctx.preview, where: page.slug, linkOk: ctx.linkOk };
-  const items = (page.catalogIds || []).map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean);
+  const items = [...new Set([...(page.catalogIds || []), ...(page.alsoIds || [])])].map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean);
   const price = priceInfo(items);
   const book = `/?svc=${page.slug}#contact`;
   const layoutCtx = { home: false, site, book, pageUrl: ctx.pageUrl, hubLive: ctx.hubLive, current: page.slug };

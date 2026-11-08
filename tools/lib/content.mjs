@@ -45,7 +45,9 @@ export async function loadContent(root, { preview = false } = {}) {
   }
   const doc = existsSync(join(root, 'content/doctors.mjs')) ? await import(pathToFileURL(join(root, 'content/doctors.mjs')).href) : {};
   const hubMod = existsSync(join(root, 'content/hub.mjs')) ? await import(pathToFileURL(join(root, 'content/hub.mjs')).href) : {};
-  return { pages: [...bySlug.values()], doctors: doc.doctors || {}, hub: hubMod.hub || null };
+  const pipeMod = existsSync(join(root, 'content/pipeline.mjs')) ? await import(pathToFileURL(join(root, 'content/pipeline.mjs')).href) : {};
+  const pipeline = pipeMod.pipeline || [];
+  return { pages: [...bySlug.values()], doctors: doc.doctors || {}, hub: hubMod.hub || null, pipeline, pipelineSlugs: new Set(pipeline.map((p) => p.slug)) };
 }
 
 const stable = (v) => {
@@ -117,6 +119,11 @@ export function validatePage(page, ctx) {
     if (!s || !s.title || !s.publisher || !/^https:\/\//.test(s.url || '')) E(`sources[${i}]: title, publisher, https url шаардлагатай`);
     if (s && s.accessed && !/^\d{4}-\d{2}-\d{2}$/.test(s.accessed)) E(`sources[${i}].accessed огноо YYYY-MM-DD`);
   }
+  for (const id of page.alsoIds || []) {
+    if (!ids.has(id)) E(`alsoIds: "${id}" catalog-defaults.js-д алга`);
+    if ((page.catalogIds || []).includes(id)) E(`alsoIds: "${id}" catalogIds-д аль хэдийн бий`);
+  }
+  if (ctx.pipelineSlugs && ctx.pipelineSlugs.size && !ctx.pipelineSlugs.has(page.slug)) W(`content/pipeline.mjs-д "${page.slug}" төлөвлөгдөөгүй`);
   for (const r of page.related || []) if (!ctx.allPages.some((p) => p.slug === r)) W(`related "${r}" хуудас алга (холбоос гарахгүй)`);
   if (!Array.isArray(page.legacy || [])) E('legacy массив байх ёстой');
 

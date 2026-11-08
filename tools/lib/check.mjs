@@ -36,8 +36,8 @@ export function sourceToRegExp(src) {
 }
 
 /** vercel.json-ийн redirect эх (host-гүй) — дотоод холбоос redirect руу заахыг илрүүлэхэд */
-function redirectMatchers(root) {
-  const cfg = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8'));
+function redirectMatchers(root, files) {
+  const cfg = JSON.parse(files && files.has('vercel.json') ? files.get('vercel.json') : readFileSync(join(root, 'vercel.json'), 'utf8'));
   return (cfg.redirects || []).filter((r) => !r.has).map((r) => {
     const re = sourceToRegExp(r.source);
     return (p) => re.test(p);
@@ -75,7 +75,7 @@ export function checkSite({ root, site, pages, otherHtml, files, catalog, tracke
   if (tracked) {
     for (const rel of [...pages.map((p) => p.file), ...otherHtml, ...files.keys()]) if (!tracked.has(rel)) untracked.add(rel);
   }
-  const isRedirect = redirectMatchers(root);
+  const isRedirect = redirectMatchers(root, files);
   const seen = { title: new Map(), description: new Map(), canonical: new Map() };
 
   for (const pg of pages) {
@@ -96,8 +96,45 @@ export function checkSite({ root, site, pages, otherHtml, files, catalog, tracke
   }
 
   const originAsset = new RegExp(reEsc(site.origin) + '/assets/[^"\'\\s<>),]+', 'g');
+  // Дэд хуудас (эмчилгээ, hub): Firebase/reCAPTCHA-гүй, ноорогийн тэмдэггүй, breadcrumb = JSON-LD, хянагч харагдана
+  for (const pg of pages.filter((p) => p.path.startsWith('/emchilgee'))) {
+    const html = read(pg.file);
+    const E = (msg) => errors.push(`${pg.file}: ${msg}`);
+    if (/<script[^>]+src="[^"]*(?:backend|app-check|firebase|recaptcha)[^"]*"/i.test(html)) E('дэд хуудсанд Firebase/reCAPTCHA script ачаалахгүй');
+    if (/<link[^>]+rel="preconnect"[^>]+(?:www\.gstatic\.com|firestore\.googleapis\.com)/.test(html)) E('дэд хуудсанд gstatic/firestore preconnect хэрэггүй');
+    if (/class="dr-q"|class="draft-banner"|\[НООРОГ\]|\[\[эмч:/.test(html)) E('ноорогийн тэмдэг (dr-q / draft-banner / [[эмч:) үлдсэн');
+    if (!/class="disclaimer"/.test(html)) E('эмнэлгийн анхааруулга (disclaimer) алга');
+    const crumbHtml = (html.match(/<nav class="crumbs"[\s\S]*?<\/nav>/) || [''])[0];
+    const crumbs = [...crumbHtml.matchAll(/<li>(?:<a href="([^"]+)">([^<]+)<\/a>|<span aria-current="page">([^<]+)<\/span>)<\/li>/g)]
+      .map((x) => ({ path: x[1] || pg.path, name: decode(x[2] || x[3]) }));
+    let graph = [];
+    for (const [, body] of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script/gi)) { try { graph = graph.concat(JSON.parse(body)['@graph'] || []); } catch { /* доор алдаа гарна */ } }
+    const bc = graph.find((n) => n['@type'] === 'BreadcrumbList');
+    const want = bc ? bc.itemListElement.map((i) => ({ path: i.item.replace(site.origin, '') || '/', name: i.name })) : null;
+    if (!bc) E('BreadcrumbList JSON-LD алга');
+    else if (JSON.stringify(crumbs) !== JSON.stringify(want)) E(`breadcrumb (${JSON.stringify(crumbs)}) ≠ JSON-LD (${JSON.stringify(want)})`);
+    const wp = graph.find((n) => n['@type'] === 'MedicalWebPage');
+    if (pg.path !== '/emchilgee') {
+      if (!wp) E('MedicalWebPage JSON-LD алга');
+      else if (!wp.reviewedBy || !wp.lastReviewed) E('нийтлэгдсэн хуудсанд reviewedBy, lastReviewed байх ёстой');
+      else {
+        const person = graph.find((n) => n['@id'] === wp.reviewedBy['@id']);
+        if (!person || !html.includes(`Хянасан: <strong>${person.name.replace(/&/g, '&amp;')}`)) E('хянагч эмчийн нэр хуудсанд харагдахгүй байна');
+        if (!html.includes(`<time datetime="${wp.lastReviewed}">`)) E('хянасан огноо (<time>) хуудсанд харагдахгүй байна');
+      }
+    }
+  }
+
   for (const rel of [...pages.map((p) => p.file), ...otherHtml]) {
     const html = read(rel);
+    // Зураг бүр alt-тай
+    for (const [tag] of html.matchAll(/<img\b[^>]*>/g)) if (!/\balt="/.test(tag)) errors.push(`${rel}: alt-гүй зураг ${tag.slice(0, 80)}`);
+    // JSON-LD: үнэлгээ/сэтгэгдэл хэзээ ч, баталгаажаагүй цаг/geo оруулахгүй
+    for (const [, body] of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script/gi)) {
+      if (/"@type":"(?:AggregateRating|Review|Rating)"|"(?:aggregateRating|review)":/.test(body)) errors.push(`${rel}: JSON-LD-д үнэлгээ/сэтгэгдэл (AggregateRating/Review) байж болохгүй`);
+      if (!site.geo && /"geo":/.test(body)) errors.push(`${rel}: site.geo баталгаажаагүй ч JSON-LD-д geo байна`);
+      if (!site.openingHours && /"openingHours(?:Specification)?":/.test(body)) errors.push(`${rel}: ажлын цаг баталгаажаагүй ч JSON-LD-д байна`);
+    }
     // build тэмдэглэгээ: нээх/хаах бүр яг нэг удаа
     for (const name of new Set([...html.matchAll(/<!-- \/?build:([\w-]+) -->/g)].map((x) => x[1]))) {
       const o = html.split(`<!-- build:${name} -->`).length - 1, c = html.split(`<!-- /build:${name} -->`).length - 1;

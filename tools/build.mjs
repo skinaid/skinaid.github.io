@@ -25,7 +25,8 @@ import { site, corePages, otherHtml } from '../content/site.mjs';
 import { siteHeader, siteFooter } from './lib/layout.mjs';
 import { homeGraph, treatmentGraph, hubGraph } from './lib/schema.mjs';
 import { AssetStamper, BuildError, vercelIgnore } from './lib/assets.mjs';
-import { checkSite, pageMeta } from './lib/check.mjs';
+import { checkSite, pageMeta, sourceToRegExp } from './lib/check.mjs';
+import { manageRedirects } from './lib/redirects.mjs';
 import { loadContent, validatePage, reviewHash } from './lib/content.mjs';
 import { renderTreatment, renderHub, GENERATED } from './lib/pages.mjs';
 import { plain, wordCount } from './lib/render.mjs';
@@ -71,9 +72,19 @@ const bookingOptions = (() => {
   return [...sel.matchAll(/<option(?![^>]*value="")[^>]*>([^<]+)<\/option>/g)].map((m) => m[1].trim());
 })();
 const contentErrors = [], contentWarnings = [];
+{ // content/pipeline.mjs: үйлчилгээ бүр нэг л хуудсанд, catalog-д байх ёстой
+  const owner = new Map(), ids = new Set(catalog.treatments.map((t) => t.id));
+  for (const p of content.pipeline) {
+    for (const id of [...(p.catalogIds || []), ...(p.alsoIds || [])]) if (!ids.has(id)) contentErrors.push(`content/pipeline.mjs: ${p.slug} — "${id}" catalog-defaults.js-д алга`);
+    for (const id of p.catalogIds || []) {
+      if (owner.has(id)) contentErrors.push(`content/pipeline.mjs: "${id}" ${owner.get(id)} ба ${p.slug} хоёуланд catalogIds-д байна`);
+      owner.set(id, p.slug);
+    }
+  }
+}
 const results = new Map();
 for (const pg of content.pages) {
-  const r = validatePage(pg, { catalog, doctors: content.doctors, bookingOptions, allPages: content.pages, today, preview: PREVIEW });
+  const r = validatePage(pg, { catalog, doctors: content.doctors, bookingOptions, allPages: content.pages, today, preview: PREVIEW, pipelineSlugs: content.pipelineSlugs });
   results.set(pg.slug, r);
   // Нийтлэх гэж буй (content/pages) хуудасны алдаа = build-ийн алдаа. Ноорог (preview)-ийн асуудлыг туузанд харуулна.
   if (pg._dir === 'content/pages') contentErrors.push(...r.errors);
@@ -129,6 +140,23 @@ function region(html, name, body0, file, { pad = '  ' } = {}) {
 const ldJson = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c');
 const asset = (p) => stamper.withVersion('.', p);   // JSON-LD-ийн logo/image → ?v=hash (immutable cache)
 
+/**
+ * Гараар бичсэн нүүрний картууд: <a … data-page="slug|hub#cat" data-fallback="#treatments" href="…">.
+ * Нийтлэгдсэн хуудас → /emchilgee/slug; hub#cat → hub нийтлэгдсэн бол /emchilgee#cat; үгүй бол data-fallback.
+ */
+function applyPageLinks(html) {
+  return html.replace(/<a\b[^>]*\bdata-page="([^"]+)"[^>]*>/g, (tag, key) => {
+    const fb = (tag.match(/\bdata-fallback="([^"]*)"/) || [])[1];
+    if (fb === undefined) throw new BuildError(`index.html: data-page="${key}" картад data-fallback алга`);
+    const [slug, anchor] = key.split('#');
+    let href = fb;
+    if (slug === 'hub') { if (hubLive && anchor) href = '/emchilgee#' + anchor; }
+    else if (!content.pipelineSlugs.has(slug)) throw new BuildError(`index.html: data-page="${key}" — content/pipeline.mjs-д ийм хуудас алга`);
+    else if (pageUrl(slug)) href = pageUrl(slug);
+    return tag.replace(/\bhref="[^"]*"/, `href="${href}"`);
+  });
+}
+
 {
   let html = read('index.html');
   const meta = pageMeta(html);
@@ -141,6 +169,7 @@ const asset = (p) => stamper.withVersion('.', p);   // JSON-LD-ийн logo/image
   const homeCtx = { home: true, site, pageUrl, hubLive };
   html = region(html, 'site-header', siteHeader(homeCtx), 'index.html', { pad: '' });
   html = region(html, 'site-footer', siteFooter(homeCtx), 'index.html', { pad: '' });
+  html = applyPageLinks(html);
   files.set('index.html', html);
 }
 
@@ -154,7 +183,7 @@ for (const pg of visible) {
   const doc = content.doctors[pg.reviewer];
   const reviewer = doc && doc.consent && pg.status === 'published' ? { key: pg.reviewer, doc } : null;
   const url = site.origin + '/emchilgee/' + pg.slug;
-  const items = pg.catalogIds.map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean);
+  const items = [...new Set([...pg.catalogIds, ...(pg.alsoIds || [])])].map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean);
   const graph = treatmentGraph(site, pg, {
     url, title: pg.title, description: pg.description, items, reviewer, lastReviewed: pg.lastReviewed, asset,
     summaryText: plain(pg.summary),
@@ -198,6 +227,13 @@ if (PREVIEW) {
     for (const m of i.issues) console.log(`      - ${m}`);
   }
   process.exit(0);
+}
+
+/* ---------- 5c. vercel.json: нийтлэгдсэн хуудасны хуучин (Wix) URL → 308 ---------- */
+{
+  const r = manageRedirects(read('vercel.json'), visible.map((pg) => ({ slug: pg.slug, legacy: pg.legacy || [] })), sourceToRegExp);
+  contentErrors.push(...r.errors.map((e) => 'vercel.json: ' + e));
+  files.set('vercel.json', r.text);
 }
 
 /* ---------- 6. Эх нь байхгүй болсон эмчилгээний хуудас (emchilgee/**) ---------- */
