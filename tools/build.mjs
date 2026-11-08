@@ -9,15 +9,17 @@
 // Тэр хэсгүүдийг гараар бүү засаарай — дараагийн build дарна. Эх өгөгдөл:
 //   assets/js/catalog-defaults.js   (үйлчилгээ, ангилал — admin-тай хуваалцдаг)
 //   assets/js/catalog-render.js     (мөрийн HTML загвар — main.js-тэй хуваалцдаг)
-//   content/site.mjs                (эмнэлгийн NAP, JSON-LD-ийн баримт, хуудсын жагсаалт)
+//   content/site.mjs                (эмнэлгийн NAP, JSON-LD-ийн баримт, байнгын хуудсууд)
+//   tools/lib/layout.mjs            (header/footer — нүүр, дэд хуудас бүгд)
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
-import { site, pages, otherHtml } from '../content/site.mjs';
+import { site, corePages, otherHtml } from '../content/site.mjs';
+import { siteHeader, siteFooter } from './lib/layout.mjs';
 import { homeGraph } from './lib/schema.mjs';
 import { AssetStamper, BuildError, vercelIgnore } from './lib/assets.mjs';
 import { checkSite, pageMeta } from './lib/check.mjs';
@@ -39,6 +41,11 @@ function loadBrowserScript(rel, key) {
   return sandbox.window[key];
 }
 const catalog = loadBrowserScript('assets/js/catalog-defaults.js', 'SKINAID_DEFAULTS');
+// Индекслэгдэх хуудсууд: байнгын хуудсууд (+ дараа нь content/pages-аас эмчилгээний хуудсууд)
+const pages = [...corePages];
+/** Нийтлэгдсэн эмчилгээний хуудасны URL (slug → '/emchilgee/<slug>' эсвэл null) */
+const pageUrl = () => null;
+const hubLive = false;
 const R = loadBrowserScript('assets/js/catalog-render.js', 'SKINAID_RENDER');
 
 /** git-д бүртгэлтэй файлууд (яг бичлэгээр). Vercel case-sensitive — локал macOS биш. */
@@ -54,7 +61,8 @@ const tracked = gitTracked();
 const stamper = new AssetStamper(ROOT, files, { origin: site.origin, tracked, ignored: vercelIgnore(ROOT) });
 
 /* ---------- 2. build хэсгүүдийг солих ---------- */
-function region(html, name, content, file) {
+/** pad: мөр бүрт хаах тэмдэглэгээний доголын дараа нэмэх зай (анхдагч 2; layout-д '') */
+function region(html, name, content, file, { pad = '  ' } = {}) {
   const open = `<!-- build:${name} -->`, close = `<!-- /build:${name} -->`;
   if (html.split(open).length !== 2 || html.split(close).length !== 2) {
     throw new BuildError(`${file}: ${open} … ${close} тэмдэглэгээ яг нэг удаа байх ёстой`);
@@ -63,7 +71,7 @@ function region(html, name, content, file) {
   const m = html.match(re);
   if (!m) throw new BuildError(`${file}: ${open} тэмдэглэгээ олдсонгүй`);
   const indent = m[4] || '';
-  const body = content.split('\n').map((l) => (l ? indent + '  ' + l : l)).join('\n');
+  const body = content.split('\n').map((l) => (l ? indent + pad + l : l)).join('\n');
   // Replacer функц: агуулга дахь `$&`, `$1`, `$$` зэргийг String.replace тайлахгүй, яг байгаагаар нь оруулна
   return html.replace(re, (_, o) => `${o}\n${body}\n${indent}${close}`);
 }
@@ -79,6 +87,9 @@ const ldJson = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c');
   html = region(html, 'jsonld', `<script type="application/ld+json">\n${ldJson(graph)}\n</script>`, 'index.html');
   html = region(html, 'treat-chips', R.chips(catalog.cats).join('\n'), 'index.html');
   html = region(html, 'treat-list', catalog.treatments.map((t) => R.row(t, catalog.cats)).join('\n'), 'index.html');
+  const homeCtx = { home: true, site, pageUrl, hubLive };
+  html = region(html, 'site-header', siteHeader(homeCtx), 'index.html', { pad: '' });
+  html = region(html, 'site-footer', siteFooter(homeCtx), 'index.html', { pad: '' });
   files.set('index.html', html);
 }
 
@@ -91,7 +102,12 @@ for (const rel of [...pages.map((p) => p.file), ...otherHtml]) {
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar' }).format(new Date());
 const lastmodFile = 'content/lastmod.json';
 const lastmod = existsSync(join(ROOT, lastmodFile)) ? JSON.parse(readFileSync(join(ROOT, lastmodFile), 'utf8')) : {};
-const contentHash = (html) => createHash('sha1').update(html.replace(/\?v=[0-9a-z]+/g, '')).digest('hex').slice(0, 12);
+// Зөвхөн хуудасны өөрийн агуулга (title, description, <main>) — header/footer эсвэл ?v= өөрчлөгдөхөд lastmod хөдлөхгүй
+const contentHash = (html) => {
+  const m = pageMeta(html);
+  const main = (html.match(/<main[\s>][\s\S]*<\/main>/) || [html])[0];
+  return createHash('sha1').update([m.title, m.description, main].join('\n').replace(/\?v=[0-9a-z]+/g, '')).digest('hex').slice(0, 12);
+};
 const nextLastmod = {};
 for (const pg of pages) {
   const h = contentHash(read(pg.file));
@@ -115,7 +131,7 @@ for (const [rel, text] of files) {
   if (old === text) continue;
   // --check: lastmod.json-ийн зөвхөн огноо өөрчлөгдсөн нь (хуудас өөрчлөгдсөн) өөрөө алдаа болно
   changed.push(rel);
-  if (!CHECK) writeFileSync(abs, text);
+  if (!CHECK) { mkdirSync(dirname(abs), { recursive: true }); writeFileSync(abs, text); }
 }
 
 const { errors, warnings } = checkSite({ root: ROOT, site, pages, otherHtml, files, catalog, tracked, strict: CHECK });

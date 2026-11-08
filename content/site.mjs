@@ -11,6 +11,8 @@ export const site = {
     'Улаанбаатар дахь арьсны өвчин, гоо заслын эмнэлэг. 2007 оноос хойш батга, сорви, нүхжилт, нөсөө, ' +
     'үрчлээний эмчилгээ, лазер, тарилга, арьс чангалах үйлчилгээг эмчийн үзлэгт үндэслэн үзүүлдэг.',
   telephone: '+97676000505',
+  // Сайтын header/footer-т (tools/lib/layout.mjs) харагдах хэлбэрүүд
+  phone: { tel: '+97676000505', display: '7600-0505', intl: '+976 7600-0505' },
   email: 'info@skinaid.mn',
   foundingDate: '2007',
   logo: '/assets/img/logo.png',
@@ -32,10 +34,25 @@ export const site = {
   paymentAccepted: 'Storepay, Pocket',
   areaServed: 'Улаанбаатар',
   sameAs: ['https://www.facebook.com/Skinaid.mn', 'https://www.instagram.com/skinaid.mn'],
+
+  // Footer (tools/lib/layout.mjs)
+  addressShort: 'Чингэлтэй дүүрэг, Тэнгис кино театрын хажууд, KFC-тэй байр, 5 давхар',
+  footerAbout: 'Арьсны өвчин, үрчлээ, гоо засал, батганы үрэвсэл, сорви, нүхжилтийн цогц эмчилгээ. 2007 оноос хойш Улаанбаатар хотод.',
+  // Footer «Эмчилгээ» багана: page нийтлэгдсэн бол /emchilgee/<page>, үгүй бол hub-ийн ангилал
+  // (/emchilgee#<hub>, hub нийтлэгдсэн үед), үгүй бол нүүрний #treatments.
+  footerTreatments: [
+    { label: 'Батга эмчилгээ', page: 'batga', hub: 'acne' },
+    { label: 'Сорви, нүхжилт', page: 'batganii-sorvi', hub: 'scar' },
+    { label: 'Тарилга эмчилгээ', page: null, hub: 'inject' },
+    { label: 'Лазер, гэрлэн эмчилгээ', page: null, hub: 'laser' },
+    { label: 'Арьс чангалах', page: 'ultraformer-hifu', hub: 'lift' },
+    { label: 'Дусал эмчилгээ', page: null, hub: 'iv' },
+  ],
 };
 
-// Индекслэгдэх хуудсууд (sitemap.xml ба шалгалтын жагсаалт). path нь ташуу зураасгүй.
-export const pages = [
+// Байнгын, индекслэгдэх хуудсууд. Эмчилгээний хуудсууд (/emchilgee/…) болон hub-ийг
+// tools/build.mjs нь content/pages/-аас нэмж тооцно. path нь ташуу зураасгүй.
+export const corePages = [
   { path: '/', file: 'index.html', jsonld: 'home' },
   { path: '/privacy', file: 'privacy/index.html' },
 ];
