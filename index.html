@@ -29,7 +29,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"></noscript>
 
-  <link rel="stylesheet" href="assets/css/style.css?v=dbc20af4">
+  <link rel="stylesheet" href="assets/css/style.css?v=71af281f">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="48x48" href="assets/img/favicon-48.png?v=044af2e2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=af82331c">
@@ -720,7 +720,69 @@
             </div>
           </div>
 
-          <form class="form reveal" data-delay="2" id="bookForm" novalidate>
+          <div class="booking reveal" data-delay="2">
+          <!-- Онлайн цаг захиалга: UB Beauty «Вэб суваг» (assets/js/booking.js + ubbeauty-config.js). Сул цагийг энэ хэсэг
+               ойртох эсвэл «Цаг захиалах» дарах үед л татна. API ажиллахгүй бол доорх #bookForm (Firestore хүсэлт) нөөц болно. -->
+          <form class="form ub" id="ubForm" novalidate>
+            <h3>Цаг захиалах</h3>
+            <p data-ub-intro>Үйлчилгээ, эмч, сул цагаа сонгоод онлайнаар шууд захиална уу.</p>
+            <noscript><p class="ub__alert">Онлайн захиалгад JavaScript шаардлагатай. <a href="tel:+97676000505">7600-0505</a> утсаар захиална уу.</p></noscript>
+            <div class="ub__body">
+              <div class="field">
+                <label for="ub-service">Үйлчилгээ</label>
+                <select id="ub-service" name="service" required disabled aria-describedby="ub-service-info">
+                  <option value="">Ачаалж байна…</option>
+                </select>
+                <span class="ub__hint" id="ub-service-info"></span>
+              </div>
+              <fieldset class="ub__group" id="ub-doctor-group" hidden>
+                <legend>Эмч, мэргэжилтэн</legend>
+                <div class="ub__chips" id="ub-doctors"></div>
+              </fieldset>
+              <fieldset class="ub__group" id="ub-day-group" disabled>
+                <legend>Өдөр</legend>
+                <div class="ub__cal-head">
+                  <button type="button" class="ub__nav" data-ub-week="-1" aria-label="Өмнөх 2 долоо хоног">‹</button>
+                  <span id="ub-range"></span>
+                  <button type="button" class="ub__nav" data-ub-week="1" aria-label="Дараах 2 долоо хоног">›</button>
+                </div>
+                <div class="ub__cal" id="ub-days"></div>
+              </fieldset>
+              <fieldset class="ub__group" id="ub-slot-group" disabled>
+                <legend>Цаг</legend>
+                <div class="ub__slots" id="ub-slots"><p class="ub__hint">Эхлээд үйлчилгээгээ сонгоно уу.</p></div>
+              </fieldset>
+              <div class="form__grid">
+                <div class="field">
+                  <label for="ub-name">Нэр</label>
+                  <input id="ub-name" name="name" type="text" placeholder="Таны нэр" required minlength="2" maxlength="100" autocomplete="name">
+                </div>
+                <div class="field">
+                  <label for="ub-phone">Утас</label>
+                  <input id="ub-phone" name="phone" type="tel" inputmode="tel" placeholder="8800-0000" required autocomplete="tel" maxlength="20">
+                </div>
+                <div class="field field--full">
+                  <label for="ub-note">Нэмэлт мэдээлэл <span class="ub__opt">(заавал биш)</span></label>
+                  <textarea id="ub-note" name="note" maxlength="300" placeholder="Арьсны асуудал, анх удаа ирж байгаа эсэх гэх мэт…"></textarea>
+                </div>
+                <!-- Honeypot: хүнд харагдахгүй, ботууд бөглөдөг тул бөглөгдсөн бол API руу илгээхгүй -->
+                <div class="hp" aria-hidden="true">
+                  <label for="ub-website">Вэбсайт</label>
+                  <input id="ub-website" name="website" type="text" tabindex="-1" autocomplete="off">
+                </div>
+                <p class="ub__summary field--full" id="ub-summary" hidden></p>
+                <div class="ub__alert field--full" id="ub-alert" role="alert" hidden></div>
+                <div class="form__foot">
+                  <span class="form__note">«Захиалах» дарснаар нэр, утас тань цаг захиалгын зорилгоор эмнэлэгт (UB Beauty системээр) дамжина. <a href="/privacy" style="color:var(--purple);font-weight:700">Нууцлалын бодлого</a></span>
+                  <button class="btn btn--primary btn--lg" type="submit" disabled>Захиалах</button>
+                </div>
+              </div>
+            </div>
+            <span class="sr-only" id="ub-status" role="status"></span>
+            <div class="form__ok" id="ub-done"></div>
+          </form>
+
+          <form class="form" id="bookForm" novalidate hidden>
             <h3>Цаг захиалах хүсэлт</h3>
             <p>Маягтаа бөглөөд илгээнэ үү. Зөвлөх тантай утсаар холбогдож цагийг баталгаажуулна.</p>
             <div class="form__grid">
@@ -769,6 +831,7 @@
             </div>
             <div class="form__ok" role="status"></div>
           </form>
+          </div>
         </div>
 
         <div class="map reveal">
@@ -849,5 +912,7 @@
   <script src="assets/js/main.js?v=f91772dc"></script>
   <!-- Firebase (Firestore): захиалга бүртгэх, тохиргоо/каталог унших. Ачаалагдахгүй бол сайт анхны байдлаараа ажиллана. -->
   <script type="module" src="assets/js/backend.js?v=90e14c2b" onerror="document.dispatchEvent(new Event('skinaid:backend-failed'))"></script>
+  <!-- Онлайн цаг захиалга (UB Beauty вэб суваг). Ачаалагдахгүй бол #bookForm (Firestore хүсэлт) нөөцөөр гарна. -->
+  <script type="module" src="assets/js/booking.js?v=fb992a2d" onerror="var u=document.getElementById('ubForm'),b=document.getElementById('bookForm');if(u&&b){u.hidden=true;b.hidden=false}"></script>
 </body>
 </html>
