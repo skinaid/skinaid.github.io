@@ -172,6 +172,15 @@ function applyPageLinks(html) {
   html = applyPageLinks(html);
   files.set('index.html', html);
 }
+// Бусад байнгын хуудас (privacy г.м.): build:site-header / site-footer тэмдэглэгээтэй бол дэд хуудасны загвар
+for (const pg of corePages.filter((p) => p.file !== 'index.html')) {
+  let html = read(pg.file);
+  if (!html.includes('<!-- build:site-header -->')) continue;
+  const ctx = { home: false, site, pageUrl, hubLive };
+  html = region(html, 'site-header', siteHeader(ctx), pg.file, { pad: '' });
+  html = region(html, 'site-footer', siteFooter(ctx), pg.file, { pad: '' });
+  files.set(pg.file, html);
+}
 
 /* ---------- 4. Эмчилгээний хуудас, hub үүсгэх ---------- */
 const infoFor = (pg) => {

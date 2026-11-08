@@ -5,59 +5,165 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Нууцлалын бодлого — SkinAid</title>
   <meta name="description" content="SkinAid эмнэлгийн вэб сайтын нууцлалын бодлого: цаг захиалгын маягтаар цуглуулах мэдээлэл, хадгалалт, гуравдагч талын үйлчилгээ, таны эрх.">
+  <meta name="theme-color" content="#654186">
   <link rel="canonical" href="https://www.skinaid.mn/privacy">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/style.css?v=5a81adad">
-  <style>
-    .legal { max-width: 760px; margin: 0 auto; padding: calc(var(--header-h) + 40px) var(--gutter) 80px; }
-    .legal h1 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; font-size: clamp(28px, 4vw, 40px); color: var(--purple-900); margin-bottom: 8px; }
-    .legal .meta { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
-    .legal h2 { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--purple-900); margin: 32px 0 10px; }
-    .legal p, .legal li { color: var(--ink-2); font-size: 16px; }
-    .legal ul { list-style: disc; padding-left: 22px; display: grid; gap: 6px; }
-    .legal a { color: var(--purple); font-weight: 700; }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"></noscript>
+  <link rel="stylesheet" href="/assets/css/style.css?v=99c2259d">
 </head>
 <body>
-  <header class="header is-scrolled">
+  <!-- build:site-header -->
+  <header class="header is-scrolled" data-solid>
     <div class="container header__inner">
-      <a href="/" class="logo" aria-label="SkinAid нүүр хуудас"><img src="/assets/img/logo.png?v=8f412ce0" alt="Skin Aid — Dermatology &amp; Aesthetic Clinic" width="480" height="121"></a>
-      <div class="header__cta"><a class="btn btn--primary btn--sm" href="/#contact">Цаг захиалах</a></div>
+      <a href="/" class="logo" aria-label="SkinAid нүүр хуудас">
+        <img src="/assets/img/logo.png?v=8f412ce0" alt="Skin Aid — Dermatology &amp; Aesthetic Clinic" width="480" height="121" decoding="async">
+      </a>
+
+      <nav class="nav" aria-label="Үндсэн цэс">
+        <a href="/#services">Үйлчилгээ</a>
+        <a href="/#promo">Урамшуулал</a>
+        <a href="/#treatments">Эмчилгээ</a>
+        <a href="/#about">Бидний тухай</a>
+        <a href="/#faq">Асуулт</a>
+        <a href="/#blog">Зөвлөгөө</a>
+        <a href="/#contact">Холбоо барих</a>
+      </nav>
+
+      <div class="header__cta">
+        <a class="header__phone" href="tel:+97676000505" data-site="tel">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+          <span data-site="phone">7600-0505</span>
+        </a>
+        <a class="btn btn--primary btn--sm" href="/#contact">Цаг захиалах</a>
+        <button class="burger" aria-label="Цэс нээх" aria-expanded="false" aria-controls="drawer">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
     </div>
   </header>
-  <main class="legal">
-    <h1>Нууцлалын бодлого</h1>
-    <p class="meta">SkinAid арьсны өвчин, гоо заслын эмнэлэг (Eco Beauty Nature LLC) · Сүүлд шинэчилсэн: 2026 оны 11-р сарын 7</p>
 
-    <h2>1. Ямар мэдээлэл цуглуулдаг вэ</h2>
-    <p>Энэ вэб сайтын «Цаг захиалах» маягтаар та дараах мэдээллийг сайн дураараа өгнө: нэр, утасны дугаар, сонгосон үйлчилгээ, хүссэн огноо, нэмэлт мессеж. Өөр хувийн мэдээлэл (хаяг, иргэний үнэмлэх, төлбөрийн мэдээлэл гэх мэт) сайтаар дамжин цуглуулдаггүй.</p>
+  <div class="drawer" id="drawer">
+    <a href="/#services">Үйлчилгээ</a>
+    <a href="/#promo">Шинэ жилийн урамшуулал</a>
+    <a href="/#treatments">Эмчилгээ</a>
+    <a href="/#about">Бидний тухай</a>
+    <a href="/#faq">Түгээмэл асуулт</a>
+    <a href="/#blog">Зөвлөгөө</a>
+    <a href="/#contact">Холбоо барих</a>
+    <div class="drawer__cta">
+      <a class="btn btn--primary btn--lg" href="/#contact">Цаг захиалах</a>
+      <a class="btn btn--outline btn--lg" href="tel:+97676000505" data-site="tel"><span data-site="phone">7600-0505</span> руу залгах</a>
+    </div>
+  </div>
+  <!-- /build:site-header -->
 
-    <h2>2. Юунд ашигладаг вэ</h2>
-    <p>Өгсөн мэдээллийг зөвхөн таны захиалгыг хүлээн авч, утсаар эсвэл мессенжерээр эргэн холбогдож цагийг баталгаажуулах зорилгоор эмнэлгийн ажилтнууд ашиглана. Сурталчилгааны зорилгоор гуравдагч этгээдэд дамжуулдаггүй.</p>
+  <main class="page" id="main">
+    <div class="page-head">
+      <div class="container container--narrow">
+        <h1>Нууцлалын бодлого</h1>
+        <p class="byline"><span>SkinAid арьсны өвчин, гоо заслын эмнэлэг (Eco Beauty Nature LLC) · Сүүлд шинэчилсэн: 2026 оны 11-р сарын 7</span></p>
+      </div>
+    </div>
 
-    <h2>3. Хаана, хэр удаан хадгалдаг вэ</h2>
-    <p>Захиалгын мэдээлэл Google Firebase (Cloud Firestore, Азийн бүсийн дата төв) үйлчилгээнд хадгалагдаж, зөвхөн эмнэлгийн эрх бүхий ажилтан нэвтэрч үзнэ. Захиалга дууссаны дараа мэдээллийг эмнэлэг устгаж эсвэл архивлаж болно. Та өөрийн мэдээллээ устгуулахыг хүсвэл доорх хаягаар хандана уу.</p>
+    <div class="container container--narrow prose">
+      <h2>1. Ямар мэдээлэл цуглуулдаг вэ</h2>
+      <p>Энэ вэб сайтын «Цаг захиалах» маягтаар та дараах мэдээллийг сайн дураараа өгнө: нэр, утасны дугаар, сонгосон үйлчилгээ, хүссэн огноо, нэмэлт мессеж. Өөр хувийн мэдээлэл (хаяг, иргэний үнэмлэх, төлбөрийн мэдээлэл гэх мэт) сайтаар дамжин цуглуулдаггүй.</p>
 
-    <h2>4. Гуравдагч талын үйлчилгээ</h2>
-    <ul>
-      <li><strong>Google reCAPTCHA / Firebase App Check</strong> — маягтыг робот, спамаас хамгаалахад ашиглана. Google-ийн <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">Нууцлалын бодлого</a> ба <a href="https://policies.google.com/terms" rel="noopener" target="_blank">Үйлчилгээний нөхцөл</a> үйлчилнэ.</li>
-      <li><strong>Google Fonts, Google Maps</strong> — фонт, газрын зураг ачаалахад таны IP хаяг Google-д дамжина.</li>
-      <li><strong>Vercel</strong> — вэб сайтын хостинг; серверийн ердийн хандалтын бүртгэл хөтөлж болно.</li>
-    </ul>
+      <h2>2. Юунд ашигладаг вэ</h2>
+      <p>Өгсөн мэдээллийг зөвхөн таны захиалгыг хүлээн авч, утсаар эсвэл мессенжерээр эргэн холбогдож цагийг баталгаажуулах зорилгоор эмнэлгийн ажилтнууд ашиглана. Сурталчилгааны зорилгоор гуравдагч этгээдэд дамжуулдаггүй.</p>
 
-    <h2>5. Cookie, хөтчийн хадгалалт</h2>
-    <p>Сайт сурталчилгааны cookie ашигладаггүй. Хамгаалалтын (App Check) токен таны хөтөчид түр хадгалагдана. Статистик, хяналтын систем суулгаагүй.</p>
+      <h2>3. Хаана, хэр удаан хадгалдаг вэ</h2>
+      <p>Захиалгын мэдээлэл Google Firebase (Cloud Firestore, Азийн бүсийн дата төв) үйлчилгээнд хадгалагдаж, зөвхөн эмнэлгийн эрх бүхий ажилтан нэвтэрч үзнэ. Захиалга дууссаны дараа мэдээллийг эмнэлэг устгаж эсвэл архивлаж болно. Та өөрийн мэдээллээ устгуулахыг хүсвэл доорх хаягаар хандана уу.</p>
 
-    <h2>6. Таны эрх</h2>
-    <p>Та өөрийн өгсөн мэдээллийг үзэх, засуулах, устгуулах хүсэлтийг <a href="mailto:info@skinaid.mn">info@skinaid.mn</a> хаягаар эсвэл <a href="tel:+97676000505">7600-0505</a> утсаар илгээж болно.</p>
+      <h2>4. Гуравдагч талын үйлчилгээ</h2>
+      <ul>
+        <li><strong>Google reCAPTCHA / Firebase App Check</strong> — маягтыг робот, спамаас хамгаалахад ашиглана. Google-ийн <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">Нууцлалын бодлого</a> ба <a href="https://policies.google.com/terms" rel="noopener" target="_blank">Үйлчилгээний нөхцөл</a> үйлчилнэ.</li>
+        <li><strong>Google Fonts, Google Maps</strong> — фонт, газрын зураг ачаалахад таны IP хаяг Google-д дамжина.</li>
+        <li><strong>Vercel</strong> — вэб сайтын хостинг; серверийн ердийн хандалтын бүртгэл хөтөлж болно.</li>
+      </ul>
 
-    <h2>7. Холбоо барих</h2>
-    <p>SkinAid эмнэлэг, Чингэлтэй дүүрэг, Тэнгис кино театрын хажууд, Улаанбаатар. Утас: <a href="tel:+97676000505">7600-0505</a>, и-мэйл: <a href="mailto:info@skinaid.mn">info@skinaid.mn</a>.</p>
-    <p style="margin-top:32px"><a href="/">← Нүүр хуудас руу буцах</a></p>
+      <h2>5. Cookie, хөтчийн хадгалалт</h2>
+      <p>Сайт сурталчилгааны cookie ашигладаггүй. Хамгаалалтын (App Check) токен таны хөтөчид түр хадгалагдана. Статистик, хяналтын систем суулгаагүй.</p>
+
+      <h2>6. Таны эрх</h2>
+      <p>Та өөрийн өгсөн мэдээллийг үзэх, засуулах, устгуулах хүсэлтийг <a href="mailto:info@skinaid.mn">info@skinaid.mn</a> хаягаар эсвэл <a href="tel:+97676000505">7600-0505</a> утсаар илгээж болно.</p>
+
+      <h2>7. Холбоо барих</h2>
+      <p>SkinAid эмнэлэг, Чингэлтэй дүүрэг, Тэнгис кино театрын хажууд, Улаанбаатар. Утас: <a href="tel:+97676000505">7600-0505</a>, и-мэйл: <a href="mailto:info@skinaid.mn">info@skinaid.mn</a>.</p>
+      <p><a href="/">← Нүүр хуудас руу буцах</a></p>
+    </div>
   </main>
+
+  <!-- build:site-footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer__grid">
+        <div>
+          <a href="/" class="logo" aria-label="SkinAid">
+            <img src="/assets/img/logo-white.png?v=0caecd65" alt="Skin Aid — Dermatology &amp; Aesthetic Clinic" width="480" height="121" loading="lazy" decoding="async">
+          </a>
+          <p class="footer__about">Арьсны өвчин, үрчлээ, гоо засал, батганы үрэвсэл, сорви, нүхжилтийн цогц эмчилгээ. 2007 оноос хойш Улаанбаатар хотод.</p>
+        </div>
+        <div>
+          <h3>Цэс</h3>
+          <ul>
+            <li><a href="/#services">Үйлчилгээ</a></li>
+            <li><a href="/#promo">Урамшуулал</a></li>
+            <li><a href="/#treatments">Онцлох эмчилгээ</a></li>
+            <li><a href="/#about">Бидний тухай</a></li>
+            <li><a href="/#faq">Түгээмэл асуулт</a></li>
+            <li><a href="/#blog">Зөвлөгөө</a></li>
+            <li><a href="/#contact">Холбоо барих</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Эмчилгээ</h3>
+          <ul>
+            <li><a href="/#treatments">Батга эмчилгээ</a></li>
+            <li><a href="/#treatments">Сорви, нүхжилт</a></li>
+            <li><a href="/#treatments">Тарилга эмчилгээ</a></li>
+            <li><a href="/#treatments">Лазер, гэрлэн эмчилгээ</a></li>
+            <li><a href="/#treatments">Арьс чангалах</a></li>
+            <li><a href="/#treatments">Дусал эмчилгээ</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Холбоо барих</h3>
+          <ul class="footer__contact">
+            <li><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Чингэлтэй дүүрэг, Тэнгис кино театрын хажууд, KFC-тэй байр, 5 давхар</span></li>
+            <li><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg><a href="tel:+97676000505" data-site="tel phone">+976 7600-0505</a></li>
+            <li><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><a href="mailto:info@skinaid.mn" data-site="mailto email">info@skinaid.mn</a></li>
+            <li><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 22v-8h2.7l.4-3.2h-3.1V8.8c0-.9.3-1.6 1.6-1.6h1.7V4.4c-.3 0-1.3-.1-2.5-.1-2.5 0-4.1 1.5-4.1 4.2v2.3H7.4V14h2.8v8h3.3z"/></svg><a href="https://www.facebook.com/Skinaid.mn" target="_blank" rel="noopener">facebook.com/Skinaid.mn</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer__bottom">
+        <span>© <span id="year">2026</span> Eco Beauty Nature LLC · SkinAid Clinic. Бүх эрх хуулиар хамгаалагдсан.</span>
+        <a href="/privacy">Нууцлалын бодлого</a>
+        <!-- reCAPTCHA-ийн тэмдэг (badge) нуугдсан тул Google-ийн нөхцөлөөр энэ мэдэгдлийг заавал харуулна -->
+        <span class="footer__recaptcha">Энэ сайт reCAPTCHA-аар хамгаалагдсан бөгөөд Google-ийн <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Нууцлалын бодлого</a> ба <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Үйлчилгээний нөхцөл</a> үйлчилнэ.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Mobile sticky bar -->
+  <div class="mobile-bar">
+    <a class="btn btn--outline" href="tel:+97676000505" data-site="tel">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+      Залгах
+    </a>
+    <a class="btn btn--primary" href="/#contact">Цаг захиалах</a>
+  </div>
+
+  <button class="totop" aria-label="Дээш очих" type="button">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+  <!-- /build:site-footer -->
+
+  <script src="/assets/js/main.js?v=a418aa6f"></script>
 </body>
 </html>
