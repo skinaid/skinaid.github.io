@@ -10,4 +10,4 @@
    Түлхүүр солих: шинэ pk үүсгэх → энд солих → `node tools/build.mjs` → push → OS-оос хуучныг хүчингүй болгох.
    ========================================================================== */
 export const API_BASE = 'https://www.ubbeauty.mn/api/v1/web';
-export const PUBLISHABLE_KEY = '';
+export const PUBLISHABLE_KEY = 'pk_live_Iv_zL1rDAGEt5arepIzkC9Bt4jgQyVyk1OHPh_08yzo';

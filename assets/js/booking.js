@@ -12,7 +12,7 @@
      main.js) нөөц болж гарна. Алдааны дотоод мэдээллийг үйлчлүүлэгчид харуулахгүй — кодоор нь өөрсдийн текст.
    Локал хөгжүүлэлт: README → «Онлайн цаг захиалга» (tools/ub-mock-server.mjs).
    ========================================================================== */
-import { API_BASE, PUBLISHABLE_KEY } from './ubbeauty-config.js?v=069ef895';
+import { API_BASE, PUBLISHABLE_KEY } from './ubbeauty-config.js?v=8eb0f74a';
 
 const form = document.getElementById('ubForm');
 if (form) setup(form);
