@@ -223,7 +223,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .hero__actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
 .hero__stats { display: flex; gap: clamp(20px, 4vw, 44px); margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .stat strong { display: block; font-family: var(--font-display); font-size: clamp(24px, 2.8vw, 32px); color: var(--purple-900); line-height: 1; font-weight: 700; letter-spacing: -0.02em; }
-.stat span { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+.stat > span { font-size: 13.5px; color: var(--muted); font-weight: 600; }
 
 .hero__visual { position: relative; isolation: isolate; }
 .hero__img-wrap {
