@@ -29,35 +29,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"></noscript>
 
-  <link rel="stylesheet" href="assets/css/style.css?v=20261108f">
+  <link rel="stylesheet" href="assets/css/style.css?v=0af2a851">
   <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="48x48" href="assets/img/favicon-48.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="assets/img/favicon-48.png?v=044af2e2">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=af82331c">
 
-  <!-- Structured data -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "MedicalClinic",
-    "name": "SkinAid арьсны өвчин, гоо заслын эмнэлэг",
-    "alternateName": "Skin Aid Clinic",
-    "url": "https://www.skinaid.mn/",
-    "logo": "https://www.skinaid.mn/assets/img/logo.png",
-    "image": "https://www.skinaid.mn/assets/img/og-image.jpg",
-    "telephone": "+97676000505",
-    "email": "info@skinaid.mn",
-    "foundingDate": "2007",
-    "medicalSpecialty": "Dermatology",
-    "address": {
-      "@type": "PostalAddress",
-      "streetAddress": "Чингэлтэй дүүрэг, Тэнгис кино театрын автобусны буудлын баруун талд, KFC-тэй байр, Caffe Bene хаалгаар, 5 давхар",
-      "addressLocality": "Улаанбаатар",
-      "postalCode": "15141",
-      "addressCountry": "MN"
-    },
-    "sameAs": ["https://www.facebook.com/Skinaid.mn", "https://www.instagram.com/skinaid.mn"]
-  }
-  </script>
+  <!-- Structured data (tools/build.mjs үүсгэнэ — гараар бүү засаарай) -->
+  <!-- build:jsonld -->
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://www.skinaid.mn/#website","url":"https://www.skinaid.mn/","name":"SkinAid","alternateName":["Skin Aid","Скин Эйд"],"inLanguage":"mn","publisher":{"@id":"https://www.skinaid.mn/#clinic"}},{"@type":"MedicalClinic","@id":"https://www.skinaid.mn/#clinic","name":"SkinAid","alternateName":["Skin Aid","Скин Эйд","SkinAid арьсны өвчин, гоо заслын эмнэлэг","Skin Aid Clinic"],"legalName":"Eco Beauty Nature LLC","description":"Улаанбаатар дахь арьсны өвчин, гоо заслын эмнэлэг. 2007 оноос хойш батга, сорви, нүхжилт, нөсөө, үрчлээний эмчилгээ, лазер, тарилга, арьс чангалах үйлчилгээг эмчийн үзлэгт үндэслэн үзүүлдэг.","url":"https://www.skinaid.mn/","logo":"https://www.skinaid.mn/assets/img/logo.png","image":["https://www.skinaid.mn/assets/img/og-image.jpg","https://www.skinaid.mn/assets/img/photos/about-main.jpg","https://www.skinaid.mn/assets/img/photos/hero.jpg"],"telephone":"+97676000505","email":"info@skinaid.mn","foundingDate":"2007","medicalSpecialty":"https://schema.org/Dermatology","isAcceptingNewPatients":true,"address":{"@type":"PostalAddress","streetAddress":"Чингэлтэй дүүрэг, Тэнгис кино театрын автобусны буудлын баруун талд, KFC-тэй байр, Caffe Bene хаалгаар, 5 давхар","addressLocality":"Улаанбаатар","postalCode":"15141","addressCountry":"MN"},"priceRange":"₮50,000 – ₮830,000","currenciesAccepted":"MNT","paymentAccepted":"Storepay, Pocket","areaServed":{"@type":"City","name":"Улаанбаатар"},"hasOfferCatalog":{"@type":"OfferCatalog","name":"Эмчилгээ, үйлчилгээ","itemListElement":[{"@type":"OfferCatalog","name":"Үзлэг","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Арьсны үзлэг, оношлогоо","description":"Батганы үрэвсэл, үрчлээ, арьсны өвчин, нүхжилтийн цогц оношлогоо, эмчилгээний төлөвлөгөө."},"price":"50000","priceCurrency":"MNT"},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Онлайн оношлогоо","description":"Арьс, харшил, гоо заслын бүх төрлийн зөвлөгөөг мэргэжлийн эмч онлайнаар өгнө."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Давтан үзлэг","description":"Эмчилгээний явц, үр дүнг хянах давтан үзлэг."}}]},{"@type":"OfferCatalog","name":"Батга","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Үрэвсэлт батганы эмчилгээ","description":"Нэг удаагийн мэргэжлийн цэвэрлэгээ, үрэвсэл намдаах эмчилгээ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Батганы багц эмчилгээ","description":"Арьсны онцлогт тохирсон 1/1–2/5 хүртэлх хэмнэлттэй, үр дүнтэй багц."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Цээж, нурууны батганы эмчилгээ","description":"Цээж, нурууны хэсгийн батгыг цэвэрлэж, эрүүл арьсыг сэргээнэ. Карбоксийн хамт хийх боломжтой."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"IPL батганы багцын урамшуулал","description":"Гэрлэн эмчилгээг батганы багцтай хослуулсан урамшуулалтай үйлчилгээ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Карбокси эмчилгээ","description":"Арьсанд хүчилтөрөгч бэлэглэж, үрэвсэл, нөсөө багасгах нэг удаагийн эмчилгээ."}}]},{"@type":"OfferCatalog","name":"Сорви, нүхжилт","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"CO₂ Fractional лазер","description":"Лазерын микро цацрагаар коллаген нийлэгжилтийг өдөөж, сорви, нүхжилтийг тэгшлэнэ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"VIVACE Needle RF","description":"Бичил зүү + радио давтамжийн хосолсон эмчилгээ: нүхжилт, сорви, арьсны бүтэц."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"MTS Microneedling","description":"Бичил зүүн эмчилгээгээр арьсны нөхөн төлжилтийг идэвхжүүлнэ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Сорви салгах эмчилгээ","description":"Сорвийг бүдгэрүүлж, арьсны гадаргууг жигд болгоно."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Келоид шимэгдүүлэх тарилга","description":"Келоид сорвийг багасгаж, зөөлрүүлэх тарилга эмчилгээ."}}]},{"@type":"OfferCatalog","name":"Тарилга","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"REJURAN 2ml / 4ml","description":"PDRN-д суурилсан арьс нөхөн төлжүүлэх тарилга."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Juvelook тарилга","description":"Арьс залуужуулах, чангалах коллаген өдөөгч тарилга."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Lapuroon Aurora-S / Aurora-V","description":"PDRN, гиалурон, пептид, амин хүчлийн комплекс skin booster."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Cellbooster Glow","description":"Швейцарын SUISSELLE-ийн патентлагдсан гэрэлтүүлэх тарилга."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Exo one эхэс тарилга","description":"Эксосом технологиор арьсыг эсийн түвшинд сэргээнэ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Загасан тарилга (PDRN)","description":"Арьсыг нөхөн сэргээх PDRN тарилга."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Япон гиалуроны тарилга","description":"Японы технологиор гүн чийгшил, залуу төрхийг сэргээнэ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"ASCE plus SRLV","description":"Үүдэл эсийн дэвшилтэт технологийн эсийн нөхөн төлжилт."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Cellbooster Hair — үсний мезо","description":"Үсний үндсийг бэхжүүлэх мезотерапи."}}]},{"@type":"OfferCatalog","name":"Хөгшрөлтийн эсрэг","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Ботокс (1 тун)","description":"Үрчлээ арилгах, тэнийлгэх. V-Line, хуян, суганы хөлрөлтийн ботокс."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Дүүргэгч филлер","description":"Нүүрний хэлбэр засах, уруулын филлер (1 мл), эзлэхүүн сэргээх."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Facetem CaHA тарилга","description":"Коллаген өдөөх дэвшилтэт тарилга: тал / 2 бүтэн / филлертэй."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Плазма эмчилгээ","description":"Нүдний цацраг үрчлээ, чихний урд хэсгийн үрчлээнд."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Филлер хайлуулагч тарилга","description":"Өмнөх филлерийг хайлуулж, төрөлх төрхийг сэргээхэд чиглэсэн тарилга."}}]},{"@type":"OfferCatalog","name":"Залуужуулах","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Glass skin therapy","description":"Гүний бохирдлын цэвэрлэгээ, чийгшил, тайвшрал — массажтай/массажгүй."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"AHA 70% химийн гуужуулалт","description":"Арьсыг гүн гуужуулж, толигор гэрэлтсэн төрхийг цогцлооно."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Хүчилээр арчих / TCA","description":"Мэргэжлийн химийн пийл, арьсны нөхөн сэргээлт."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Карбокси + Карбон пийл","description":"Хүчилтөрөгч + нүүрстөрөгчийн хосолсон гэрэлтүүлэх эмчилгээ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Хацрын улайлтын IPL","description":"Хацрын улайлтыг багасгаж, арьсны өнгийг жигдрүүлэх IPL гэрлэн эмчилгээ."}}]},{"@type":"OfferCatalog","name":"Чангалах","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Ультраформер III (HIFU)","description":"Мэс заслын бус аргаар арьсыг чангалж өргөх, нүүрний хэлбэрийг тодруулах HIFU технологи."},"priceSpecification":{"@type":"PriceSpecification","minPrice":300000,"priceCurrency":"MNT"}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Моно Thread утсан эмчилгээ","description":"Мэс заслын бус аргаар арьсыг өргөж, чангаруулж, залуужуулна."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Cellbooster Shape өөх хайлуулах","description":"Илүүдэл өөхийг багасгаж, нүүр, биеийн хэлбэрийг сайжруулна."}}]},{"@type":"OfferCatalog","name":"Лазер","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Diode лазер үс арилгах","description":"Нүүр, сахал, суга, бикини, гар, хөл, бүтэн бие — урт хугацааны толигор арьс."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"IPL үсний ургалт зогсоох","description":"Суга, гар, хөл, бикини, шилбэ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"IPL гэрлэн эмчилгээ","description":"Арьсны өнгө жигдрүүлэх, батга, улайлтад."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Нөсөө лазер (Pigmentation)","description":"Цэвэрхэн, эрүүл, жигд өнгөтэй арьсны төлөө."}}]},{"@type":"OfferCatalog","name":"Дусал","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Glutathione 1200","description":"Антиоксидант, гэрэлтүүлэх, хоргүйжүүлэх премиум дусал."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Эссенциале дусал","description":"Элэгний эрүүл мэнд, эрч хүчийг дэмжинэ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"L-Carnitine тураах дусал","description":"Бодисын солилцоог идэвхжүүлж, жин хасахад тусална."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Дархлааны дусал","description":"Plevita, амин хүчил, сармис, BFLUID, Рингер, Синделла, харшлын эсрэг дусал."}}]},{"@type":"OfferCatalog","name":"Массаж","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"RF нүүр, хүзүүний массаж","description":"Радио давтамжаар арьсыг чангалж, өнгө зүсийг сэргээнэ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"RF хүйтэн массаж","description":"Тайвшруулах, хавдар намдаах хүйтэн RF массаж."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Карбокситой нүүрний массаж","description":"Арьсанд хүчилтөрөгч бэлэглэж, залуу төрхийг хадгална."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Хүзүү, цээж, нуруу, гарын массаж","description":"Дээд биеийн алжаал тайлах, хөнгөвчлөх массаж."}}]},{"@type":"OfferCatalog","name":"Жижиг ажилбар","itemListElement":[{"@type":"Offer","itemOffered":{"@type":"Service","name":"Үү авах","description":"Энгийн үү, улны үү, хавтгай үүний эмчилгээ."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Ургацаг авах","description":"Эрүүл, булбарай арьсны төлөө мэргэжлийн ажилбар."}},{"@type":"Offer","itemOffered":{"@type":"Service","name":"Суганы хөлрөлт арилгах ботокс","description":"Хэт хөлрөлтийг удаан хугацаанд багасгана."}}]}]},"sameAs":["https://www.facebook.com/Skinaid.mn","https://www.instagram.com/skinaid.mn"]},{"@type":"WebPage","@id":"https://www.skinaid.mn/#webpage","url":"https://www.skinaid.mn/","name":"SkinAid — Арьсны өвчин, гоо заслын эмнэлэг | Улаанбаатар","description":"SkinAid арьсны өвчин, гоо заслын эмнэлэг, Улаанбаатар. 2007 оноос хойш батга, сорви, нүхжилт, үрчлээний цогц эмчилгээ. Утас: 7600-0505","isPartOf":{"@id":"https://www.skinaid.mn/#website"},"about":{"@id":"https://www.skinaid.mn/#clinic"},"inLanguage":"mn"}]}
+    </script>
+  <!-- /build:jsonld -->
 </head>
 <body id="top">
 
@@ -65,7 +47,7 @@
   <header class="header">
     <div class="container header__inner">
       <a href="#top" class="logo" aria-label="SkinAid нүүр хуудас">
-        <img src="assets/img/logo.png" alt="Skin Aid — Dermatology &amp; Aesthetic Clinic" width="480" height="121" decoding="async">
+        <img src="assets/img/logo.png?v=8f412ce0" alt="Skin Aid — Dermatology &amp; Aesthetic Clinic" width="480" height="121" decoding="async">
       </a>
 
       <nav class="nav" aria-label="Үндсэн цэс">
@@ -137,7 +119,7 @@
           <div class="hero__ring" aria-hidden="true"></div>
           <div class="hero__blob" aria-hidden="true"></div>
           <div class="hero__img-wrap">
-            <img src="assets/img/photos/hero.jpg" srcset="assets/img/photos/hero-700.jpg 700w, assets/img/photos/hero.jpg 1400w" sizes="(max-width: 960px) 92vw, 46vw" alt="SkinAid эмнэлэгт нүүрний арьсны эмчилгээ хийлгэж буй үйлчлүүлэгч" width="1400" height="1610" fetchpriority="high">
+            <img src="assets/img/photos/hero.jpg?v=16588751" srcset="assets/img/photos/hero-700.jpg?v=2082d29c 700w, assets/img/photos/hero.jpg?v=16588751 1400w" sizes="(max-width: 960px) 92vw, 46vw" alt="SkinAid эмнэлэгт нүүрний арьсны эмчилгээ хийлгэж буй үйлчлүүлэгч" width="1400" height="1610" fetchpriority="high">
           </div>
           <div class="float-card float-card--1">
             <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
@@ -175,7 +157,7 @@
 
         <div class="bento">
           <a class="svc svc--featured reveal" href="#contact">
-            <img src="assets/img/photos/feat-exam.jpg" alt="" loading="lazy" width="1600" height="1067">
+            <img src="assets/img/photos/feat-exam.jpg?v=d69c9218" alt="" loading="lazy" width="1600" height="1067">
             <span class="svc__icon"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></span>
             <h3>Эмчийн үзлэг, оношлогоо</h3>
             <p>Арьсны эрүүл мэндийг эрэмбэлэх таны анхны алхам. Мэргэжлийн эмч арьсны нөхцөл байдлыг нарийн оношилж, тохирсон эмчилгээний төлөвлөгөө гаргана.</p>
@@ -295,7 +277,7 @@
         </div>
 
         <div class="promo__facetem reveal">
-          <img src="assets/img/facetem-s.png" alt="FACETEM S" width="420" height="420" loading="lazy">
+          <img src="assets/img/facetem-s.png?v=5cb465d6" alt="FACETEM S" width="420" height="420" loading="lazy">
           <div>
             <span class="eyebrow">Шинэ жилийн онцлох санал</span>
             <h3>FACETEM S — <em>10% хөнгөлөлт</em></h3>
@@ -326,7 +308,7 @@
       <div class="container scroller-wrap" data-scroller>
         <div class="scroller">
           <article class="treat reveal">
-            <div class="treat__media"><img src="assets/img/photos/t-ultraformer.jpg" alt="Ультраформер III HIFU эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Арьс чангалах</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-ultraformer.jpg?v=e2f86a0a" alt="Ультраформер III HIFU эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Арьс чангалах</span></div>
             <div class="treat__body">
               <h3>Ультраформер III</h3>
               <p>Мэс заслын бус, HIFU технологиор арьсыг чангалж өргөнө. Үр дүн хэдэн сарын турш аажмаар илэрдэг бөгөөд хадгалагдах хугацаа хүн бүрт ялгаатай.</p>
@@ -335,7 +317,7 @@
           </article>
 
           <article class="treat reveal" data-delay="1">
-            <div class="treat__media"><img src="assets/img/photos/t-co2.jpg" alt="CO₂ Fractional лазер эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Сорви, нүхжилт</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-co2.jpg?v=a21d7fc5" alt="CO₂ Fractional лазер эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Сорви, нүхжилт</span></div>
             <div class="treat__body">
               <h3>CO₂ Fractional лазер</h3>
               <p>Лазерын микро цацрагаар арьсны гүнд коллагены шинэ нийлэгжилтийг өдөөж, сорви, нүхжилт, жигд бус гадаргууг тэгшлэнэ.</p>
@@ -344,7 +326,7 @@
           </article>
 
           <article class="treat reveal" data-delay="2">
-            <div class="treat__media"><img src="assets/img/photos/t-vivace.jpg" alt="VIVACE Needle RF аппарат — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Бичил зүү + RF</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-vivace.jpg?v=2a4a50fd" alt="VIVACE Needle RF аппарат — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Бичил зүү + RF</span></div>
             <div class="treat__body">
               <h3>VIVACE Needle RF</h3>
               <p>Бичил зүү ба радио давтамжийн хосолсон технологи: нүхжилт, сорви, арьсны бүтэц, чангаралтыг нэг дор сайжруулна.</p>
@@ -353,7 +335,7 @@
           </article>
 
           <article class="treat reveal" data-delay="3">
-            <div class="treat__media"><img src="assets/img/photos/t-rejuran.jpg" alt="Эмч арьсны бүтцийг тайлбарлаж байна — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">PREMIUM тарилга</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-rejuran.jpg?v=038b602e" alt="Эмч арьсны бүтцийг тайлбарлаж байна — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">PREMIUM тарилга</span></div>
             <div class="treat__body">
               <h3>Rejuran · Juvelook · Lapuroon</h3>
               <p>PDRN, гиалурон, пептидийн комплекс skin booster тарилгууд арьсыг эсийн түвшинд нөхөн сэргээж, чийгшил, уян хатан чанарыг дээшлүүлнэ.</p>
@@ -362,7 +344,7 @@
           </article>
 
           <article class="treat reveal">
-            <div class="treat__media"><img src="assets/img/photos/t-glass.jpg" alt="Нүүрний гүн цэвэрлэгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Залуужуулах</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-glass.jpg?v=8db83fe1" alt="Нүүрний гүн цэвэрлэгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Залуужуулах</span></div>
             <div class="treat__body">
               <h3>Glass skin therapy</h3>
               <p>Гүний бохирдлын цэвэрлэгээ, чийгшүүлэлт, тайвшруулалт — шилэн мэт гэрэлтсэн, толигор арьсны нууц.</p>
@@ -371,7 +353,7 @@
           </article>
 
           <article class="treat reveal" data-delay="1">
-            <div class="treat__media"><img src="assets/img/photos/t-acne.jpg" alt="Батганы гэрлэн эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Батга</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-acne.jpg?v=88f4f94c" alt="Батганы гэрлэн эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Батга</span></div>
             <div class="treat__body">
               <h3>Батганы багц эмчилгээ</h3>
               <p>Үрэвсэлт батганы цэвэрлэгээ, карбокси, IPL гэрлэн эмчилгээг хослуулсан, арьсны онцлогт тохирсон хэмнэлттэй багц.</p>
@@ -380,7 +362,7 @@
           </article>
 
           <article class="treat reveal" data-delay="2">
-            <div class="treat__media"><img src="assets/img/photos/t-diode.jpg" alt="Diode лазер үс арилгах — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Лазер</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-diode.jpg?v=0c238357" alt="Diode лазер үс арилгах — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Лазер</span></div>
             <div class="treat__body">
               <h3>Diode лазер үс арилгах</h3>
               <p>Нүүр, сахал, суга, бикини, гар, хөл, бүтэн бие — AI технологитой diode лазераар урт хугацааны толигор арьс.</p>
@@ -389,7 +371,7 @@
           </article>
 
           <article class="treat reveal" data-delay="3">
-            <div class="treat__media"><img src="assets/img/photos/t-rf.jpg" alt="RF аппаратын эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Массаж</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-rf.jpg?v=5c1f5dc4" alt="RF аппаратын эмчилгээ — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Массаж</span></div>
             <div class="treat__body">
               <h3>RF нүүр, хүзүүний массаж</h3>
               <p>Радио давтамжийн дэвшилтэт технологиор арьсыг чангалж, өргөж, өнгө зүсийг сэргээнэ. Хүйтэн RF, карбокситой хувилбартай.</p>
@@ -398,7 +380,7 @@
           </article>
 
           <article class="treat reveal">
-            <div class="treat__media"><img src="assets/img/photos/t-online.jpg" alt="Онлайн оношлогоо — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Онлайн</span></div>
+            <div class="treat__media"><img src="assets/img/photos/t-online.jpg?v=ffc75e84" alt="Онлайн оношлогоо — SkinAid" loading="lazy" width="1200" height="900"><span class="treat__tag">Онлайн</span></div>
             <div class="treat__body">
               <h3>Онлайн оношлогоо</h3>
               <p>Арьс, харшил, гоо заслын бүх төрлийн зөвлөгөөг мэргэжлийн эмч танд онлайнаар өгнө. Хотоос гадуур байгаа ч эмчтэй холбогдоорой.</p>
@@ -414,8 +396,76 @@
           <span class="eyebrow">Бүх үйлчилгээ</span>
           <h2 class="h2" style="font-size: clamp(24px, 3vw, 32px);">Ангиллаар хайх</h2>
         </div>
-        <div class="chips reveal" id="treatChips" role="group" aria-label="Үйлчилгээний ангилал"></div>
-        <div class="list" id="treatList"></div>
+        <div class="chips reveal" id="treatChips" role="group" aria-label="Үйлчилгээний ангилал">
+          <!-- build:treat-chips -->
+            <button type="button" class="chip is-active" data-cat="all" aria-pressed="true">Бүгд</button>
+            <button type="button" class="chip" data-cat="exam" aria-pressed="false">Үзлэг</button>
+            <button type="button" class="chip" data-cat="acne" aria-pressed="false">Батга</button>
+            <button type="button" class="chip" data-cat="scar" aria-pressed="false">Сорви, нүхжилт</button>
+            <button type="button" class="chip" data-cat="inject" aria-pressed="false">Тарилга</button>
+            <button type="button" class="chip" data-cat="anti" aria-pressed="false">Хөгшрөлтийн эсрэг</button>
+            <button type="button" class="chip" data-cat="glow" aria-pressed="false">Залуужуулах</button>
+            <button type="button" class="chip" data-cat="lift" aria-pressed="false">Чангалах</button>
+            <button type="button" class="chip" data-cat="laser" aria-pressed="false">Лазер</button>
+            <button type="button" class="chip" data-cat="iv" aria-pressed="false">Дусал</button>
+            <button type="button" class="chip" data-cat="massage" aria-pressed="false">Массаж</button>
+            <button type="button" class="chip" data-cat="minor" aria-pressed="false">Жижиг ажилбар</button>
+          <!-- /build:treat-chips -->
+        </div>
+        <div class="list" id="treatList" data-ssr>
+          <!-- build:treat-list -->
+            <a class="row" href="#contact" data-c="exam" id="t-exam-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Үзлэг</span><h3>Арьсны үзлэг, оношлогоо</h3><p>Батганы үрэвсэл, үрчлээ, арьсны өвчин, нүхжилтийн цогц оношлогоо, эмчилгээний төлөвлөгөө.</p><span class="row__meta"><span>⏱ 1 цаг</span><span>₮50,000</span><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="exam" id="t-exam-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Үзлэг</span><h3>Онлайн оношлогоо</h3><p>Арьс, харшил, гоо заслын бүх төрлийн зөвлөгөөг мэргэжлийн эмч онлайнаар өгнө.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="exam" id="t-exam-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Үзлэг</span><h3>Давтан үзлэг</h3><p>Эмчилгээний явц, үр дүнг хянах давтан үзлэг.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="acne" id="t-acne-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Батга</span><h3>Үрэвсэлт батганы эмчилгээ</h3><p>Нэг удаагийн мэргэжлийн цэвэрлэгээ, үрэвсэл намдаах эмчилгээ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="acne" id="t-acne-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Батга</span><h3>Батганы багц эмчилгээ</h3><p>Арьсны онцлогт тохирсон 1/1–2/5 хүртэлх хэмнэлттэй, үр дүнтэй багц.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="acne" id="t-acne-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Батга</span><h3>Цээж, нурууны батганы эмчилгээ</h3><p>Цээж, нурууны хэсгийн батгыг цэвэрлэж, эрүүл арьсыг сэргээнэ. Карбоксийн хамт хийх боломжтой.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="acne" id="t-acne-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Батга</span><h3>IPL батганы багцын урамшуулал</h3><p>Гэрлэн эмчилгээг батганы багцтай хослуулсан урамшуулалтай үйлчилгээ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="acne" id="t-acne-5"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Батга</span><h3>Карбокси эмчилгээ</h3><p>Арьсанд хүчилтөрөгч бэлэглэж, үрэвсэл, нөсөө багасгах нэг удаагийн эмчилгээ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="scar" id="t-scar-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Сорви, нүхжилт</span><h3>CO₂ Fractional лазер</h3><p>Лазерын микро цацрагаар коллаген нийлэгжилтийг өдөөж, сорви, нүхжилтийг тэгшлэнэ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="scar" id="t-scar-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Сорви, нүхжилт</span><h3>VIVACE Needle RF</h3><p>Бичил зүү + радио давтамжийн хосолсон эмчилгээ: нүхжилт, сорви, арьсны бүтэц.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="scar" id="t-scar-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Сорви, нүхжилт</span><h3>MTS Microneedling</h3><p>Бичил зүүн эмчилгээгээр арьсны нөхөн төлжилтийг идэвхжүүлнэ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="scar" id="t-scar-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Сорви, нүхжилт</span><h3>Сорви салгах эмчилгээ</h3><p>Сорвийг бүдгэрүүлж, арьсны гадаргууг жигд болгоно.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="scar" id="t-scar-5"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Сорви, нүхжилт</span><h3>Келоид шимэгдүүлэх тарилга</h3><p>Келоид сорвийг багасгаж, зөөлрүүлэх тарилга эмчилгээ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>REJURAN 2ml / 4ml</h3><p>PDRN-д суурилсан арьс нөхөн төлжүүлэх тарилга.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>Juvelook тарилга</h3><p>Арьс залуужуулах, чангалах коллаген өдөөгч тарилга.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>Lapuroon Aurora-S / Aurora-V</h3><p>PDRN, гиалурон, пептид, амин хүчлийн комплекс skin booster.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>Cellbooster Glow</h3><p>Швейцарын SUISSELLE-ийн патентлагдсан гэрэлтүүлэх тарилга.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-5"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>Exo one эхэс тарилга</h3><p>Эксосом технологиор арьсыг эсийн түвшинд сэргээнэ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-6"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>Загасан тарилга (PDRN)</h3><p>Арьсыг нөхөн сэргээх PDRN тарилга.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-7"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>Япон гиалуроны тарилга</h3><p>Японы технологиор гүн чийгшил, залуу төрхийг сэргээнэ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-8"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>ASCE plus SRLV</h3><p>Үүдэл эсийн дэвшилтэт технологийн эсийн нөхөн төлжилт.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="inject" id="t-inject-9"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Тарилга</span><h3>Cellbooster Hair — үсний мезо</h3><p>Үсний үндсийг бэхжүүлэх мезотерапи.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="anti" id="t-anti-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Хөгшрөлтийн эсрэг</span><h3>Ботокс (1 тун)</h3><p>Үрчлээ арилгах, тэнийлгэх. V-Line, хуян, суганы хөлрөлтийн ботокс.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="anti" id="t-anti-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Хөгшрөлтийн эсрэг</span><h3>Дүүргэгч филлер</h3><p>Нүүрний хэлбэр засах, уруулын филлер (1 мл), эзлэхүүн сэргээх.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="anti" id="t-anti-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Хөгшрөлтийн эсрэг</span><h3>Facetem CaHA тарилга</h3><p>Коллаген өдөөх дэвшилтэт тарилга: тал / 2 бүтэн / филлертэй.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="anti" id="t-anti-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Хөгшрөлтийн эсрэг</span><h3>Плазма эмчилгээ</h3><p>Нүдний цацраг үрчлээ, чихний урд хэсгийн үрчлээнд.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="anti" id="t-anti-5"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Хөгшрөлтийн эсрэг</span><h3>Филлер хайлуулагч тарилга</h3><p>Өмнөх филлерийг хайлуулж, төрөлх төрхийг сэргээхэд чиглэсэн тарилга.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="glow" id="t-glow-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Залуужуулах</span><h3>Glass skin therapy</h3><p>Гүний бохирдлын цэвэрлэгээ, чийгшил, тайвшрал — массажтай/массажгүй.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="glow" id="t-glow-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Залуужуулах</span><h3>AHA 70% химийн гуужуулалт</h3><p>Арьсыг гүн гуужуулж, толигор гэрэлтсэн төрхийг цогцлооно.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="glow" id="t-glow-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Залуужуулах</span><h3>Хүчилээр арчих / TCA</h3><p>Мэргэжлийн химийн пийл, арьсны нөхөн сэргээлт.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="glow" id="t-glow-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Залуужуулах</span><h3>Карбокси + Карбон пийл</h3><p>Хүчилтөрөгч + нүүрстөрөгчийн хосолсон гэрэлтүүлэх эмчилгээ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="glow" id="t-glow-5"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Залуужуулах</span><h3>Хацрын улайлтын IPL</h3><p>Хацрын улайлтыг багасгаж, арьсны өнгийг жигдрүүлэх IPL гэрлэн эмчилгээ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="lift" id="t-lift-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Чангалах</span><h3>Ультраформер III (HIFU)</h3><p>Мэс заслын бус аргаар арьсыг чангалж өргөх, нүүрний хэлбэрийг тодруулах HIFU технологи.</p><span class="row__meta"><span>⏱ 1ц 30м</span><span>₮300,000-с</span><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="lift" id="t-lift-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Чангалах</span><h3>Моно Thread утсан эмчилгээ</h3><p>Мэс заслын бус аргаар арьсыг өргөж, чангаруулж, залуужуулна.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="lift" id="t-lift-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Чангалах</span><h3>Cellbooster Shape өөх хайлуулах</h3><p>Илүүдэл өөхийг багасгаж, нүүр, биеийн хэлбэрийг сайжруулна.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="laser" id="t-laser-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Лазер</span><h3>Diode лазер үс арилгах</h3><p>Нүүр, сахал, суга, бикини, гар, хөл, бүтэн бие — урт хугацааны толигор арьс.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="laser" id="t-laser-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Лазер</span><h3>IPL үсний ургалт зогсоох</h3><p>Суга, гар, хөл, бикини, шилбэ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="laser" id="t-laser-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Лазер</span><h3>IPL гэрлэн эмчилгээ</h3><p>Арьсны өнгө жигдрүүлэх, батга, улайлтад.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="laser" id="t-laser-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Лазер</span><h3>Нөсөө лазер (Pigmentation)</h3><p>Цэвэрхэн, эрүүл, жигд өнгөтэй арьсны төлөө.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="iv" id="t-iv-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Дусал</span><h3>Glutathione 1200</h3><p>Антиоксидант, гэрэлтүүлэх, хоргүйжүүлэх премиум дусал.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="iv" id="t-iv-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Дусал</span><h3>Эссенциале дусал</h3><p>Элэгний эрүүл мэнд, эрч хүчийг дэмжинэ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="iv" id="t-iv-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Дусал</span><h3>L-Carnitine тураах дусал</h3><p>Бодисын солилцоог идэвхжүүлж, жин хасахад тусална.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="iv" id="t-iv-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Дусал</span><h3>Дархлааны дусал</h3><p>Plevita, амин хүчил, сармис, BFLUID, Рингер, Синделла, харшлын эсрэг дусал.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="massage" id="t-massage-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Массаж</span><h3>RF нүүр, хүзүүний массаж</h3><p>Радио давтамжаар арьсыг чангалж, өнгө зүсийг сэргээнэ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="massage" id="t-massage-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Массаж</span><h3>RF хүйтэн массаж</h3><p>Тайвшруулах, хавдар намдаах хүйтэн RF массаж.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="massage" id="t-massage-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Массаж</span><h3>Карбокситой нүүрний массаж</h3><p>Арьсанд хүчилтөрөгч бэлэглэж, залуу төрхийг хадгална.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="massage" id="t-massage-4"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Массаж</span><h3>Хүзүү, цээж, нуруу, гарын массаж</h3><p>Дээд биеийн алжаал тайлах, хөнгөвчлөх массаж.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="minor" id="t-minor-1"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Жижиг ажилбар</span><h3>Үү авах</h3><p>Энгийн үү, улны үү, хавтгай үүний эмчилгээ.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="minor" id="t-minor-2"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Жижиг ажилбар</span><h3>Ургацаг авах</h3><p>Эрүүл, булбарай арьсны төлөө мэргэжлийн ажилбар.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+            <a class="row" href="#contact" data-c="minor" id="t-minor-3"><span class="row__dot" aria-hidden="true"></span><span><span class="row__cat">Жижиг ажилбар</span><h3>Суганы хөлрөлт арилгах ботокс</h3><p>Хэт хөлрөлтийг удаан хугацаанд багасгана.</p><span class="row__meta"><span>Цаг захиалах →</span></span></span></a>
+          <!-- /build:treat-list -->
+        </div>
         <p class="sr-only" id="treatStatus" role="status"></p>
         <div class="list-more"><button class="btn btn--outline" id="treatMore">Бүх үйлчилгээг харах</button></div>
       </div>
@@ -425,8 +475,8 @@
     <section class="section" id="about">
       <div class="container about">
         <div class="about__media reveal">
-          <div class="about__img-main"><img src="assets/img/photos/about-main.jpg" alt="SkinAid эмнэлгийн арьсны эмчилгээ" loading="lazy" width="1200" height="1500"></div>
-          <div class="about__img-sub"><img src="assets/img/photos/about-sub.jpg" alt="SkinAid эмнэлгийн эмч үйлчлүүлэгчид зөвлөгөө өгч байна" loading="lazy" width="1000" height="1000"></div>
+          <div class="about__img-main"><img src="assets/img/photos/about-main.jpg?v=7408dacd" alt="SkinAid эмнэлгийн арьсны эмчилгээ" loading="lazy" width="1200" height="1500"></div>
+          <div class="about__img-sub"><img src="assets/img/photos/about-sub.jpg?v=aab3174b" alt="SkinAid эмнэлгийн эмч үйлчлүүлэгчид зөвлөгөө өгч байна" loading="lazy" width="1000" height="1000"></div>
           <div class="about__year"><strong>2007</strong><span>оноос хойш</span></div>
         </div>
         <div>
@@ -587,7 +637,7 @@
         </div>
         <div class="posts">
           <article class="post reveal">
-            <div class="post__media"><img src="assets/img/photos/blog-1.jpg" alt="" loading="lazy" width="1200" height="750"></div>
+            <div class="post__media"><img src="assets/img/photos/blog-1.jpg?v=f3265421" alt="" loading="lazy" width="1200" height="750"></div>
             <div class="post__body">
               <span class="post__cat">Нүхжилт</span>
               <h3>Нүхжилтийг яаж арилгах вэ?</h3>
@@ -596,7 +646,7 @@
             </div>
           </article>
           <article class="post reveal" data-delay="1">
-            <div class="post__media"><img src="assets/img/photos/blog-2.jpg" alt="" loading="lazy" width="1200" height="750"></div>
+            <div class="post__media"><img src="assets/img/photos/blog-2.jpg?v=b0a9a4a7" alt="" loading="lazy" width="1200" height="750"></div>
             <div class="post__body">
               <span class="post__cat">Батга</span>
               <h3>Хоол хүнсний буруу хэрэглээнээс шалтгаалах батгашилт</h3>
@@ -605,7 +655,7 @@
             </div>
           </article>
           <article class="post reveal" data-delay="2">
-            <div class="post__media"><img src="assets/img/photos/blog-3.jpg" alt="" loading="lazy" width="1200" height="750"></div>
+            <div class="post__media"><img src="assets/img/photos/blog-3.jpg?v=733e360f" alt="" loading="lazy" width="1200" height="750"></div>
             <div class="post__body">
               <span class="post__cat">Арьс арчилгаа</span>
               <h3>Та SPF нарны тосоо зөв хэрэглэж чаддаг уу?</h3>
@@ -735,7 +785,7 @@
       <div class="footer__grid">
         <div>
           <a href="#top" class="logo" aria-label="SkinAid">
-        <img src="assets/img/logo-white.png" alt="Skin Aid — Dermatology &amp; Aesthetic Clinic" width="480" height="121" loading="lazy" decoding="async">
+        <img src="assets/img/logo-white.png?v=0caecd65" alt="Skin Aid — Dermatology &amp; Aesthetic Clinic" width="480" height="121" loading="lazy" decoding="async">
       </a>
           <p class="footer__about">Арьсны өвчин, үрчлээ, гоо засал, батганы үрэвсэл, сорви, нүхжилтийн цогц эмчилгээ. 2007 оноос хойш Улаанбаатар хотод.</p>
         </div>
@@ -794,9 +844,10 @@
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
   </button>
 
-  <script src="assets/js/catalog-defaults.js?v=20261108c"></script>
-  <script src="assets/js/main.js?v=20261108b"></script>
+  <script src="assets/js/catalog-defaults.js?v=cf4cf057"></script>
+  <script src="assets/js/catalog-render.js?v=4ab01500"></script>
+  <script src="assets/js/main.js?v=5e9f4d18"></script>
   <!-- Firebase (Firestore): захиалга бүртгэх, тохиргоо/каталог унших. Ачаалагдахгүй бол сайт анхны байдлаараа ажиллана. -->
-  <script type="module" src="assets/js/backend.js?v=20261108b" onerror="document.dispatchEvent(new Event('skinaid:backend-failed'))"></script>
+  <script type="module" src="assets/js/backend.js?v=90e14c2b" onerror="document.dispatchEvent(new Event('skinaid:backend-failed'))"></script>
 </body>
 </html>

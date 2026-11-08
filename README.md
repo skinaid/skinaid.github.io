@@ -10,7 +10,8 @@ Backend: **Firebase (Spark үнэгүй багц)** — захиалга Firesto
 index.html                    — Үндсэн хуудас (бүх хэсэг)
 assets/css/style.css          — Загвар (өнгө, фонт, responsive)
 assets/js/main.js             — Цэс, анимаци, үйлчилгээний шүүлтүүр, FAQ, маягт (Firestore + fallback), тохиргоо унших
-assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын АНХНЫ утга (сайт + admin хоёулаа ашиглана)
+assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын АНХНЫ утга (сайт + admin + build ашиглана)
+assets/js/catalog-render.js   — Үйлчилгээний мөрийн HTML загвар (main.js болон tools/build.mjs хоёулаа ашиглана)
 assets/js/firebase-config.js  — Firebase төслийн нийтийн тохиргоо, admin и-мэйлийн жагсаалт (UI-д), reCAPTCHA сайтын түлхүүр
 assets/js/app-check.js        — Firebase App Check (reCAPTCHA): сайт + admin хоёулаа Firestore-оос өмнө дуудна
 assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog унших
@@ -18,6 +19,9 @@ admin/                        — Удирдлагын хэсэг (index.html, a
 firestore.rules               — Firestore аюулгүй байдлын дүрэм (console-д нийтэлсэнтэй ижил байлгана)
 firebase.json, .firebaserc    — Firebase CLI хэрэглэх үед (заавал биш)
 assets/img/                   — Лого (logo.png, logo-white.png), favicon, og-image; өөрийн зургуудаа энд хийнэ
+tools/build.mjs (+ tools/lib) — Build: JSON-LD, статик үйлчилгээний жагсаалт, asset хувилбар, sitemap; --check шалгалт
+content/site.mjs              — Эмнэлгийн баталгаатай мэдээлэл (NAP, JSON-LD), индекслэгдэх хуудсын жагсаалт
+content/lastmod.json          — Хуудас бүрийн агуулга өөрчлөгдсөн огноо (build бичнэ, sitemap-ийн lastmod)
 ```
 
 ## Локал дээр үзэх
@@ -26,6 +30,23 @@ assets/img/                   — Лого (logo.png, logo-white.png), favicon, 
 python3 -m http.server 8765
 ```
 Дараа нь браузерт http://localhost:8765 нээнэ.
+
+## Build (`tools/build.mjs`) — push хийхээс өмнө заавал
+
+HTML, JS, CSS, зураг, `catalog-defaults.js` эсвэл `content/site.mjs`-ийг зассан бол:
+
+```bash
+node tools/build.mjs          # шинэчилнэ
+node tools/build.mjs --check  # юу ч бичихгүй; хуучирсан эсвэл SEO алдаатай бол exit 1
+```
+
+Build юу хийдэг вэ:
+- `index.html` дахь `<!-- build:jsonld -->`, `<!-- build:treat-chips -->`, `<!-- build:treat-list -->` хэсгүүдийг дүүргэнэ (бүх 50 үйлчилгээ статик HTML — Google JS-гүйгээр харна). **Эдгээр хэсгийг гараар бүү засаарай.**
+- `/assets/...` холбоос бүр болон JS module-ийн import-д агуулгын hash (`?v=8тэмдэгт`) тавина → `vercel.json` дахь `/assets/*` нэг жилийн `immutable` cache аюулгүй. `?v=`-г гараар өөрчлөх шаардлагагүй.
+- `sitemap.xml`-ийг `content/site.mjs`-ийн хуудсын жагсаалтаас, `lastmod`-ийг агуулга өөрчлөгдсөн огноогоор бичнэ.
+- Шалгалт: title/description урт ба давхардал, canonical, h1 = 1, JSON-LD зөв, дотоод холбоос файлтай/redirect руу заагаагүй/ташуугүй, asset бүр хувилбартай, sitemap = хуудсын жагсаалт.
+
+Тэмдэглэл: Нүүр хуудас дээр Firestore-ийн `settings/catalog` (admin → Үйлчилгээ / Багц) статик жагсаалтыг хэрэглэгчийн хөтөч дээр дахин зурна. Google статик (catalog-defaults.js) хувилбарыг харна — тиймээс тайлбар засахдаа хоёуланд нь засна (admin-ыг Google-д автоматаар хүргэх синк нь SEO төлөвлөгөөний 7-р үе шат).
 
 ## Засварлах зүйлс
 
@@ -143,7 +164,7 @@ Repo: https://github.com/skinaid/skinaid.github.io
 git add -A && git commit -m "Өөрчлөлтийн тайлбар" && git push
 ```
 
-CSS/JS-ийн өөрчлөлт хэрэглэгчдэд шууд харагдахын тулд `index.html` дахь `style.css?v=...`, `main.js?v=...` дугаарыг өөрчилнө.
+Push хийхээс өмнө `node tools/build.mjs` ажиллуулна — asset хувилбар (`?v=`) автоматаар шинэчлэгдэнэ.
 
 ### Домэйн (2026-11-07-нд Wix-ээс Vercel рүү шилжүүлсэн)
 

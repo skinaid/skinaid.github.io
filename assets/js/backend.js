@@ -7,8 +7,8 @@
    ========================================================================== */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp, setLogLevel } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore-lite.js';
-import { firebaseConfig } from './firebase-config.js';
-import { attachAppCheck } from './app-check.js';
+import { firebaseConfig } from './firebase-config.js?v=0e85a329';
+import { attachAppCheck } from './app-check.js?v=5df671db';
 
 setLogLevel('error');   // амжилтгүй хүсэлтийн payload-ыг (захиалгын өгөгдөл) console-д warn хэлбэрээр хэвлэхгүй
 const app = initializeApp(firebaseConfig);

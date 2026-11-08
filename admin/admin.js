@@ -6,8 +6,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { firebaseConfig, ADMIN_EMAILS } from '../assets/js/firebase-config.js';
-import { attachAppCheck } from '../assets/js/app-check.js';
+import { firebaseConfig, ADMIN_EMAILS } from '../assets/js/firebase-config.js?v=0e85a329';
+import { attachAppCheck } from '../assets/js/app-check.js?v=5df671db';
 
 const app = initializeApp(firebaseConfig);
 attachAppCheck(app);   // reCAPTCHA → App Check token (Firestore-д Enforce асаалттай)
@@ -283,7 +283,7 @@ const notifyNew = (list) => {
   toast(`Шинэ захиалга: ${body}`);
   beep();
   if (canNotify && Notification.permission === 'granted') {
-    try { new Notification(list.length > 1 ? `${list.length} шинэ захиалга — SkinAid` : 'Шинэ захиалга — SkinAid', { body, icon: '../assets/img/apple-touch-icon.png' }); } catch (_) { }
+    try { new Notification(list.length > 1 ? `${list.length} шинэ захиалга — SkinAid` : 'Шинэ захиалга — SkinAid', { body, icon: '../assets/img/apple-touch-icon.png?v=af82331c' }); } catch (_) { }
   }
 };
 

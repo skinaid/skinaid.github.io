@@ -1,6 +1,6 @@
 /* ==========================================================================
    SKIN AID — main.js
-   Header, mobile nav, reveal animations, counters, treatment filter,
+   Header, mobile nav, reveal animations, counters, treatment filter (rows: catalog-render.js),
    horizontal scroller, FAQ accordion, booking form (Firestore + fallback),
    settings/catalog from Firebase (assets/js/backend.js, optional).
    ========================================================================== */
@@ -56,32 +56,34 @@
   }
 
   /* ---------- Reveal on scroll ---------- */
-  const reveals = $$('.reveal');
-  // Above-the-fold elements: show immediately (no flash of hidden content)
+  // Агуулга анхдагчаар харагдана. Зөвхөн дэлгэцээс доор байгааг түр нууж (.is-pending), харагдах үед гаргана.
+  const reveals = reduceMotion ? [] : $$('.reveal');
+  const pending = new Set();
   reveals.forEach(el => {
-    const r = el.getBoundingClientRect();
-    if (r.top < window.innerHeight * 0.95) { el.style.transition = 'none'; el.classList.add('is-in'); }
+    if (el.getBoundingClientRect().top < window.innerHeight * 0.95) return;   // эхний дэлгэц: хөдөлгөхгүй
+    el.style.transition = 'none';
+    el.classList.add('is-pending');
+    pending.add(el);
   });
-  // Fallback: also check on scroll/resize (covers browsers that throttle observers)
+  requestAnimationFrame(() => requestAnimationFrame(() => pending.forEach(el => { el.style.transition = ''; })));
+  const show = (el) => { if (pending.delete(el)) el.classList.remove('is-pending'); };
+  // Fallback: scroll/resize дээр ч шалгана (observer-ийг сааруулдаг хөтчид)
   let revealTick = 0;
   const revealInView = () => {
+    if (!pending.size) return;
     const now = Date.now(); if (now - revealTick < 120) return; revealTick = now;
     const h = window.innerHeight;
-    reveals.forEach(el => {
-      if (el.classList.contains('is-in')) return;
-      const r = el.getBoundingClientRect();
-      if (r.top < h - 40 && r.bottom > 0) el.classList.add('is-in');
-    });
+    pending.forEach(el => { const r = el.getBoundingClientRect(); if (r.top < h - 40 && r.bottom > 0) show(el); });
   };
   window.addEventListener('scroll', revealInView, { passive: true });
   window.addEventListener('resize', revealInView);
   if ('IntersectionObserver' in window) {
     const io = new IntersectionObserver((entries) => {
-      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } });
+      entries.forEach(e => { if (e.isIntersecting) { show(e.target); io.unobserve(e.target); } });
     }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-    reveals.forEach(el => io.observe(el));
+    pending.forEach(el => io.observe(el));
   } else {
-    reveals.forEach(el => el.classList.add('is-in'));
+    [...pending].forEach(show);
   }
 
   /* ---------- Count-up numbers ---------- */
@@ -128,54 +130,56 @@
   });
 
   /* ---------- Treatment list with category filter ---------- */
-  const BOOK = '#contact';
   // Анхны утга: assets/js/catalog-defaults.js (сайт + admin хоёулаа ашиглана).
-  // Firestore `settings/catalog` байвал applyCatalog() доор TREATMENTS-ийг сольж дахин render хийнэ.
+  // Бүх мөрийг tools/build.mjs статик HTML болгон бичдэг (#treatList[data-ssr]) — хайлтын робот JS-гүйгээр
+  // харна. Энд зөвхөн шүүлт/12-ын хязгаарыг `hidden`-ээр хийнэ. Firestore `settings/catalog` ирвэл
+  // applyCatalog() TREATMENTS-ийг сольж ижил загвараар (catalog-render.js) дахин зурна.
   const DEFAULTS = window.SKINAID_DEFAULTS || { cats: {}, treatments: [], packages: [] };
   const CATS = DEFAULTS.cats || {};
+  const RENDER = window.SKINAID_RENDER;
   let TREATMENTS = (DEFAULTS.treatments || []).slice();
   let renderTreatments = () => {};
 
   const listEl = $('#treatList');
   const chipsEl = $('#treatChips');
   const moreBtn = $('#treatMore');
-  if (listEl && chipsEl) {
+  if (listEl && chipsEl && RENDER) {
     let active = 'all';
     let expanded = false;
     const LIMIT = 12;
 
-    const render = () => {
-      const items = TREATMENTS.filter(t => active === 'all' || t.c === active);
-      const shown = (expanded || active !== 'all') ? items : items.slice(0, LIMIT);
-      listEl.innerHTML = shown.map((t, i) => `
-        <a class="row" href="${BOOK}" style="animation-delay:${Math.min(i, 12) * 30}ms">
-          <span class="row__dot" aria-hidden="true"></span>
-          <span>
-            <span class="row__cat">${CATS[t.c]}</span>
-            <h3>${esc(t.n)}</h3>
-            <p>${esc(t.d)}</p>
-            <span class="row__meta">${t.t ? '<span>⏱ ' + esc(t.t) + '</span>' : ''}${t.p ? '<span>' + esc(t.p) + '</span>' : ''}<span>Цаг захиалах →</span></span>
-          </span>
-        </a>`).join('') || '<p class="list-empty">Энэ ангилалд үйлчилгээ олдсонгүй.</p>';
-      const st = $('#treatStatus'); if (st) st.textContent = shown.length + ' үйлчилгээ харуулж байна';
-      if (moreBtn) {
-        const hidden = active === 'all' && !expanded && items.length > LIMIT;
-        moreBtn.style.display = hidden ? '' : 'none';
-        moreBtn.textContent = 'Бүх үйлчилгээг харах';
-      }
+    const draw = () => { listEl.innerHTML = TREATMENTS.map(t => RENDER.row(t, CATS)).join(''); };
+    const apply = () => {
+      let matched = 0, shown = 0;
+      $$('.row', listEl).forEach(row => {
+        const match = active === 'all' || row.dataset.c === active;
+        if (match) matched++;
+        const visible = match && (expanded || active !== 'all' || matched <= LIMIT);
+        row.hidden = !visible;
+        if (visible) shown++;
+      });
+      const empty = $('.list-empty', listEl);
+      if (!shown && !empty) listEl.insertAdjacentHTML('beforeend', '<p class="list-empty">Энэ ангилалд үйлчилгээ олдсонгүй.</p>');
+      if (shown && empty) empty.parentNode.removeChild(empty);
+      const st = $('#treatStatus'); if (st) st.textContent = shown + ' үйлчилгээ харуулж байна';
+      if (moreBtn) moreBtn.style.display = (active === 'all' && !expanded && matched > LIMIT) ? '' : 'none';
     };
 
-    chipsEl.innerHTML = `<button class="chip is-active" data-cat="all" aria-pressed="true">Бүгд</button>` +
-      Object.entries(CATS).map(([k, v]) => `<button class="chip" data-cat="${k}" aria-pressed="false">${v}</button>`).join('');
+    if (!listEl.hasAttribute('data-ssr') || !$('.row', listEl)) draw();
+    if (!$('.chip', chipsEl)) chipsEl.innerHTML = RENDER.chips(CATS).join('');
     chipsEl.addEventListener('click', (e) => {
       const b = e.target.closest('.chip'); if (!b) return;
       active = b.dataset.cat;
       $$('.chip', chipsEl).forEach(c => { const on = c === b; c.classList.toggle('is-active', on); c.setAttribute('aria-pressed', String(on)); });
-      render();
+      apply();
     });
-    if (moreBtn) moreBtn.addEventListener('click', () => { expanded = true; render(); const first = listEl.children[LIMIT]; if (first) first.focus(); });
-    render();
-    renderTreatments = render;
+    if (moreBtn) moreBtn.addEventListener('click', () => {
+      expanded = true; apply();
+      const first = $$('.row', listEl).filter(r => !r.hidden)[LIMIT];
+      if (first) first.focus();
+    });
+    apply();
+    renderTreatments = () => { draw(); apply(); };
   }
 
   /* Service cards -> preselect matching filter chip */

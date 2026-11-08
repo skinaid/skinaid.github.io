@@ -6,7 +6,7 @@
    Сайтын түлхүүр (нийтийн): firebase-config.js → RECAPTCHA_SITE_KEY. Заавар: README → «App Check».
    ========================================================================== */
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js';
-import { RECAPTCHA_SITE_KEY } from './firebase-config.js';
+import { RECAPTCHA_SITE_KEY } from './firebase-config.js?v=0e85a329';
 
 /** initializeApp(...)-ийн дараа, Firestore/Auth ашиглахаас ӨМНӨ нэг удаа дуудна. */
 export function attachAppCheck(app) {

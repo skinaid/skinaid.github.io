@@ -519,8 +519,10 @@ article.post:hover .post__media img { transform: none; }
 .totop svg { width: 18px; height: 18px; }
 
 /* ---------- Reveal animations ---------- */
-.reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
-.reveal.is-in { opacity: 1; transform: none; }
+/* Агуулга анхдагчаар харагдана (JS-гүй хөтөч, хайлтын робот). main.js зөвхөн дэлгэцээс доор
+   байгаа элементэд .is-pending нэмж, харагдах үед нь авна. */
+.reveal { transition: opacity .7s var(--ease), transform .7s var(--ease); }
+.reveal.is-pending { opacity: 0; transform: translateY(26px); }
 .reveal[data-delay="1"] { transition-delay: .1s; }
 .reveal[data-delay="2"] { transition-delay: .2s; }
 .reveal[data-delay="3"] { transition-delay: .3s; }
@@ -534,7 +536,7 @@ article.post:hover .post__media img { transform: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   html { scroll-behavior: auto; }
-  .reveal { opacity: 1; transform: none; }
+  .reveal.is-pending { opacity: 1; transform: none; }
 }
 
 /* ---------- Promo (seasonal packages) ---------- */
