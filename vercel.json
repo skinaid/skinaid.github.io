@@ -34,34 +34,104 @@
       ]
     },
     {
-      "source": "/admin/(.*)",
+      "source": "/admin(.*)",
       "headers": [
         {
           "key": "X-Robots-Tag",
-          "value": "noindex"
+          "value": "noindex, nofollow"
         },
         {
           "key": "Cache-Control",
           "value": "no-store"
         }
       ]
+    },
+    {
+      "source": "/favicon.ico",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800"
+        }
+      ]
     }
   ],
   "redirects": [
+    {
+      "source": "/:path(.*)",
+      "destination": "https://www.skinaid.mn/:path",
+      "permanent": true,
+      "has": [
+        {
+          "type": "host",
+          "value": "skinaidgithubio-y1vf.vercel.app"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/:dir(.+)/index.html",
+      "destination": "/:dir",
+      "permanent": true
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/privacy",
+      "permanent": true
+    },
     {
       "source": "/book-online",
       "destination": "/#contact",
       "permanent": true
     },
     {
-      "source": "/blog",
-      "destination": "/#blog",
+      "source": "/book-online/:rest*",
+      "destination": "/#contact",
       "permanent": true
     },
     {
-      "source": "/privacy-policy",
-      "destination": "/privacy/",
+      "source": "/booking-calendar/:rest*",
+      "destination": "/#contact",
       "permanent": true
+    },
+    {
+      "source": "/blog",
+      "destination": "/#blog",
+      "permanent": false
+    },
+    {
+      "source": "/blog/:rest*",
+      "destination": "/#blog",
+      "permanent": false
+    },
+    {
+      "source": "/zz-probe/тест",
+      "destination": "/?probe=raw",
+      "permanent": false
+    },
+    {
+      "source": "/zz-probe/%D1%82%D0%B5%D1%81%D1%82",
+      "destination": "/?probe=enc",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/:rest*",
+      "destination": "/#treatments",
+      "permanent": false
+    },
+    {
+      "source": "/post/:rest*",
+      "destination": "/#blog",
+      "permanent": false
+    },
+    {
+      "source": "/product-page/:rest*",
+      "destination": "/",
+      "permanent": false
     }
   ]
 }

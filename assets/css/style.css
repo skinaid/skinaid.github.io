@@ -418,6 +418,8 @@ ul { margin: 0; padding: 0; list-style: none; }
 .posts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .post { border-radius: var(--r-lg); overflow: hidden; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; transition: transform .35s var(--ease), box-shadow .35s var(--ease); }
 .post:hover { transform: translateY(-6px); box-shadow: var(--shadow-md); }
+article.post:hover { transform: none; box-shadow: none; }
+article.post:hover .post__media img { transform: none; }
 .post__media { aspect-ratio: 16 / 10; overflow: hidden; background: var(--purple-100); }
 .post__media img { width: 100%; height: 100%; object-fit: cover; transition: transform .8s var(--ease); }
 .post:hover .post__media img { transform: scale(1.05); }
