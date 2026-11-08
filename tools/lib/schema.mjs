@@ -113,3 +113,135 @@ export function webPageNode(site, page) {
 export function homeGraph(site, catalog, page, asset) {
   return { '@context': 'https://schema.org', '@graph': [websiteNode(site), clinicNode(site, catalog, asset), webPageNode(site, page)] };
 }
+
+/* ---------- Дэд хуудас (эмчилгээ, hub) ---------- */
+
+/** Дэд хуудсанд эмнэлгийн товч зангилаа (нүүрнийхтэй ижил @id) */
+export function clinicRefNode(site, asset = (p) => p) {
+  return compact({
+    '@type': 'MedicalClinic',
+    '@id': site.origin + '/#clinic',
+    name: site.name,
+    url: site.origin + '/',
+    logo: abs(site, asset(site.logo)),
+    telephone: site.telephone,
+    address: { '@type': 'PostalAddress', ...site.address },
+  });
+}
+
+export function breadcrumbNode(site, url, items) {
+  return {
+    '@type': 'BreadcrumbList',
+    '@id': url + '#breadcrumb',
+    itemListElement: items.map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, item: site.origin + it.path })),
+  };
+}
+
+/** Хянагч эмч (зөвхөн зөвшөөрсөн талбарууд) */
+export function personNode(site, key, doc) {
+  return compact({
+    '@type': 'Person',
+    '@id': site.origin + '/#doctor-' + key,
+    name: doc.name,
+    jobTitle: doc.jobTitle,
+    worksFor: { '@id': site.origin + '/#clinic' },
+    knowsAbout: doc.knowsAbout,
+  });
+}
+
+const PROCEDURE_TYPES = {
+  procedure: ['MedicalProcedure', 'Service'],
+  therapy: ['MedicalTherapy', 'Service'],
+  diagnostic: ['DiagnosticProcedure', 'Service'],
+  cosmetic: 'Service',
+};
+
+/**
+ * Эмчилгээний хуудасны @graph.
+ * @param ctx { url, title, description, crumbs:[{name,path}], items: catalog мөрүүд, reviewer: {key, doc}|null,
+ *              lastReviewed, asset, summaryText }
+ */
+export function treatmentGraph(site, page, ctx) {
+  const url = ctx.url;
+  const procId = url + '#procedure';
+  const s = page.schema || {};
+  const types = PROCEDURE_TYPES[s.kind] || PROCEDURE_TYPES.procedure;
+  const offers = ctx.items.filter((t) => parsePrice(t.p)).map((t) => ({ ...offer(t), url }));
+  const conditions = (s.conditions || []).map((c, i) => compact({
+    '@type': 'MedicalCondition',
+    '@id': url + '#condition-' + (i + 1),
+    name: c.name,
+    alternateName: c.alternateName,
+    code: c.icd10 ? { '@type': 'MedicalCode', code: c.icd10, codingSystem: 'ICD-10' } : null,
+    possibleTreatment: { '@id': procId },
+  }));
+  const isProc = Array.isArray(types) && types.includes('MedicalProcedure');
+  const procedure = compact({
+    '@type': types,
+    '@id': procId,
+    name: page.name,
+    description: ctx.summaryText,
+    procedureType: isProc && s.procedureType ? 'https://schema.org/' + s.procedureType : null,
+    bodyLocation: s.bodyLocation,
+    provider: { '@id': site.origin + '/#clinic' },
+    areaServed: { '@type': 'City', name: site.areaServed },
+    offers,
+  });
+  const person = ctx.reviewer ? personNode(site, ctx.reviewer.key, ctx.reviewer.doc) : null;
+  const webpage = compact({
+    '@type': 'MedicalWebPage',
+    '@id': url + '#webpage',
+    url,
+    name: ctx.title,
+    description: ctx.description,
+    inLanguage: 'mn',
+    isPartOf: { '@id': site.origin + '/#website' },
+    publisher: { '@id': site.origin + '/#clinic' },
+    about: [{ '@id': procId }, ...conditions.map((c) => ({ '@id': c['@id'] }))],
+    mainEntity: { '@id': procId },
+    breadcrumb: { '@id': url + '#breadcrumb' },
+    specialty: 'https://schema.org/Dermatology',
+    medicalAudience: 'https://schema.org/Patient',
+    lastReviewed: person ? ctx.lastReviewed : null,
+    reviewedBy: person ? { '@id': person['@id'] } : null,
+  });
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      compact({ '@type': 'WebSite', '@id': site.origin + '/#website', url: site.origin + '/', name: site.name }),
+      clinicRefNode(site, ctx.asset),
+      webpage, procedure, ...conditions, ...(person ? [person] : []),
+      breadcrumbNode(site, url, ctx.crumbs),
+    ],
+  };
+}
+
+/** /emchilgee hub: CollectionPage + ItemList (нийтлэгдсэн хуудсууд) + BreadcrumbList */
+export function hubGraph(site, ctx) {
+  const url = ctx.url;
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      compact({ '@type': 'WebSite', '@id': site.origin + '/#website', url: site.origin + '/', name: site.name }),
+      clinicRefNode(site, ctx.asset),
+      compact({
+        '@type': 'CollectionPage',
+        '@id': url + '#webpage',
+        url,
+        name: ctx.title,
+        description: ctx.description,
+        inLanguage: 'mn',
+        isPartOf: { '@id': site.origin + '/#website' },
+        publisher: { '@id': site.origin + '/#clinic' },
+        breadcrumb: { '@id': url + '#breadcrumb' },
+        mainEntity: ctx.items.length ? { '@id': url + '#list' } : null,
+      }),
+      ...(ctx.items.length ? [{
+        '@type': 'ItemList',
+        '@id': url + '#list',
+        itemListElement: ctx.items.map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, url: site.origin + it.path })),
+      }] : []),
+      breadcrumbNode(site, url, ctx.crumbs),
+    ],
+  };
+}
