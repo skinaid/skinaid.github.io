@@ -5,3 +5,9 @@
 # Raw source logos kept locally; web versions live in assets/img/
 /skinaid-logo.jpg
 /profile logo new SA.jpg
+
+# Эрүүл мэндийн ноорог, судалгаа, дотоод баримт — repo нийтэд нээлттэй тул ХЭЗЭЭ Ч commit хийхгүй.
+# Эмч баталсан хуудас л content/pages/-д орно (tools/build.mjs --check шалгана).
+/content/drafts/
+/content/_work/
+/.preview/
