@@ -28,6 +28,8 @@ function setup(form) {
   const NOTE_MAX = 300;
   const WD_SHORT = ['Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя', 'Ня'];
   const WD_LONG = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
+  const NON_PROVIDER = new Set(['receptionist', 'manager']);
+  const ROLE_ORDER = ['doctor', 'cosmetologist', 'massage', 'nurse'];
 
   let apiBase = API_BASE;
   let apiKey = String(PUBLISHABLE_KEY || '').trim();
@@ -203,8 +205,14 @@ function setup(form) {
     S.channel = (c && c.channel) || {};
     S.services = (Array.isArray(sv && sv.services) ? sv.services : []).filter((s) =>
       s && typeof s.id === 'string' && typeof s.name === 'string' && Number.isFinite(s.price) && Number.isFinite(s.duration_min));
-    S.doctors = (Array.isArray(dc && dc.doctors) ? dc.doctors : []).filter((d) => d && typeof d.id === 'string');
-    S.doctorRequired = Boolean(dc && dc.doctor_required) || S.doctors.length > 0;
+    // Захиалга авдаг ажилтан. Ресепшн, менежерийг сайтын сонголтоос хасна (API үйлчилгээ↔ажилтны холбоос өгдөггүй).
+    // «Аль нь ч болно» үед эмч → гоо засалч → массаж → сувилагч дарааллаар (дотроо sort_order) оноогдоно.
+    const all = (Array.isArray(dc && dc.doctors) ? dc.doctors : []).filter((d) => d && typeof d.id === 'string');
+    const rank = (d) => { const i = ROLE_ORDER.indexOf(d.staff_role); return i < 0 ? ROLE_ORDER.length : i; };
+    const providers = all.map((d, i) => ({ ...d, order: i })).filter((d) => !NON_PROVIDER.has(d.staff_role))
+      .sort((a, b) => rank(a) - rank(b) || a.order - b.order);
+    S.doctors = providers.length ? providers : all;
+    S.doctorRequired = Boolean(dc && dc.doctor_required) || all.length > 0;
     if (!S.services.length) { fallback('paused'); return; }
 
     if (S.channel.new_booking_status === 'pending_confirmation' && el.intro) {
@@ -225,7 +233,7 @@ function setup(form) {
     const opt = (s) => `<option value="${esc(s.id)}">${esc(s.name)} · ${esc(priceText(s))} · ${esc(durText(s.duration_min))}</option>`;
     const groups = new Map();
     S.services.forEach((s) => {
-      const c = (typeof s.category === 'string' && s.category.trim()) || 'Бусад';
+      const c = (typeof s.category === 'string' && s.category.replace(/^\s*\d+[.)]\s*/, '').trim()) || 'Бусад';   // «01. Ангилал» → «Ангилал»
       if (!groups.has(c)) groups.set(c, []);
       groups.get(c).push(s);
     });
@@ -244,7 +252,7 @@ function setup(form) {
     const named = S.doctors.filter((d) => typeof d.name === 'string' && d.name.trim());
     if (named.length < S.doctors.length) return;   // нэр нуусан суваг: «аль ч эмч» автоматаар
     const chip = (value, title, sub, checked) => `<label class="ub__chip"><input type="radio" name="ub-doctor" value="${esc(value)}"${checked ? ' checked' : ''}><span>${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`;
-    el.docs.innerHTML = chip('any', 'Аль ч эмч', 'Хамгийн олон сул цаг', true)
+    el.docs.innerHTML = chip('any', 'Аль нь ч болно', 'Хамгийн олон сул цаг', true)
       + named.map((d) => chip(d.id, d.name.trim(), typeof d.title === 'string' ? d.title.trim() : '', false)).join('');
     el.docGroup.hidden = false;
   }
@@ -256,7 +264,7 @@ function setup(form) {
     const results = await Promise.allSettled(ids.map((id) => api(q(id))));
     const okCount = results.filter((r) => r.status === 'fulfilled').length;
     if (!okCount) throw results[0].reason;
-    // «Аль ч эмч»: эмч бүрийн сул цагийг нэгтгэнэ — нэг цагт хэд хэдэн эмч сул бол жагсаалтын (sort_order) эхнийх нь авна
+    // «Аль нь ч болно»: ажилтан бүрийн сул цагийг нэгтгэнэ — нэг цагт хэд хэдэн хүн сул бол S.doctors-ийн дарааллаар эхнийх нь авна
     const byDate = new Map();
     results.forEach((r, i) => {
       if (r.status !== 'fulfilled' || !Array.isArray(r.value.days)) return;

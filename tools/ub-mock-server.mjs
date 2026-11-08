@@ -21,15 +21,16 @@ const state = { mode: 'auto_confirm', paused: false, hideNames: false, delay: 30
 const HORIZON = 30, MIN_NOTICE = 60;
 
 const services = [
-  { id: '6f1c2a10-0000-4000-8000-000000000001', name: 'Арьсны үзлэг, оношлогоо', category: 'Үзлэг', duration_min: 30, price: 50000, price_max: null },
-  { id: '6f1c2a10-0000-4000-8000-000000000002', name: 'Батганы цогц эмчилгээ', category: 'Батга, сорви', duration_min: 60, price: 80000, price_max: 120000 },
-  { id: '6f1c2a10-0000-4000-8000-000000000003', name: 'Сорвины лазер эмчилгээ', category: 'Батга, сорви', duration_min: 45, price: 150000, price_max: null },
-  { id: '6f1c2a10-0000-4000-8000-000000000004', name: 'Rejuran Healer', category: 'Тарилга', duration_min: 60, price: 450000, price_max: null },
-  { id: '6f1c2a10-0000-4000-8000-000000000005', name: 'Ультраформер III (HIFU)', category: 'Арьс чангалах', duration_min: 90, price: 300000, price_max: 900000 },
+  { id: '6f1c2a10-0000-4000-8000-000000000001', name: 'Арьсны үзлэг, оношлогоо', category: '01. Үзлэг', duration_min: 30, price: 50000, price_max: null },
+  { id: '6f1c2a10-0000-4000-8000-000000000002', name: 'Батганы цогц эмчилгээ', category: '02. Батга, сорви', duration_min: 60, price: 80000, price_max: 120000 },
+  { id: '6f1c2a10-0000-4000-8000-000000000003', name: 'Сорвины лазер эмчилгээ', category: '02. Батга, сорви', duration_min: 45, price: 150000, price_max: null },
+  { id: '6f1c2a10-0000-4000-8000-000000000004', name: 'Rejuran Healer', category: '03. Тарилга', duration_min: 60, price: 450000, price_max: null },
+  { id: '6f1c2a10-0000-4000-8000-000000000005', name: 'Ультраформер III (HIFU)', category: '04. Арьс чангалах', duration_min: 90, price: 300000, price_max: 900000 },
 ];
 const doctors = [
+  { id: '7a2b3c40-0000-4000-8000-000000000004', name: 'М.Ресепшн', title: 'Зохион байгуулагч', role: 'receptionist', days: [0, 1, 2, 3, 4, 5], from: 9, to: 20 },
   { id: '7a2b3c40-0000-4000-8000-000000000001', name: 'Б.Сарнай', title: 'Арьсны эмч', days: [0, 1, 2, 3, 4], from: 10, to: 18 },
-  { id: '7a2b3c40-0000-4000-8000-000000000002', name: 'Д.Энхжин', title: 'Гоо заслын эмч', days: [1, 2, 3, 4, 5], from: 11, to: 19 },
+  { id: '7a2b3c40-0000-4000-8000-000000000002', name: 'Д.Энхжин', title: 'Гоо засалч', role: 'cosmetologist', days: [1, 2, 3, 4, 5], from: 11, to: 19 },
   { id: '7a2b3c40-0000-4000-8000-000000000003', name: 'Г.Тэмүүлэн', title: 'Арьсны эмч', days: [0, 2, 4], from: 14, to: 19 },
 ];
 const bookings = [];          // { id, doctor_id, start, end, status }
@@ -102,7 +103,7 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === 'GET' && path === '/services') return send(res, 200, { services }, origin);
   if (req.method === 'GET' && path === '/doctors') {
-    const list = doctors.map((d) => ({ id: d.id, name: state.hideNames ? null : d.name, title: state.hideNames ? null : d.title, photo_url: null, staff_role: 'doctor' }));
+    const list = doctors.map((d) => ({ id: d.id, name: state.hideNames ? null : d.name, title: state.hideNames ? null : d.title, photo_url: null, staff_role: d.role || 'doctor' }));
     return send(res, 200, { doctors: list, doctor_required: true }, origin);
   }
   if (req.method === 'GET' && path === '/availability') {
