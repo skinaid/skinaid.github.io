@@ -109,16 +109,6 @@
       "permanent": false
     },
     {
-      "source": "/zz-probe/тест",
-      "destination": "/?probe=raw",
-      "permanent": false
-    },
-    {
-      "source": "/zz-probe/%D1%82%D0%B5%D1%81%D1%82",
-      "destination": "/?probe=enc",
-      "permanent": false
-    },
-    {
       "source": "/service-page/:rest*",
       "destination": "/#treatments",
       "permanent": false

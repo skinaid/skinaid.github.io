@@ -134,8 +134,8 @@ metrics дээр Verified 100% ойролцоо. Token-гүй хүсэлт та�
 
 | Хостинг | Хаяг | Үүрэг |
 |---|---|---|
-| **Vercel** (төсөл `skinaid.github.io-y1vf`) | https://www.skinaid.mn (үндсэн), https://skinaidgithubio-y1vf.vercel.app | Бодит домэйн, `vercel.json` header/redirect |
-| GitHub Pages | https://skinaid.github.io | Нөөц хувилбар |
+| **Vercel** (төсөл `skinaid.github.io-y1vf`) | https://www.skinaid.mn (үндсэн) | Бодит домэйн, `vercel.json` header/redirect. `skinaidgithubio-y1vf.vercel.app` нь www руу 308 redirect хийнэ (давхардсан контентоос сэргийлж). |
+| GitHub Pages | https://skinaid.github.io | Repo-ийн `CNAME` файл (`www.skinaid.mn`)-ын ачаар github.io-ийн бүх зам www.skinaid.mn руу 301 redirect хийнэ. GitHub дээрх "DNS check unsuccessful" анхааруулгыг үл тоомсорлоно; `CNAME`-ийг бүү устга. Яаралтай үед `www` CNAME-ийг `skinaid.github.io` руу заавал нөөц болж ажиллана. |
 
 Repo: https://github.com/skinaid/skinaid.github.io
 
@@ -156,5 +156,14 @@ Datacom (manage.datacom.mn) DNS удирдлага дээр:
 Хуучин Wix бичлэгүүд (буцаах шаардлага гарвал): `@` A `185.230.63.107`, `@` A `23.236.62.147`, `www` CNAME `balancer.wixdns.net`, `www` CNAME `pointing.wixdns.net`, `www` CNAME `ghs.googlehosted.com`.
 
 Домэйн солигдсоны дараа Firebase Authentication → Authorized domains болон reCAPTCHA (App Check) түлхүүрийн домэйн жагсаалтад `www.skinaid.mn`, `skinaid.mn`, `skinaidgithubio-y1vf.vercel.app`-ийг нэмсэн байх ёстой; үгүй бол маягт болон admin нэвтрэлт тэр домэйн дээр ажиллахгүй.
+
+### Redirect, SEO-ийн дүрэм (`vercel.json`)
+
+- `trailingSlash: false` — хуудсууд ташуу зураасгүй хаягтай (`/privacy`, `/admin`). Canonical, sitemap, дотоод холбоос бүгд ташуугүй хэлбэрийг ашиглана.
+- `/index.html` → `/`, `/<хавтас>/index.html` → `/<хавтас>`, `/privacy-policy` → `/privacy`.
+- Хуучин Wix замууд: `/service-page/*` → `/#treatments`, `/post/*`, `/blog/*` → `/#blog`, `/product-page/*` → `/`, `/book-online*` → `/#contact`. Үйлчилгээ/нийтлэлийн тусдаа хуудсууд гармагц эдгээрийг тэр хуудсууд руу байнгын (308) redirect болгоно.
+- **Кирилл URL:** Vercel кирилл замыг зөвхөн percent-encoded хэлбэрээр таардаг (2026-11-08 туршсан: `/zz-probe/тест` raw эх 404, `%D1%82%D0%B5%D1%81%D1%82` эх 307). Тиймээс кирилл эхтэй redirect-ийг `encodeURI()` хэлбэрээр (том hex) бичнэ.
+- `/admin` болон доорх бүх файл: `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store`.
+- Шалгах: `curl -sIL -o /dev/null -w '%{num_redirects} %{http_code} %{url_effective}\n' https://www.skinaid.mn/privacy-policy` → `1 200 https://www.skinaid.mn/privacy`.
 
 Нэмэлт мэдээлэл: `robots.txt`, `sitemap.xml`, `404.html` repo-д бий; `admin/index.html` нь `meta robots noindex, nofollow`-той (robots.txt-д Disallow хийвэл Google тэр meta-г уншиж чадахгүй тул зориуд хориглоогүй); `.gitignore`-оор эх лого JPG, `.claude/` нийтлэгдэхгүй.
