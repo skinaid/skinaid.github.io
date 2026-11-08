@@ -10,12 +10,22 @@
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
   const BOOK = '#contact';
+  const PAGE_RE = /^\/emchilgee\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-  /** Нэг үйлчилгээний мөр. t = { id, c, n, d, t, p }, cats = { key: 'Нэр' } */
-  function row(t, cats) {
+  /**
+   * Нэг үйлчилгээний мөр. t = { id, c, n, d, t, p }, cats = { key: 'Нэр' }.
+   * opts.pages = { '<id>': '/emchilgee/<slug>' } — нийтлэгдсэн эмчилгээний хуудастай мөр тэр хуудас руу
+   * «Дэлгэрэнгүй →» гэж очно (build: tools/build.mjs, хөтөч: window.SKINAID_PAGES.byId). Үгүй бол захиалга руу.
+   * opts.book — захиалгын холбоос (анхдагч '#contact'; дэд хуудсанд '/#contact').
+   */
+  function row(t, cats, opts) {
+    opts = opts || {};
+    const own = opts.pages && t.id && Object.prototype.hasOwnProperty.call(opts.pages, t.id) ? opts.pages[t.id] : null;
+    const page = typeof own === 'string' && PAGE_RE.test(own) ? own : null;
     const id = t.id ? ' id="t-' + esc(t.id) + '"' : '';
-    const meta = (t.t ? '<span>⏱ ' + esc(t.t) + '</span>' : '') + (t.p ? '<span>' + esc(t.p) + '</span>' : '') + '<span>Цаг захиалах →</span>';
-    return '<a class="row" href="' + BOOK + '" data-c="' + esc(t.c) + '"' + id + '>' +
+    const meta = (t.t ? '<span>⏱ ' + esc(t.t) + '</span>' : '') + (t.p ? '<span>' + esc(t.p) + '</span>' : '') +
+      '<span>' + (page ? 'Дэлгэрэнгүй →' : 'Цаг захиалах →') + '</span>';
+    return '<a class="row" href="' + esc(page || opts.book || BOOK) + '" data-c="' + esc(t.c) + '"' + id + '>' +
       '<span class="row__dot" aria-hidden="true"></span>' +
       '<span>' +
         '<span class="row__cat">' + esc((cats && cats[t.c]) || '') + '</span>' +

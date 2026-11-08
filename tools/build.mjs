@@ -46,6 +46,8 @@ const pages = [...corePages];
 /** Нийтлэгдсэн эмчилгээний хуудасны URL (slug → '/emchilgee/<slug>' эсвэл null) */
 const pageUrl = () => null;
 const hubLive = false;
+/** Нүүрний JS-д: үйлчилгээний id → хуудас, slug → захиалгын маягтын сонголт */
+const pagesIndex = { byId: {}, opt: {} };
 const R = loadBrowserScript('assets/js/catalog-render.js', 'SKINAID_RENDER');
 
 /** git-д бүртгэлтэй файлууд (яг бичлэгээр). Vercel case-sensitive — локал macOS биш. */
@@ -86,7 +88,8 @@ const ldJson = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c');
   const graph = homeGraph(site, catalog, { path: home.path, title: meta.title, description: meta.description }, asset);
   html = region(html, 'jsonld', `<script type="application/ld+json">\n${ldJson(graph)}\n</script>`, 'index.html');
   html = region(html, 'treat-chips', R.chips(catalog.cats).join('\n'), 'index.html');
-  html = region(html, 'treat-list', catalog.treatments.map((t) => R.row(t, catalog.cats)).join('\n'), 'index.html');
+  html = region(html, 'treat-list', catalog.treatments.map((t) => R.row(t, catalog.cats, { pages: pagesIndex.byId })).join('\n'), 'index.html');
+  html = region(html, 'pages-index', `<script>window.SKINAID_PAGES=${ldJson(pagesIndex)};</script>`, 'index.html', { pad: '' });
   const homeCtx = { home: true, site, pageUrl, hubLive };
   html = region(html, 'site-header', siteHeader(homeCtx), 'index.html', { pad: '' });
   html = region(html, 'site-footer', siteFooter(homeCtx), 'index.html', { pad: '' });

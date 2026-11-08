@@ -15,10 +15,11 @@
 
   /* ---------- Header: scrolled state + active link ---------- */
   const header = $('.header');
+  const solidHeader = !!(header && header.hasAttribute('data-solid'));   // дэд хуудас: үргэлж цагаан дэвсгэртэй
   const totop = $('.totop');
   const onScroll = () => {
     const y = window.scrollY || document.documentElement.scrollTop;
-    header.classList.toggle('is-scrolled', y > 24);
+    if (header) header.classList.toggle('is-scrolled', solidHeader || y > 24);
     if (totop) totop.classList.toggle('is-visible', y > 600);
   };
   window.addEventListener('scroll', onScroll, { passive: true });
@@ -142,6 +143,9 @@
   const DEFAULTS = window.SKINAID_DEFAULTS || { cats: {}, treatments: [], packages: [] };
   const CATS = DEFAULTS.cats || {};
   const RENDER = window.SKINAID_RENDER;
+  // Нийтлэгдсэн эмчилгээний хуудсууд (build: index.html-ийн <!-- build:pages-index -->)
+  const PAGES = (window.SKINAID_PAGES && window.SKINAID_PAGES.byId) || {};
+  const ROW_OPTS = { pages: PAGES };
   let TREATMENTS = (DEFAULTS.treatments || []).slice();
   let renderTreatments = () => {};
 
@@ -153,7 +157,7 @@
     let expanded = false;
     const LIMIT = 12;
 
-    const draw = () => { listEl.innerHTML = TREATMENTS.map(t => RENDER.row(t, CATS)).join(''); };
+    const draw = () => { listEl.innerHTML = TREATMENTS.map(t => RENDER.row(t, CATS, ROW_OPTS)).join(''); };
     const apply = () => {
       let matched = 0, shown = 0;
       $$('.row', listEl).forEach(row => {
@@ -202,6 +206,7 @@
   $$('.svc[data-cat]').forEach(card => {
     card.addEventListener('click', (e) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;   // шинэ таб г.м.
+      if ((card.getAttribute('href') || '').charAt(0) !== '#') return;   // эмчилгээний хуудас руу холбогдсон карт
       const chip = chipsEl && !chipsEl.hidden && $(`[data-cat="${card.dataset.cat}"]`, chipsEl);
       if (!chip) return;
       e.preventDefault();
@@ -214,6 +219,7 @@
   /* ---------- FAQ accordion ---------- */
   $$('.faq__item').forEach(item => {
     const q = $('.faq__q', item);
+    if (!q) return;
     q.addEventListener('click', () => {
       const open = item.classList.contains('is-open');
       $$('.faq__item.is-open').forEach(i => { i.classList.remove('is-open'); $('.faq__q', i).setAttribute('aria-expanded', 'false'); });
@@ -270,9 +276,9 @@
       // Дэлгэц дээрх мөрүүдтэй (build-ийн статик HTML) яг ижил бол дахин зурахгүй — фокус, анимейшн хэвээр.
       // Харьцуулалт DOM-оос: build хуучирсан (catalog-defaults.js засаад build мартсан) үед ч Firestore засна.
       if (RENDER && listEl) {
-        const rowSig = (root) => JSON.stringify($$('.row', root).map(r => [r.id, r.dataset.c, r.textContent]));
+        const rowSig = (root) => JSON.stringify($$('.row', root).map(r => [r.id, r.dataset.c, r.getAttribute('href'), r.textContent]));
         const tpl = document.createElement('template');
-        tpl.innerHTML = list.map(t => RENDER.row(t, CATS)).join('');
+        tpl.innerHTML = list.map(t => RENDER.row(t, CATS, ROW_OPTS)).join('');
         if (rowSig(tpl.content) !== rowSig(listEl)) renderTreatments();
       }
     }
@@ -309,6 +315,15 @@
     const nameEl = $('#f-name', form), phoneEl = $('#f-phone', form);
     let submitLabel = submitBtn ? submitBtn.textContent : '';
     let busy = false;
+
+    // Эмчилгээний хуудасны «Цаг захиалах» → /?svc=<slug>#contact: үйлчилгээг урьдчилан сонгож, URL-ийг цэвэрлэнэ
+    const svcParam = new URLSearchParams(location.search).get('svc');
+    if (svcParam) {
+      const want = (window.SKINAID_PAGES && window.SKINAID_PAGES.opt && window.SKINAID_PAGES.opt[svcParam]) || '';
+      const sel = $('#f-service', form);
+      if (want && sel && Array.from(sel.options).some(o => o.text === want)) sel.value = want;
+      try { history.replaceState(null, '', location.pathname + location.hash); } catch (_) { /* file:// г.м. */ }
+    }
 
     const setBusy = (on) => {
       busy = on;
