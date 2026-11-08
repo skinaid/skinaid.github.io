@@ -1,10 +1,12 @@
-.claude
-firestore.rules
-firestore.indexes.json
-firebase.json
-README.md
-CNAME
-tools
-content
-skinaid-logo.jpg
-profile logo new SA.jpg
+# Зөвхөн repo-ийн root дахь зам ("/" — gitignore хэлбэр). tools/build.mjs asset-ийг үүнтэй тулгана.
+/.claude
+/firestore.rules
+/firestore.indexes.json
+/firebase.json
+/README.md
+/CNAME
+/tools
+/content
+/skinaid-logo.jpg
+/profile logo new SA.jpg
+/.githooks

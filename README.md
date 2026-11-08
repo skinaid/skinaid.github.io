@@ -1,7 +1,8 @@
 # SkinAid.mn — вэб сайт
 
 Арьсны өвчин, гоо заслын SkinAid эмнэлгийн орчин үеийн нэг хуудаст (single-page) вэб сайт.
-Цэвэр HTML + CSS + JavaScript — ямар ч framework, build алхам шаардлагагүй.
+Цэвэр HTML + CSS + JavaScript, framework-гүй. Vercel дээр build алхам байхгүй: `node tools/build.mjs`-ийг локал дээр
+ажиллуулж гарсан файлуудыг commit хийнэ (доорх «Build» хэсэг).
 Backend: **Firebase (Spark үнэгүй багц)** — захиалга Firestore-д хадгалагдаж, `/admin/` удирдлагын хэсгээр Google-ээр нэвтэрч удирдана.
 
 ## Файлын бүтэц
@@ -40,11 +41,20 @@ node tools/build.mjs          # шинэчилнэ
 node tools/build.mjs --check  # юу ч бичихгүй; хуучирсан эсвэл SEO алдаатай бол exit 1
 ```
 
+Шинэ компьютер/clone дээр нэг удаа: `git config core.hooksPath .githooks` — ингэснээр `git push` бүрийн өмнө
+`.githooks/pre-push` нь `--check`-ийг ажиллуулж, хуучирсан build-ийг push хийлгэхгүй (`/assets` нэг жилийн cache-тэй тул
+build мартвал хэрэглэгчид хуучин JS/CSS-ээ жилээр ашиглана).
+
 Build юу хийдэг вэ:
 - `index.html` дахь `<!-- build:jsonld -->`, `<!-- build:treat-chips -->`, `<!-- build:treat-list -->` хэсгүүдийг дүүргэнэ (бүх 50 үйлчилгээ статик HTML — Google JS-гүйгээр харна). **Эдгээр хэсгийг гараар бүү засаарай.**
 - `/assets/...` холбоос бүр болон JS module-ийн import-д агуулгын hash (`?v=8тэмдэгт`) тавина → `vercel.json` дахь `/assets/*` нэг жилийн `immutable` cache аюулгүй. `?v=`-г гараар өөрчлөх шаардлагагүй.
 - `sitemap.xml`-ийг `content/site.mjs`-ийн хуудсын жагсаалтаас, `lastmod`-ийг агуулга өөрчлөгдсөн огноогоор бичнэ.
-- Шалгалт: title/description урт ба давхардал, canonical, h1 = 1, JSON-LD зөв, дотоод холбоос файлтай/redirect руу заагаагүй/ташуугүй, asset бүр хувилбартай, sitemap = хуудсын жагсаалт.
+- Шалгалт: title/description урт ба давхардал, canonical, h1 = 1, JSON-LD зөв (дотроо `<`-гүй), build тэмдэглэгээ нэг удаа,
+  дотоод холбоос (href/src/srcset) git-д яг ийм бичлэгээр байгаа файлтай/redirect руу заагаагүй/ташуугүй, asset бүр
+  (og:image, JSON-LD зураг ч) хувилбартай, багцын картын үнэ = `catalog-defaults.js`, sitemap = хуудсын жагсаалт.
+- Шинэ зураг/файл нэмбэл эхлээд `git add` хийнэ (build нь git-д бүртгэлгүй эсвэл том/жижиг үсэг зөрүүтэй asset-д алдаа өгнө —
+  Vercel үсгийн хэмжээ ялгадаг). Root `index.html`-ээс бусад HTML-д зөвхөн `/`-ээр эхэлсэн зам бичнэ (`/privacy` гэх мэт
+  ташуугүй URL дээр харьцангуй зам буруу задарна).
 
 Тэмдэглэл: Нүүр хуудас дээр Firestore-ийн `settings/catalog` (admin → Үйлчилгээ / Багц) статик жагсаалтыг хэрэглэгчийн хөтөч дээр дахин зурна. Google статик (catalog-defaults.js) хувилбарыг харна — тиймээс тайлбар засахдаа хоёуланд нь засна (admin-ыг Google-д автоматаар хүргэх синк нь SEO төлөвлөгөөний 7-р үе шат).
 
@@ -122,7 +132,8 @@ Firestore хүсэлт бүрд хавсаргана. Token-гүй хүсэлт 
 **Түлхүүр солих / домэйн нэмэх.** skinaid.mn домэйн холбоход reCAPTCHA admin → SkinAid Web → Settings → Domains-д `skinaid.mn`,
 `www.skinaid.mn` нэмнэ (Firebase Authentication → Authorized domains-д мөн). Түлхүүрийг бүхэлд нь солих бол: reCAPTCHA admin-д
 шинэ score-based түлхүүр (төсөл skinaid-mn) үүсгэж → Firebase console → App Check → Apps → SkinAid Web → ⋮ → Edit → шинэ
-сайтын түлхүүр → `firebase-config.js` → `RECAPTCHA_SITE_KEY` солиод `index.html`/`admin/index.html` дахь `?v=` дугаарыг өөрчилж push.
+сайтын түлхүүр → `firebase-config.js` → `RECAPTCHA_SITE_KEY` солиод `node tools/build.mjs` ажиллуулна (firebase-config.js →
+app-check.js → backend.js/admin.js → HTML бүгд шинэ hash авна; `?v=`-г гараар бүү өөрчил), `--check`-ээр шалгаад push.
 Хуучин түлхүүрийг хэрэглэгчдийн token (TTL 1 цаг) дуусахыг хүлээгээд устгана.
 
 **Шалгах.** Сайтаас захиалга илгээхэд «Хүсэлт тань бүртгэгдлээ» гарч admin-д орж ирнэ; App Check → APIs → Cloud Firestore

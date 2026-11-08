@@ -55,6 +55,11 @@
     window.addEventListener('resize', () => { if (window.innerWidth > 960) close(); });
   }
 
+  // Шүүлтийн chip-үүд HTML-д `hidden` (JS-гүй үед ажиллахгүй товч харуулахгүй). Reveal хэмжихээс өмнө гаргана,
+  // эс тэгвээс нуугдсан элемент «дэлгэц дээр» гэж тооцогдоод анимейшнгүй гарна.
+  const chipsEarly = $('#treatChips');
+  if (chipsEarly && window.SKINAID_RENDER && $('#treatList')) chipsEarly.hidden = false;
+
   /* ---------- Reveal on scroll ---------- */
   // Агуулга анхдагчаар харагдана. Зөвхөн дэлгэцээс доор байгааг түр нууж (.is-pending), харагдах үед гаргана.
   const reveals = reduceMotion ? [] : $$('.reveal');
@@ -162,7 +167,7 @@
       if (!shown && !empty) listEl.insertAdjacentHTML('beforeend', '<p class="list-empty">Энэ ангилалд үйлчилгээ олдсонгүй.</p>');
       if (shown && empty) empty.parentNode.removeChild(empty);
       const st = $('#treatStatus'); if (st) st.textContent = shown + ' үйлчилгээ харуулж байна';
-      if (moreBtn) moreBtn.style.display = (active === 'all' && !expanded && matched > LIMIT) ? '' : 'none';
+      if (moreBtn) moreBtn.hidden = !(active === 'all' && !expanded && matched > LIMIT);
     };
 
     if (!listEl.hasAttribute('data-ssr') || !$('.row', listEl)) draw();
@@ -178,17 +183,30 @@
       const first = $$('.row', listEl).filter(r => !r.hidden)[LIMIT];
       if (first) first.focus();
     });
+    // Chip, «Бүгдийг харах» нь HTML-д `hidden` — JS ажиллахгүй үед ажиллахгүй товч харагдахгүй (бүх 50 мөр харагдана)
+    chipsEl.hidden = false;
     apply();
-    renderTreatments = () => { draw(); apply(); };
+    // Firestore-оос өөр жагсаалт ирвэл дахин зурна; гар (keyboard) фокус мөр дээр байсан бол хадгална
+    renderTreatments = () => {
+      const a = document.activeElement;
+      const focusId = a && a !== listEl && listEl.contains(a) ? a.id : '';
+      draw(); apply();
+      if (!focusId) return;
+      const same = document.getElementById(focusId);
+      const target = (same && !same.hidden) ? same : ($$('.row', listEl).find(r => !r.hidden) || $('.chip.is-active', chipsEl));
+      if (target) target.focus({ preventScroll: true });
+    };
   }
 
   /* Service cards -> preselect matching filter chip */
   $$('.svc[data-cat]').forEach(card => {
     card.addEventListener('click', (e) => {
-      const chip = chipsEl && $(`[data-cat="${card.dataset.cat}"]`, chipsEl);
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;   // шинэ таб г.м.
+      const chip = chipsEl && !chipsEl.hidden && $(`[data-cat="${card.dataset.cat}"]`, chipsEl);
       if (!chip) return;
       e.preventDefault();
       chip.click();
+      chip.focus({ preventScroll: true });   // гарын хэрэглэгч шүүсэн жагсаалтаас үргэлжлүүлнэ
       chipsEl.scrollIntoView({ behavior: smooth, block: 'start' });
     });
   });
@@ -248,7 +266,15 @@
           n: sv.n.trim(), d: typeof sv.d === 'string' ? sv.d : '',
           t: typeof sv.t === 'string' ? sv.t : '', p: typeof sv.p === 'string' ? sv.p : '',
         }));
-      TREATMENTS = list; renderTreatments();
+      TREATMENTS = list;
+      // Дэлгэц дээрх мөрүүдтэй (build-ийн статик HTML) яг ижил бол дахин зурахгүй — фокус, анимейшн хэвээр.
+      // Харьцуулалт DOM-оос: build хуучирсан (catalog-defaults.js засаад build мартсан) үед ч Firestore засна.
+      if (RENDER && listEl) {
+        const rowSig = (root) => JSON.stringify($$('.row', root).map(r => [r.id, r.dataset.c, r.textContent]));
+        const tpl = document.createElement('template');
+        tpl.innerHTML = list.map(t => RENDER.row(t, CATS)).join('');
+        if (rowSig(tpl.content) !== rowSig(listEl)) renderTreatments();
+      }
     }
     if (Array.isArray(cat.packages)) {
       cat.packages.forEach(pk => {

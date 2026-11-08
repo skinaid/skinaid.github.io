@@ -1,0 +1,47 @@
+#!/bin/sh
+# SkinAid: push хийгдэж буй commit бүр дээр `node tools/build.mjs --check` ажиллуулна.
+# /assets/*?v=… нь нэг жилийн immutable cache-тэй — build мартсан (эсвэл хагас commit хийсэн) бол
+# хэрэглэгчид хуучин JS/CSS-ийг жилээр ашиглана.
+#
+# Ажлын хавтсыг биш, яг push хийгдэх commit-ийг шалгана: commit бүрийг түр `git worktree`-д гаргаж
+# тэнд шалгаад устгана (commit хийгдээгүй өөрчлөлт, өөр branch push хийх үед ч зөв).
+#
+# Идэвхжүүлэх (clone бүрт нэг удаа): git config core.hooksPath .githooks
+# Яаралтай үед алгасах: git push --no-verify (зөвлөхгүй)
+
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+top=$(git rev-parse --show-toplevel) || exit 1
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node олдсонгүй — tools/build.mjs --check ажиллуулж чадсангүй." >&2
+  exit 1
+fi
+
+status=0
+checked=" "
+# git stdin-ээр мөр бүрт: <local ref> <local sha> <remote ref> <remote sha>
+while read -r lref lsha rref rsha; do
+  [ -n "$lsha" ] || continue
+  case "$lsha" in *[!0]*) ;; *) continue ;; esac          # branch устгах push — шалгах commit алга
+  case "$checked" in *" $lsha "*) continue ;; esac        # нэг commit-ийг нэг л удаа
+  checked="$checked$lsha "
+
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/skinaid-prepush.XXXXXX") || exit 1
+  if ! git -C "$top" worktree add --quiet --detach "$tmp" "$lsha" >/dev/null 2>&1; then
+    echo "pre-push: $lref ($lsha)-г түр worktree-д гаргаж чадсангүй." >&2
+    rmdir "$tmp" 2>/dev/null
+    status=1
+    continue
+  fi
+  if [ -f "$tmp/tools/build.mjs" ]; then
+    echo "pre-push: $lref ($(git -C "$top" rev-parse --short "$lsha")) шалгаж байна…" >&2
+    if ! (cd "$tmp" && node tools/build.mjs --check); then
+      echo "pre-push: $lref — build хуучирсан эсвэл SEO шалгалт унав. node tools/build.mjs ажиллуулж," >&2
+      echo "          бүх өөрчлөгдсөн файлыг (git add -A) commit хийгээд дахин push хийнэ үү." >&2
+      status=1
+    fi
+  fi
+  git -C "$top" worktree remove --force "$tmp" >/dev/null 2>&1 || git -C "$top" worktree prune
+done
+
+exit $status

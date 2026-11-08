@@ -533,6 +533,8 @@ article.post:hover .post__media img { transform: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes marquee { to { transform: translateX(-50%); } }
 
+/* Хэвлэх/PDF: гүйлгэж хүрээгүй хэсэг хоосон гарахгүй */
+@media print { .reveal.is-pending { opacity: 1 !important; transform: none !important; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   html { scroll-behavior: auto; }

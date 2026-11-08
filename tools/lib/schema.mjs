@@ -27,6 +27,16 @@ export function parsePrice(p) {
   return m[2] ? { minPrice: n } : { price: n };
 }
 
+/** Үнийн хүрээ: catalog-ийн үйлчилгээ + багцын үнээс (гараар бичсэн мөр зөрөхгүй). "₮50,000 – ₮830,000" */
+export function priceRange(catalog) {
+  const ns = [...(catalog.treatments || []).map((t) => t.p), ...(catalog.packages || []).map((p) => p.price)]
+    .map(parsePrice).filter(Boolean).map((x) => x.price || x.minPrice);
+  if (!ns.length) return null;
+  const fmt = (n) => '₮' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const lo = Math.min(...ns), hi = Math.max(...ns);
+  return lo === hi ? fmt(lo) : `${fmt(lo)} – ${fmt(hi)}`;
+}
+
 function offer(t) {
   const pr = parsePrice(t.p);
   const o = { '@type': 'Offer', itemOffered: { '@type': 'Service', name: t.n, description: t.d } };
@@ -35,7 +45,8 @@ function offer(t) {
   return o;
 }
 
-export function clinicNode(site, catalog) {
+/** @param asset (path) => хувилбартай зам ('/assets/img/logo.png' → '/assets/img/logo.png?v=…'); build.mjs өгнө */
+export function clinicNode(site, catalog, asset = (p) => p) {
   const id = site.origin + '/#clinic';
   const byCat = Object.entries(catalog.cats).map(([key, label]) => ({
     '@type': 'OfferCatalog',
@@ -50,8 +61,8 @@ export function clinicNode(site, catalog) {
     legalName: site.legalName,
     description: site.description,
     url: site.origin + '/',
-    logo: abs(site, site.logo),
-    image: site.images.map((i) => abs(site, i)),
+    logo: abs(site, asset(site.logo)),
+    image: site.images.map((i) => abs(site, asset(i))),
     telephone: site.telephone,
     email: site.email,
     foundingDate: site.foundingDate,
@@ -63,7 +74,7 @@ export function clinicNode(site, catalog) {
     openingHoursSpecification: site.openingHours
       ? site.openingHours.map((h) => ({ '@type': 'OpeningHoursSpecification', dayOfWeek: h.days, opens: h.opens, closes: h.closes }))
       : null,
-    priceRange: site.priceRange,
+    priceRange: priceRange(catalog),
     currenciesAccepted: site.currenciesAccepted,
     paymentAccepted: site.paymentAccepted,
     areaServed: { '@type': 'City', name: site.areaServed },
@@ -99,6 +110,6 @@ export function webPageNode(site, page) {
 }
 
 /** Нүүр хуудасны @graph */
-export function homeGraph(site, catalog, page) {
-  return { '@context': 'https://schema.org', '@graph': [websiteNode(site), clinicNode(site, catalog), webPageNode(site, page)] };
+export function homeGraph(site, catalog, page, asset) {
+  return { '@context': 'https://schema.org', '@graph': [websiteNode(site), clinicNode(site, catalog, asset), webPageNode(site, page)] };
 }

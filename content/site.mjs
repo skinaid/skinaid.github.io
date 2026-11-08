@@ -27,7 +27,7 @@ export const site = {
   // Эзэмшигч бодит цагийг баталгаажуулсны дараа бөглөнө. Жишээ:
   // [{ days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], opens: '10:00', closes: '19:00' }]
   openingHours: null,
-  priceRange: '₮50,000 – ₮830,000',
+  // priceRange: catalog-defaults.js-ийн үйлчилгээ + багцын үнээс tools/lib/schema.mjs priceRange() тооцно
   currenciesAccepted: 'MNT',
   paymentAccepted: 'Storepay, Pocket',
   areaServed: 'Улаанбаатар',

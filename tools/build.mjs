@@ -3,6 +3,7 @@
 //
 //   node tools/build.mjs           # HTML-ийн build хэсгүүд, asset хувилбар, sitemap-ийг шинэчилнэ
 //   node tools/build.mjs --check   # юу ч бичихгүй: файл хуучирсан эсвэл SEO шалгалт унавал exit 1
+//                                  # (.githooks/pre-push push бүрийн өмнө ажиллуулна)
 //
 // Гараар бичсэн HTML-д зөвхөн <!-- build:NAME --> … <!-- /build:NAME --> хооронд бичнэ.
 // Тэр хэсгүүдийг гараар бүү засаарай — дараагийн build дарна. Эх өгөгдөл:
@@ -11,14 +12,18 @@
 //   content/site.mjs                (эмнэлгийн NAP, JSON-LD-ийн баримт, хуудсын жагсаалт)
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { site, pages, otherHtml } from '../content/site.mjs';
 import { homeGraph } from './lib/schema.mjs';
-import { AssetStamper } from './lib/assets.mjs';
+import { AssetStamper, BuildError, vercelIgnore } from './lib/assets.mjs';
 import { checkSite, pageMeta } from './lib/check.mjs';
+
+// Зориуд шидсэн алдаа (BuildError) → нэг мөр; бусад (catalog-defaults.js-ийн SyntaxError г.м.) → file:line-тэй stack
+process.on('uncaughtException', (e) => { console.error(e instanceof BuildError ? `✗ ${e.message}` : e); process.exit(1); });
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK = process.argv.includes('--check');
@@ -30,35 +35,54 @@ function loadBrowserScript(rel, key) {
   const sandbox = { window: {}, globalThis: {} };
   sandbox.globalThis = sandbox.window;
   vm.runInNewContext(readFileSync(join(ROOT, rel), 'utf8'), sandbox, { filename: rel });
-  if (!sandbox.window[key]) throw new Error(`${rel}: window.${key} олдсонгүй`);
+  if (!sandbox.window[key]) throw new BuildError(`${rel}: window.${key} олдсонгүй`);
   return sandbox.window[key];
 }
 const catalog = loadBrowserScript('assets/js/catalog-defaults.js', 'SKINAID_DEFAULTS');
 const R = loadBrowserScript('assets/js/catalog-render.js', 'SKINAID_RENDER');
 
+/** git-д бүртгэлтэй файлууд (яг бичлэгээр). Vercel case-sensitive — локал macOS биш. */
+function gitTracked() {
+  try {
+    return new Set(execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean));
+  } catch {
+    console.warn('⚠ git ls-files ажиллаагүй — asset git-д бүртгэлтэй эсэхийг шалгахгүй.');
+    return null;
+  }
+}
+const tracked = gitTracked();
+const stamper = new AssetStamper(ROOT, files, { origin: site.origin, tracked, ignored: vercelIgnore(ROOT) });
+
 /* ---------- 2. build хэсгүүдийг солих ---------- */
 function region(html, name, content, file) {
+  const open = `<!-- build:${name} -->`, close = `<!-- /build:${name} -->`;
+  if (html.split(open).length !== 2 || html.split(close).length !== 2) {
+    throw new BuildError(`${file}: ${open} … ${close} тэмдэглэгээ яг нэг удаа байх ёстой`);
+  }
   const re = new RegExp(`(<!-- build:${name} -->)([\\s\\S]*?)(\\n?([ \\t]*)<!-- /build:${name} -->)`);
   const m = html.match(re);
-  if (!m) throw new Error(`${file}: <!-- build:${name} --> тэмдэглэгээ олдсонгүй`);
+  if (!m) throw new BuildError(`${file}: ${open} тэмдэглэгээ олдсонгүй`);
   const indent = m[4] || '';
   const body = content.split('\n').map((l) => (l ? indent + '  ' + l : l)).join('\n');
-  return html.replace(re, `$1\n${body}\n${indent}<!-- /build:${name} -->`);
+  // Replacer функц: агуулга дахь `$&`, `$1`, `$$` зэргийг String.replace тайлахгүй, яг байгаагаар нь оруулна
+  return html.replace(re, (_, o) => `${o}\n${body}\n${indent}${close}`);
 }
+/** JSON-LD-г <script> дотор аюулгүй: `<` → \u003c (`</script`, `<!--` тэмдэглэгээг эвдэхгүй) */
+const ldJson = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c');
 
 {
   let html = read('index.html');
   const meta = pageMeta(html);
   const home = pages.find((p) => p.jsonld === 'home');
-  const graph = homeGraph(site, catalog, { path: home.path, title: meta.title, description: meta.description });
-  html = region(html, 'jsonld', `<script type="application/ld+json">\n${JSON.stringify(graph)}\n</script>`, 'index.html');
+  const asset = (p) => stamper.withVersion('.', p);   // JSON-LD-ийн logo/image → ?v=hash (immutable cache)
+  const graph = homeGraph(site, catalog, { path: home.path, title: meta.title, description: meta.description }, asset);
+  html = region(html, 'jsonld', `<script type="application/ld+json">\n${ldJson(graph)}\n</script>`, 'index.html');
   html = region(html, 'treat-chips', R.chips(catalog.cats).join('\n'), 'index.html');
   html = region(html, 'treat-list', catalog.treatments.map((t) => R.row(t, catalog.cats)).join('\n'), 'index.html');
   files.set('index.html', html);
 }
 
 /* ---------- 3. Asset хувилбар (JS module-ууд доороос дээш) ---------- */
-const stamper = new AssetStamper(ROOT, files);
 for (const rel of [...pages.map((p) => p.file), ...otherHtml]) {
   files.set(rel, stamper.stampHtml(rel, read(rel)));
 }
@@ -94,7 +118,8 @@ for (const [rel, text] of files) {
   if (!CHECK) writeFileSync(abs, text);
 }
 
-const errors = checkSite({ root: ROOT, site, pages, otherHtml, files });
+const { errors, warnings } = checkSite({ root: ROOT, site, pages, otherHtml, files, catalog, tracked, strict: CHECK });
+if (warnings.length) console.warn(`⚠ ${warnings.length} анхааруулга:\n  - ` + warnings.join('\n  - '));
 if (CHECK && changed.length) errors.unshift(`Build хуучирсан — дараах файлууд шинэчлэгдэх ёстой: ${changed.join(', ')} (node tools/build.mjs ажиллуулна уу)`);
 
 if (errors.length) {
