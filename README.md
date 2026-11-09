@@ -79,7 +79,8 @@ Build юу хийдэг вэ:
 1. Ноорог: `content/drafts/<slug>.mjs` (бүтэц: `tools/lib/content.mjs`; жишээ: `tools/test/content.test.mjs`). Эмчээр батлуулах
    зүйлийг текстэд `[[эмч: асуулт]]` гэж тэмдэглэнэ. Үнэ бичихгүй — `catalog-defaults.js`-ээс автоматаар орно.
 2. `node tools/build.mjs --preview && node tools/preview.mjs` → http://127.0.0.1:8766/emchilgee/<slug> («НООРОГ» тууз, асуудлын жагсаалт).
-3. Эмчид Google Doc-оор хянуулна (шалгах хүснэгт + бүтэн текст). Засварыг ноорогт оруулаад preview-ийн туузан дээрх
+3. Эмчид Google Doc-оор хянуулна: `node tools/review-doc.mjs <slug>` нь `content/_work/<slug>/review-doc.html`-ийг (шалгах хүснэгт,
+   эсрэг заалт, асуулт, бүтэн текст, зөвшөөрлийн хэсэг) `content/_work/<slug>/claims.json`-оос үүсгэнэ — Google Drive-д Doc болгон оруулна. Засварыг ноорогт оруулаад preview-ийн туузан дээрх
    «Хувилбар» (hash)-ийг эмчээр «Зөвшөөрөв» гэж батлуулна.
 4. `content/doctors.mjs`-д эмчийн цол, `consent: { date, scope: ['reviewer'] }`-ийг бичнэ (бичгээр авсан зөвшөөрөл Drive-д).
 5. Ноорогийг `content/pages/<slug>.mjs` руу зөөж `status: 'published'`, `lastReviewed`, `review: { hash }` бөглөнө.

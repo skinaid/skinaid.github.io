@@ -7,11 +7,11 @@
 // Нийтлэгдсэн эсэхийг build өөрөө тогтооно (content/pages/<slug>.mjs шалгалтад тэнцсэн бол).
 
 export const pipeline = [
-  { slug: 'batganii-sorvi', week: 1, stage: 'drafting', reviewer: 'onorsaikhan', category: 'scar', h1: 'Батганы сорви арилгах эмчилгээ',
+  { slug: 'batganii-sorvi', week: 1, stage: 'review', reviewer: 'onorsaikhan', category: 'scar', h1: 'Батганы сорви арилгах эмчилгээ',
     primary: 'батганы сорви арилгах', secondary: ['батганы сорви', 'сорвины төрөл', 'сорви өөрөө арилдаг уу', 'сорви салгах', 'келоид сорви'],
     catalogIds: ['scar-4', 'scar-5'], alsoIds: ['scar-1', 'scar-2', 'scar-3', 'glow-3'], related: ['nuhjilt', 'co2-lazer', 'vivace-rf'],
     bookingOption: 'Сорви, нүхжилт', legacy: [] },
-  { slug: 'nuhjilt', week: 1, stage: 'drafting', reviewer: 'onorsaikhan', category: 'scar', h1: 'Нүхжилт арилгах эмчилгээ',
+  { slug: 'nuhjilt', week: 1, stage: 'review', reviewer: 'onorsaikhan', category: 'scar', h1: 'Нүхжилт арилгах эмчилгээ',
     primary: 'нүхжилт арилгах', secondary: ['сүв томрох', 'нүүрний нүхжилт', 'нүхжилтийн шалтгаан', 'карбон пийл'],
     catalogIds: ['glow-4'], alsoIds: ['scar-1', 'scar-2', 'scar-3', 'glow-2'], related: ['batganii-sorvi', 'vivace-rf', 'nuur-archilgaa'],
     bookingOption: 'Сорви, нүхжилт', legacy: [] },
