@@ -29,6 +29,9 @@ const escText = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').re
  * @property {string}  [current]   'hub' | slug — идэвхтэй цэс тэмдэглэх
  */
 
+/** Дэд хуудсанд улирлын «Урамшуулал» холбоос гаргахгүй (admin promoEnabled-ийг тэнд хэрэгжүүлэх боломжгүй) */
+const navFor = (ctx) => (ctx.home ? NAV : NAV.filter((n) => n[0] !== 'promo'));
+
 function hrefs(ctx) {
   const a = (id) => (ctx.home ? '#' + id : '/#' + id);
   const asset = (p) => (ctx.home ? p : '/' + p);
@@ -55,7 +58,7 @@ export function siteHeader(ctx) {
     '    </a>',
     '',
     '    <nav class="nav" aria-label="Үндсэн цэс">',
-    ...NAV.map((n) => '      ' + navLink(h, ctx, n, n[1])),
+    ...navFor(ctx).map((n) => '      ' + navLink(h, ctx, n, n[1])),
     '    </nav>',
     '',
     '    <div class="header__cta">',
@@ -72,7 +75,7 @@ export function siteHeader(ctx) {
     '</header>',
     '',
     '<div class="drawer" id="drawer">',
-    ...NAV.map((n) => '  ' + navLink(h, ctx, n, n[2])),
+    ...navFor(ctx).map((n) => '  ' + navLink(h, ctx, n, n[2])),
     '  <div class="drawer__cta">',
     `    <a class="btn btn--primary btn--lg" href="${escAttr(h.book)}">Цаг захиалах</a>`,
     `    <a class="btn btn--outline btn--lg" href="tel:${p.tel}" data-site="tel"><span data-site="phone">${p.display}</span> руу залгах</a>`,
@@ -108,7 +111,7 @@ export function siteFooter(ctx) {
     '      <div>',
     '        <h3>Цэс</h3>',
     '        <ul>',
-    ...NAV.map((n) => `          <li>${navLink(h, ctx, n, n[3])}</li>`),
+    ...navFor(ctx).map((n) => `          <li>${navLink(h, ctx, n, n[3])}</li>`),
     '        </ul>',
     '      </div>',
     '      <div>',

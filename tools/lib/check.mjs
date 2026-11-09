@@ -74,6 +74,8 @@ export function checkSite({ root, site, pages, otherHtml, files, catalog, tracke
   };
   if (tracked) {
     for (const rel of [...pages.map((p) => p.file), ...otherHtml, ...files.keys()]) if (!tracked.has(rel)) untracked.add(rel);
+    // Repo нийтэд нээлттэй — ноорог, судалгаа, preview git-д хэзээ ч орох ёсгүй
+    for (const t of tracked) if (/^(?:content\/drafts|content\/_work|\.preview)\//.test(t)) errors.push(`${t}: git-д бүртгэгдсэн байна — \`git rm --cached ${t}\` (ноорог/дотоод файл нийтэд гарна)`);
   }
   const isRedirect = redirectMatchers(root, files);
   const seen = { title: new Map(), description: new Map(), canonical: new Map() };

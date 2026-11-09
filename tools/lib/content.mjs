@@ -8,7 +8,7 @@
 // review.hash === reviewHash(page) (эмчийн баталсан текст өөрчлөгдөөгүй), [[эмч: …]] тэмдэг үлдээгүй,
 // хориотой мэдэгдэлгүй. Нэг нь ч зөрвөл build АЛДАА өгнө (чимээгүй нуухгүй — холбоос, redirect эвдрэхээс сэргийлнэ).
 
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -20,7 +20,11 @@ import { parsePrice } from './schema.mjs';
 export const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const SECTION_KEYS = ['what', 'suits', 'contraindications', 'procedure', 'aftercare', 'sideEffects', 'price'];
 export const FACT_KEYS = ['duration', 'anesthesia', 'sessions', 'downtime'];
-const HASHED = ['title', 'description', 'h1', 'name', 'summary', 'facts', 'headings', 'sections', 'faq', 'sources', 'schema', 'claimsAllow', 'video'];
+const HASHED = ['title', 'description', 'h1', 'name', 'summary', 'ctaTitle', 'facts', 'headings', 'sections', 'faq', 'sources', 'schema', 'claimsAllow', 'video'];
+const KINDS = ['procedure', 'therapy', 'diagnostic', 'cosmetic'];
+const PROCEDURE_TYPES = ['NoninvasiveProcedure', 'PercutaneousProcedure'];
+// content/pages/ (нийтэд нээлттэй repo) файлд ноорогийн/дотоод тэмдэглэл үлдэх ёсгүй
+const RAW_FORBIDDEN = /НООРОГ|content\/_work|content\/drafts|\[\[эмч:|өртөг|ашиг|нийлүүлэгч|margin|\bcost\b/i;
 
 async function importAll(dir) {
   if (!existsSync(dir)) return [];
@@ -28,7 +32,7 @@ async function importAll(dir) {
   for (const f of readdirSync(dir).filter((x) => x.endsWith('.mjs')).sort()) {
     const mod = await import(pathToFileURL(join(dir, f)).href);
     if (!mod.default || typeof mod.default !== 'object') throw new BuildError(`${dir}/${f}: export default {…} байх ёстой`);
-    out.push({ ...mod.default, _file: f, _slugFromFile: f.replace(/\.mjs$/, '') });
+    out.push({ ...mod.default, _file: f, _slugFromFile: f.replace(/\.mjs$/, ''), _raw: readFileSync(join(dir, f), 'utf8') });
   }
   return out;
 }
@@ -63,7 +67,7 @@ export function reviewHash(page) {
 
 /** Хуудасны бүх өвчтөнд харагдах текст (markup-гүй) */
 export function pageText(page) {
-  return plain([page.title, page.description, page.h1, page.name, page.summary, page.facts, page.headings, page.sections,
+  return plain([page.title, page.description, page.h1, page.name, page.summary, page.ctaTitle, page.facts, page.headings, page.sections,
     (page.faq || []).map((f) => [f.q, f.a])]);
 }
 
@@ -93,6 +97,10 @@ export function validatePage(page, ctx) {
   if (!SLUG_RE.test(page.slug || '')) E('slug зөвхөн латин жижиг үсэг, тоо, зураас');
   if (!['draft', 'published'].includes(page.status)) E(`status "${page.status}" — 'draft' эсвэл 'published'`);
   if (page._dir === 'content/pages' && page.status !== 'published') E('ноорог content/pages/-д байж болохгүй (repo нийтэд нээлттэй) — content/drafts/-д шилжүүлнэ үү');
+  if (page._dir === 'content/pages' && RAW_FORBIDDEN.test(page._raw || '')) E('файлд ноорогийн/дотоод тэмдэглэл (НООРОГ, content/_work, [[эмч:, өртөг …) үлдсэн — толгойн тайлбарыг устгана уу (repo нийтэд нээлттэй)');
+  const sch = page.schema || {};
+  if (sch.kind !== undefined && !KINDS.includes(sch.kind)) E(`schema.kind "${sch.kind}" — ${KINDS.join(' | ')}`);
+  if (sch.procedureType != null && !PROCEDURE_TYPES.includes(sch.procedureType)) E(`schema.procedureType "${sch.procedureType}" — ${PROCEDURE_TYPES.join(' | ')}`);
 
   for (const k of ['title', 'description', 'h1', 'name', 'summary', 'category', 'bookingOption']) {
     if (typeof page[k] !== 'string' || !page[k].trim()) E(`"${k}" хоосон`);
@@ -123,10 +131,13 @@ export function validatePage(page, ctx) {
     if (!ids.has(id)) E(`alsoIds: "${id}" catalog-defaults.js-д алга`);
     if ((page.catalogIds || []).includes(id)) E(`alsoIds: "${id}" catalogIds-д аль хэдийн бий`);
   }
-  if (ctx.pipelineSlugs && ctx.pipelineSlugs.size && !ctx.pipelineSlugs.has(page.slug)) W(`content/pipeline.mjs-д "${page.slug}" төлөвлөгдөөгүй`);
+  if (ctx.pipelineSlugs && ctx.pipelineSlugs.size && !ctx.pipelineSlugs.has(page.slug)) {
+    (page._dir === 'content/pages' ? E : W)(`content/pipeline.mjs-д "${page.slug}" төлөвлөгдөөгүй (admin-ий хяналт, үйлчилгээний холбоосыг тэндээс авна)`);
+  }
   for (const r of page.related || []) if (!ctx.allPages.some((p) => p.slug === r)) W(`related "${r}" хуудас алга (холбоос гарахгүй)`);
   if (!Array.isArray(page.legacy || [])) E('legacy массив байх ёстой');
 
+  const text = pageText(page);
   // Рендер хийж үзэх (буруу холбоос, блок) + тэмдэг цуглуулах
   try {
     const c = { markers, preview: true };
@@ -137,8 +148,7 @@ export function validatePage(page, ctx) {
   } catch (e) { E(e.message); }
   for (const k of ['title', 'description']) if (/\[\[|\*\*|\]\(/.test(page[k] || '')) E(`${k}-д markup/тэмдэг байж болохгүй`);
 
-  const text = pageText(page);
-  if (/₮\s*\d|\d[\d,]*\s*₮|\d[\d,]*\s*төгрөг/u.test(plain([page.sections, page.faq, page.facts, page.summary]))) E('текстэд үнэ бичихгүй — үнэ catalog-defaults.js-ээс автоматаар орно');
+  if (/₮\s*\d|\d[\d,.]*\s*₮|\d[\d,.]*\s*(?:мянга|сая)?\S*\s*төгрөг/u.test(text)) E('текстэд үнэ бичихгүй — үнэ catalog-defaults.js-ээс автоматаар орно');
   const claims = findClaims(text, page.claimsAllow || []);
   for (const c of claims) E(`хориотой мэдэгдэл «${c.label}»: …${c.context}…`);
   const words = wordCount(text);
@@ -160,6 +170,7 @@ export function validatePage(page, ctx) {
       if (age > 365) W(`сүүлд ${Math.round(age)} хоногийн өмнө хянасан — эмчээр дахин хянуулна уу`);
     }
     const h = reviewHash(page);
+    if (!page.review || page.review.by !== page.reviewer) E(`review.by "${page.review && page.review.by}" ≠ reviewer "${page.reviewer}" — баталсан эмч өөр (хянагчийг солих бол шинэ эмчээр дахин хянуулна)`);
     if (!page.review || page.review.hash !== h) E(`review.hash "${page.review && page.review.hash}" ≠ одоогийн текстийн hash "${h}" — текст эмч баталснаас хойш өөрчлөгдсөн (дахин хянуулна)`);
     if (markers.length) E(`${markers.length} [[эмч: …]] тэмдэг үлдсэн`);
   }

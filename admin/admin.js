@@ -336,7 +336,12 @@ const svcBody = $('#svcTable tbody'), pkgBody = $('#pkgTable tbody'), catStatus 
 const catOptions = (sel) => Object.entries(CATS).map(([k, v]) => `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(v)}</option>`).join('');
 // Нийтлэгдсэн эмчилгээний хуудастай холбоотой үйлчилгээ (build: admin/pages-status.js) — зөвхөн харуулна, хадгалахгүй
 const PAGE_BY_ID = {};
-((window.SKINAID_PAGES_STATUS || {}).pages || []).forEach(p => { if (p.url) p.catalogIds.forEach(id => { PAGE_BY_ID[id] = p.url; }); });
+const PRICE_PAGE_BY_ID = {};   // үнэ нь эмчилгээний хуудсанд харагддаг (catalogIds + alsoIds)
+((window.SKINAID_PAGES_STATUS || {}).pages || []).forEach(p => {
+  if (!p.url) return;
+  p.catalogIds.forEach(id => { PAGE_BY_ID[id] = p.url; });
+  (p.priceIds || p.catalogIds).forEach(id => { PRICE_PAGE_BY_ID[id] = PRICE_PAGE_BY_ID[id] || p.url; });
+});
 const svcRow = (s) => {
   const tr = document.createElement('tr');
   tr.dataset.id = s.id; if (s.hidden) tr.classList.add('is-hidden');
@@ -397,7 +402,8 @@ $('#btnSvcAdd').addEventListener('click', () => {
 svcBody.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act="rm"]'); if (!b) return;
   const tr = b.closest('tr');
-  if (PAGE_BY_ID[tr.dataset.id] && !confirm(`Энэ үйлчилгээ ${PAGE_BY_ID[tr.dataset.id]} хуудастай холбоотой. Устгавал дахин нэмэхэд холбоос сэргэхгүй (шинэ id). Түр нуух бол «Нуух»-ыг сонгоно уу. Устгах уу?`)) return;
+  const linked = PAGE_BY_ID[tr.dataset.id] || PRICE_PAGE_BY_ID[tr.dataset.id];
+  if (linked && !confirm(`Энэ үйлчилгээ ${linked} хуудастай холбоотой. Устгавал дахин нэмэхэд холбоос сэргэхгүй (шинэ id). Түр нуух бол «Нуух»-ыг сонгоно уу. Устгах уу?`)) return;
   tr.remove(); $('#svcCount').textContent = String(svcBody.children.length);
 });
 [svcBody, pkgBody].forEach(tb => tb.addEventListener('change', (e) => {
@@ -421,6 +427,7 @@ $('#catForm').addEventListener('submit', async (e) => {
     setStatus(catStatus, `Хадгалагдлаа (${services.length} үйлчилгээ, ${packages.length} багц) — сайт дээр дараагийн ачааллаас харагдана.`, 'ok');
     toast('Каталог хадгалагдлаа');
     fillCatalog(services, packages);
+    renderPages(services);
   } catch (err) { setStatus(catStatus, errText(err), 'err'); }
   finally { btn.disabled = false; }
 });
@@ -452,7 +459,7 @@ function renderPages(fsServices) {
   const warn = [];
   if (Array.isArray(fsServices)) {
     const byId = new Map(fsServices.map(s => [s && s.id, s]));
-    ST.filter(p => p.url).forEach(p => p.catalogIds.forEach(id => {
+    ST.filter(p => p.url).forEach(p => (p.priceIds || p.catalogIds).forEach(id => {
       const s = byId.get(id), d = (DEFAULTS.treatments || []).find(x => x.id === id) || {};
       if (!s) warn.push(`${p.url}: «${nameOf(id)}» үйлчилгээ admin-ий жагсаалтад алга (устгагдсан).`);
       else if (s.hidden) warn.push(`${p.url}: «${nameOf(id)}» admin-д нуугдсан ч эмчилгээний хуудсанд харагдаж байна.`);

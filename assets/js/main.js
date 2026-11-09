@@ -322,7 +322,7 @@
       const want = (window.SKINAID_PAGES && window.SKINAID_PAGES.opt && window.SKINAID_PAGES.opt[svcParam]) || '';
       const sel = $('#f-service', form);
       if (want && sel && Array.from(sel.options).some(o => o.text === want)) sel.value = want;
-      try { history.replaceState(null, '', location.pathname + location.hash); } catch (_) { /* file:// г.м. */ }
+      try { const u = new URL(location.href); u.searchParams.delete('svc'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } catch (_) { /* file:// г.м. */ }
     }
 
     const setBusy = (on) => {

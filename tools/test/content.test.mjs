@@ -53,10 +53,15 @@ test('claims: catches banned phrases in Mongolian word forms', () => {
   assert.deepEqual(labels('гаж нөлөө огт байхгүй'), ['гаж нөлөөгүй']);
   assert.deepEqual(labels('Энэ арга аюулгүй'), ['аюулгүй']);
   assert.deepEqual(labels('сорви бүрмөсөн арилна'), ['бүрмөсөн']);
+  assert.deepEqual(labels('Энэ эмчилгээ аюулгүй байдаг.'), ['аюулгүй']);
+  assert.deepEqual(labels('Эмчилгээ огт өвдөхгүй'), ['өвдөлтгүй']);
+  assert.deepEqual(labels('Үр дүнгийн баталгаа өгнө'), ['баталгаа өгнө']);
+  assert.deepEqual(labels('гаж нөлөө гарахгүй'), ['гаж нөлөөгүй']);
+  assert.deepEqual(labels('100 хувь арилна'), ['100%']);
 });
 
 test('claims: allows legitimate uses', () => {
-  assert.deepEqual(findClaims('Эмч баталгаажуулна. Аюулгүй байдлын зөвлөмж.'), []);
+  assert.deepEqual(findClaims('Эмч баталгаажуулна. Аюулгүй байдлын зөвлөмж. Аюулгүй байдал чухал.'), []);
   assert.deepEqual(findClaims('Хамгийн түгээмэл хэлбэр нь', ['хамгийн түгээмэл']), []);
   assert.deepEqual(findClaims('хамгийнхаа'), []);   // өөр үг (үсгээр үргэлжилсэн)
 });
@@ -124,7 +129,7 @@ test('validatePage: publishing needs consent, title, date, matching hash and no 
   assert.ok(r.errors.some((e) => /consent/.test(e)));
   assert.ok(r.errors.some((e) => /jobTitle/.test(e)));
   assert.ok(r.errors.some((e) => /review\.hash/.test(e)));
-  const ok = { ...p, review: { hash: reviewHash(p) } };
+  const ok = { ...p, review: { hash: reviewHash(p), by: 'dr' } };
   r = validatePage(ok, vctx(ok, { dr: { name: 'Э.Т', jobTitle: 'Арьсны эмч', consent: { date: '2026-11-07' } } }));
   assert.deepEqual(r.errors, []);
   assert.equal(r.publishable, true);
@@ -132,7 +137,7 @@ test('validatePage: publishing needs consent, title, date, matching hash and no 
   r = validatePage(edited, vctx(edited, { dr: { name: 'Э.Т', jobTitle: 'Арьсны эмч', consent: { date: '2026-11-07' } } }));
   assert.ok(r.errors.some((e) => /review\.hash/.test(e)));
   const marked = { ...p, sections: { ...p.sections, aftercare: ['[[эмч: хэд хоног?]]'] } };
-  const m2 = { ...marked, review: { hash: reviewHash(marked) } };
+  const m2 = { ...marked, review: { hash: reviewHash(marked), by: 'dr' } };
   r = validatePage(m2, vctx(m2, { dr: { name: 'Э.Т', jobTitle: 'Арьсны эмч', consent: { date: '2026-11-07' } } }));
   assert.ok(r.errors.some((e) => /тэмдэг үлдсэн/.test(e)));
 });
@@ -143,4 +148,34 @@ test('validatePage: draft in content/pages, prices in prose and banned claims ar
   assert.ok(r.errors.some((e) => /content\/pages/.test(e)));
   assert.ok(r.errors.some((e) => /үнэ бичихгүй/.test(e)));
   assert.ok(r.errors.some((e) => /хамгийн/.test(e)));
+});
+
+test('validatePage: review.by must match reviewer; ctaTitle is hashed; prices in title are caught', () => {
+  const docs = { dr: { name: 'Э.Т', jobTitle: 'Арьсны эмч', consent: { date: '2026-11-07' } }, dr2: { name: 'Б.Б', jobTitle: 'Арьсны эмч', consent: { date: '2026-11-07' } } };
+  const p = samplePage({ status: 'published', _dir: 'content/pages', lastReviewed: '2026-11-07' });
+  const ok = { ...p, review: { hash: reviewHash(p), by: 'dr' } };
+  assert.deepEqual(validatePage(ok, vctx(ok, docs)).errors, []);
+  const swapped = { ...ok, reviewer: 'dr2' };
+  assert.ok(validatePage(swapped, vctx(swapped, docs)).errors.some((e) => /review\.by/.test(e)));
+  const cta = { ...ok, ctaTitle: 'Шинэ гарчиг' };
+  assert.ok(validatePage(cta, vctx(cta, docs)).errors.some((e) => /review\.hash/.test(e)));
+  const priced = samplePage({ title: 'Туршилт 275,000₮ | SkinAid' });
+  assert.ok(validatePage(priced, vctx(priced)).errors.some((e) => /үнэ бичихгүй/.test(e)));
+  const raw = { ...ok, _raw: '// НООРОГ — эмч хянаагүй\nexport default {}' };
+  assert.ok(validatePage(raw, vctx(raw, docs)).errors.some((e) => /НООРОГ/.test(e)));
+});
+
+test('manageRedirects: pre-encoded legacy is not double-encoded; old slug allowed; dropped rules warned', async () => {
+  const { manageRedirects } = await import('../lib/redirects.mjs');
+  const { sourceToRegExp } = await import('../lib/check.mjs');
+  const base = JSON.stringify({ redirects: [{ source: '/service-page/:rest*', destination: '/#treatments', permanent: false }, { source: '/x', destination: '/emchilgee/old', permanent: true }] });
+  const r = manageRedirects(base, [{ slug: 'co2-lazer', legacy: ['/service-page/лазер', encodeURI('/service-page/сорви'), '/emchilgee/co2-laser'] }], sourceToRegExp, { liveSlugs: new Set(['co2-lazer']) });
+  assert.deepEqual(r.errors, []);
+  const sources = r.rules.map((x) => x.source);
+  assert.ok(sources.includes(encodeURI('/service-page/сорви')));
+  assert.ok(!sources.some((s) => s.includes('%25')));
+  assert.ok(sources.includes('/emchilgee/co2-laser'));
+  assert.ok(r.warnings.some((w) => /emchilgee\/old/.test(w)));
+  const bad = manageRedirects(base, [{ slug: 'co2-lazer', legacy: ['/service-page/лазер', encodeURI('/service-page/лазер')] }], sourceToRegExp);
+  assert.ok(bad.errors.some((e) => /давхардсан/.test(e)));
 });

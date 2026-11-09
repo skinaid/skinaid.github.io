@@ -173,16 +173,18 @@ export function treatmentGraph(site, page, ctx) {
     name: c.name,
     alternateName: c.alternateName,
     code: c.icd10 ? { '@type': 'MedicalCode', code: c.icd10, codingSystem: 'ICD-10' } : null,
-    possibleTreatment: { '@id': procId },
+    // possibleTreatment-ийн муж нь MedicalTherapy — зөвхөн therapy төрөлд холбоно (бусад нь WebPage.about-аар)
+    possibleTreatment: s.kind === 'therapy' ? { '@id': procId } : null,
   }));
-  const isProc = Array.isArray(types) && types.includes('MedicalProcedure');
+  // bodyLocation, procedureType нь MedicalProcedure (ба дэд төрөл)-д л хүчинтэй
+  const isProc = Array.isArray(types) && types.some((t) => /Procedure$|^MedicalTherapy$/.test(t));
   const procedure = compact({
     '@type': types,
     '@id': procId,
-    name: page.name,
+    name: page.h1 || page.name,
     description: ctx.summaryText,
     procedureType: isProc && s.procedureType ? 'https://schema.org/' + s.procedureType : null,
-    bodyLocation: s.bodyLocation,
+    bodyLocation: isProc ? s.bodyLocation : null,
     provider: { '@id': site.origin + '/#clinic' },
     areaServed: { '@type': 'City', name: site.areaServed },
     offers,

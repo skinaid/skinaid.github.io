@@ -685,17 +685,21 @@ article.post:hover .post__media img { transform: none; }
 
 .prose { font-size: 17px; line-height: 1.75; color: var(--ink-2); padding-bottom: clamp(40px, 6vw, 72px); }
 .prose > section { margin-top: clamp(36px, 5vw, 52px); }
-.prose h2 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; font-size: clamp(22px, 2.6vw, 28px); color: var(--purple-900); margin-bottom: 14px; }
-.prose h3 { font-weight: 700; font-size: 18px; color: var(--ink); margin: 24px 0 8px; }
-.prose p { margin-bottom: 14px; }
-.prose ul { list-style: disc; padding-left: 22px; margin-bottom: 14px; }
-.prose ol { list-style: decimal; padding-left: 22px; margin-bottom: 14px; }
-.prose li { margin: 6px 0; }
-.prose a { color: var(--purple); text-decoration: underline; text-underline-offset: 2px; }
-.prose strong { color: var(--ink); }
+/* :where() — тэг дүрмүүдийн жин бага тул .row, .hub-card, .toc зэрэг компонент өөрийн загвараа хадгална */
+.prose :where(h2) { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; font-size: clamp(22px, 2.6vw, 28px); color: var(--purple-900); margin-bottom: 14px; }
+.prose :where(h3) { font-weight: 700; font-size: 18px; color: var(--ink); margin: 24px 0 8px; }
+.prose :where(p) { margin-bottom: 14px; }
+.prose :where(ul:not([class])) { list-style: disc; padding-left: 22px; margin-bottom: 14px; }
+.prose :where(ol:not([class])) { list-style: decimal; padding-left: 22px; margin-bottom: 14px; }
+.prose :where(ul:not([class]), ol:not([class])) > li { margin: 6px 0; }
+.prose :where(a:not([class])) { color: var(--purple); text-decoration: underline; text-underline-offset: 2px; }
+.prose :where(strong) { color: var(--ink); }
+.prose .list, .prose .hub-cards { font-size: 16px; line-height: 1.55; color: var(--ink); }
+.prose .row h3, .prose .hub-card h3 { margin-top: 0; }
+.prose .row p, .prose .hub-card p { margin-bottom: 0; }
 .prose .meta { color: var(--muted); font-size: 14px; }
 
-.steps-list { list-style: none !important; padding-left: 0 !important; counter-reset: step; }
+.steps-list { list-style: none; padding-left: 0; margin-bottom: 14px; counter-reset: step; }
 .steps-list > li { counter-increment: step; position: relative; padding-left: 46px; margin: 14px 0; }
 .steps-list > li::before { content: counter(step); position: absolute; left: 0; top: 1px; width: 30px; height: 30px; border-radius: 50%; background: var(--purple-100); color: var(--purple); font-weight: 800; font-size: 14px; display: grid; place-items: center; }
 
@@ -704,6 +708,7 @@ article.post:hover .post__media img { transform: none; }
 .callout > :last-child { margin-bottom: 0; }
 
 .sources { list-style: decimal; padding-left: 22px; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.toc ol li, .sources li { margin: 4px 0; }
 .sources li { margin: 6px 0; }
 .sources a { color: var(--purple); word-break: break-word; }
 .disclaimer { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
@@ -722,3 +727,12 @@ article.post:hover .post__media img { transform: none; }
 }
 .prose > h2 { margin-top: clamp(28px, 4vw, 40px); }
 .prose > h2:first-child { margin-top: 0; }
+
+/* Дэд хуудас хэвлэх: тогтмол header/товч нуух, FAQ хариуг бүтэн харуулах */
+@media print {
+  .page .header, .drawer, .mobile-bar, .totop, .cta__actions { display: none !important; }
+  .page { padding-top: 0; }
+  .header[data-solid] { display: none !important; }
+  .faq__a { grid-template-rows: 1fr !important; }
+  .faq__a > div { visibility: visible !important; }
+}

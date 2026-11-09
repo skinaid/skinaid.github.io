@@ -28,6 +28,7 @@ import { AssetStamper, BuildError, vercelIgnore } from './lib/assets.mjs';
 import { checkSite, pageMeta, sourceToRegExp } from './lib/check.mjs';
 import { manageRedirects } from './lib/redirects.mjs';
 import { loadContent, validatePage, reviewHash, priceInfo } from './lib/content.mjs';
+import { findClaims } from './lib/claims.mjs';
 import { renderTreatment, renderHub, GENERATED } from './lib/pages.mjs';
 import { plain, wordCount } from './lib/render.mjs';
 
@@ -82,6 +83,16 @@ const contentErrors = [], contentWarnings = [];
     }
   }
 }
+{ // content/hub.mjs: эмнэлгийн мэдэгдэлгүй, тэмдэггүй, бүрэн (эхний хуудастай хамт нийтлэгдэнэ)
+  const hub = content.hub;
+  if (hub) {
+    for (const k of ['title', 'description', 'h1']) if (typeof hub[k] !== 'string' || !hub[k].trim()) contentErrors.push(`content/hub.mjs: "${k}" хоосон`);
+    if (!Array.isArray(hub.intro) || !hub.intro.length) contentErrors.push('content/hub.mjs: intro хоосон');
+    const hubText = plain([hub.title, hub.description, hub.h1, hub.intro, hub.intros]);
+    if (/\[\[/.test(JSON.stringify(hub))) contentErrors.push('content/hub.mjs: [[эмч: …]] тэмдэг байж болохгүй');
+    for (const c of findClaims(hubText)) contentErrors.push(`content/hub.mjs: хориотой мэдэгдэл «${c.label}»: …${c.context}…`);
+  }
+}
 const results = new Map();
 for (const pg of content.pages) {
   const r = validatePage(pg, { catalog, doctors: content.doctors, bookingOptions, allPages: content.pages, today, preview: PREVIEW, pipelineSlugs: content.pipelineSlugs });
@@ -130,12 +141,13 @@ if (!PREVIEW) {
       const pub = visibleSlugs.has(p.slug) ? content.pages.find((x) => x.slug === p.slug) : null;
       const doc = p.reviewer ? content.doctors[p.reviewer] : null;
       const ids = pub ? pub.catalogIds : p.catalogIds || [];
+      const priceIds = [...new Set([...ids, ...((pub ? pub.alsoIds : p.alsoIds) || [])])];
       return {
         slug: p.slug, h1: p.h1, primary: p.primary, week: p.week, weekStart: iso(W1 + (p.week - 1) * 7 * 864e5),
         stage: pub ? 'published' : (p.stage || 'planned'),
         reviewer: doc ? doc.name : null, reviewerConsent: !!(doc && doc.consent),
         lastReviewed: pub ? pub.lastReviewed : null, url: pub ? '/emchilgee/' + p.slug : null,
-        catalogIds: ids, sitePrice: priceInfo(ids.map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean)).text,
+        catalogIds: ids, priceIds, sitePrice: priceInfo(priceIds.map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean)).text,
       };
     }),
   };
@@ -214,15 +226,22 @@ for (const pg of visible) {
   const doc = content.doctors[pg.reviewer];
   const reviewer = doc && doc.consent && pg.status === 'published' ? { key: pg.reviewer, doc } : null;
   const url = site.origin + '/emchilgee/' + pg.slug;
-  const items = [...new Set([...pg.catalogIds, ...(pg.alsoIds || [])])].map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean);
+  const items = [...new Set([...(pg.catalogIds || []), ...(pg.alsoIds || [])])].map((id) => catalog.treatments.find((t) => t.id === id)).filter(Boolean);
   const graph = treatmentGraph(site, pg, {
     url, title: pg.title, description: pg.description, items, reviewer, lastReviewed: pg.lastReviewed, asset,
     summaryText: plain(pg.summary),
     crumbs: [{ name: 'Нүүр', path: '/' }, { name: 'Эмчилгээ', path: '/emchilgee' }, { name: pg.name, path: '/emchilgee/' + pg.slug }],
   });
-  files.set(rel, renderTreatment(pg, {
-    site, catalog, R, pageUrl, hubLive, preview: PREVIEW, reviewer, ldJson: ldJson(graph), info: infoFor(pg), relatedPages: visible, linkOk,
-  }));
+  try {
+    files.set(rel, renderTreatment(pg, {
+      site, catalog, R, pageUrl, hubLive, preview: PREVIEW, reviewer, ldJson: ldJson(graph), info: infoFor(pg), relatedPages: visible, linkOk,
+    }));
+  } catch (e) {
+    if (!PREVIEW) throw e;
+    // Дутуу ноорог бусад ноорогийн preview-г зогсоохгүй: асуудлыг хэвлээд энэ хуудсыг алгасна
+    results.get(pg.slug).errors.push(`${pg.slug}: preview үүсгэж чадсангүй — ${e.message}`);
+    pages.splice(pages.findIndex((p) => p.file === rel), 1);
+  }
 }
 if (hubLive) {
   const graph = hubGraph(site, {
@@ -262,8 +281,13 @@ if (PREVIEW) {
 
 /* ---------- 5c. vercel.json: нийтлэгдсэн хуудасны хуучин (Wix) URL → 308 ---------- */
 {
-  const r = manageRedirects(read('vercel.json'), visible.map((pg) => ({ slug: pg.slug, legacy: pg.legacy || [] })), sourceToRegExp);
+  // Хуучин URL: хуудасны legacy + content/pipeline.mjs-ийн legacy (нэгтгэж)
+  const pipeLegacy = (slug) => ((content.pipeline.find((p) => p.slug === slug) || {}).legacy || []);
+  const r = manageRedirects(read('vercel.json'),
+    visible.map((pg) => ({ slug: pg.slug, legacy: [...new Set([...(pg.legacy || []), ...pipeLegacy(pg.slug)])] })),
+    sourceToRegExp, { liveSlugs: new Set([...visibleSlugs, ...blocked.map((b) => b.slug)]) });
   contentErrors.push(...r.errors.map((e) => 'vercel.json: ' + e));
+  contentWarnings.push(...r.warnings);
   files.set('vercel.json', r.text);
 }
 
@@ -278,7 +302,7 @@ const stale = [];
   for (const n of readdirSync(abs)) {
     const rel = `${dir}/${n}`;
     if (statSync(join(ROOT, rel)).isDirectory()) walk(rel);
-    else if (!expected.has(rel)) stale.push(rel);
+    else if (!n.startsWith('.') && !expected.has(rel)) stale.push(rel);
   }
 })('emchilgee');
 for (const t of tracked || []) if (t.startsWith('emchilgee/') && !expected.has(t) && !stale.includes(t)) stale.push(t);
@@ -308,6 +332,10 @@ files.set('sitemap.xml', [
 ].join('\n'));
 
 /* ---------- 8. Бичих / шалгах ---------- */
+if (!CHECK && contentErrors.length) {
+  console.error(`✗ ${contentErrors.length} алдаа (контент) — юу ч бичээгүй:\n  - ` + contentErrors.join('\n  - '));
+  process.exit(1);
+}
 const changed = [];
 for (const [rel, text] of files) {
   const abs = join(ROOT, rel);

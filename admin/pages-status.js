@@ -16,6 +16,14 @@ window.SKINAID_PAGES_STATUS = {
     "scar-4",
     "scar-5"
    ],
+   "priceIds": [
+    "scar-4",
+    "scar-5",
+    "scar-1",
+    "scar-2",
+    "scar-3",
+    "glow-3"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -32,6 +40,13 @@ window.SKINAID_PAGES_STATUS = {
    "catalogIds": [
     "glow-4"
    ],
+   "priceIds": [
+    "glow-4",
+    "scar-1",
+    "scar-2",
+    "scar-3",
+    "glow-2"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -46,6 +61,10 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
+    "scar-2",
+    "scar-3"
+   ],
+   "priceIds": [
     "scar-2",
     "scar-3"
    ],
@@ -69,6 +88,13 @@ window.SKINAID_PAGES_STATUS = {
     "acne-4",
     "acne-5"
    ],
+   "priceIds": [
+    "acne-1",
+    "acne-2",
+    "acne-3",
+    "acne-4",
+    "acne-5"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -85,6 +111,9 @@ window.SKINAID_PAGES_STATUS = {
    "catalogIds": [
     "scar-1"
    ],
+   "priceIds": [
+    "scar-1"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -99,6 +128,12 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
+    "inject-1",
+    "inject-3",
+    "inject-4",
+    "inject-6"
+   ],
+   "priceIds": [
     "inject-1",
     "inject-3",
     "inject-4",
@@ -121,6 +156,10 @@ window.SKINAID_PAGES_STATUS = {
     "inject-2",
     "anti-3"
    ],
+   "priceIds": [
+    "inject-2",
+    "anti-3"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -135,6 +174,9 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
+    "lift-1"
+   ],
+   "priceIds": [
     "lift-1"
    ],
    "sitePrice": "₮300,000-с"
@@ -154,6 +196,10 @@ window.SKINAID_PAGES_STATUS = {
     "anti-1",
     "minor-3"
    ],
+   "priceIds": [
+    "anti-1",
+    "minor-3"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -168,6 +214,11 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
+    "laser-4",
+    "laser-3",
+    "glow-5"
+   ],
+   "priceIds": [
     "laser-4",
     "laser-3",
     "glow-5"
@@ -190,6 +241,11 @@ window.SKINAID_PAGES_STATUS = {
     "exam-2",
     "exam-3"
    ],
+   "priceIds": [
+    "exam-1",
+    "exam-2",
+    "exam-3"
+   ],
    "sitePrice": "₮50,000"
   },
   {
@@ -204,6 +260,10 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
+    "anti-2",
+    "anti-5"
+   ],
+   "priceIds": [
     "anti-2",
     "anti-5"
    ],
@@ -224,6 +284,10 @@ window.SKINAID_PAGES_STATUS = {
     "laser-1",
     "laser-2"
    ],
+   "priceIds": [
+    "laser-1",
+    "laser-2"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -240,6 +304,9 @@ window.SKINAID_PAGES_STATUS = {
    "catalogIds": [
     "inject-9"
    ],
+   "priceIds": [
+    "inject-9"
+   ],
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
@@ -254,6 +321,14 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
+    "glow-1",
+    "glow-2",
+    "glow-3",
+    "massage-1",
+    "massage-2",
+    "massage-3"
+   ],
+   "priceIds": [
     "glow-1",
     "glow-2",
     "glow-3",

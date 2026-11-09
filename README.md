@@ -83,8 +83,10 @@ Build юу хийдэг вэ:
    эсрэг заалт, асуулт, бүтэн текст, зөвшөөрлийн хэсэг) `content/_work/<slug>/claims.json`-оос үүсгэнэ — Google Drive-д Doc болгон оруулна. Засварыг ноорогт оруулаад preview-ийн туузан дээрх
    «Хувилбар» (hash)-ийг эмчээр «Зөвшөөрөв» гэж батлуулна.
 4. `content/doctors.mjs`-д эмчийн цол, `consent: { date, scope: ['reviewer'] }`-ийг бичнэ (бичгээр авсан зөвшөөрөл Drive-д).
-5. Ноорогийг `content/pages/<slug>.mjs` руу зөөж `status: 'published'`, `lastReviewed`, `review: { hash }` бөглөнө.
-   `[[эмч: …]]` тэмдэг үлдэхгүй. Дараа нь `node tools/build.mjs`, `git add -A`, commit, push.
+5. Ноорогийг `content/pages/<slug>.mjs` руу зөөж `status: 'published'`, `lastReviewed`, `review: { hash, by: '<reviewer>' }`
+   бөглөнө. Толгойн тайлбарыг (// НООРОГ …, content/_work г.м.) устгаж, хүсвэл `// Эмч баталсан: <нэр>, <огноо>` гэсэн нэг мөр
+   үлдээнэ (build шалгана). `[[эмч: …]]` тэмдэг үлдэхгүй. Хуучин Wix URL-ыг `content/pipeline.mjs`-ийн `legacy`-д бичнэ (хуудасны
+   `legacy`-тай нэгтгэгдэнэ). Дараа нь `node tools/build.mjs`, `git add -A`, commit, push.
 6. Батлагдсаны дараа текстийг засвал hash зөрж build алдаа өгнө — эмчээр дахин хянуулна (санамсаргүй засвар live хуудсыг
    эвдэхгүй: build алдаатай хуудасны HTML-ийг хөндөхгүй). Хуудсыг буцаахад `content/pages/<slug>.mjs`-ийг устгаад build хийнэ.
 

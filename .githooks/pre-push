@@ -26,6 +26,16 @@ while read -r lref lsha rref rsha; do
   case "$checked" in *" $lsha "*) continue ;; esac        # нэг commit-ийг нэг л удаа
   checked="$checked$lsha "
 
+  # Repo нийтэд нээлттэй: push хийгдэж буй ШИНЭ commit бүрт ноорог/дотоод файл орсон эсэх (түүхэнд үлдэнэ)
+  for c in $(git -C "$top" rev-list "$lsha" --not --remotes 2>/dev/null); do
+    leak=$(git -C "$top" ls-tree -r --name-only "$c" -- content/drafts content/_work .preview 2>/dev/null | head -3)
+    if [ -n "$leak" ]; then
+      echo "pre-push: commit $(git -C "$top" rev-parse --short "$c")-д ноорог/дотоод файл байна (repo нийтэд нээлттэй):" >&2
+      echo "$leak" | sed 's/^/          /' >&2
+      status=1
+    fi
+  done
+
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/skinaid-prepush.XXXXXX") || exit 1
   if ! git -C "$top" worktree add --quiet --detach "$tmp" "$lsha" >/dev/null 2>&1; then
     echo "pre-push: $lref ($lsha)-г түр worktree-д гаргаж чадсангүй." >&2
