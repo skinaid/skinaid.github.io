@@ -4,17 +4,19 @@
 // legacy — хуучин Wix URL (нийтлэгдэхэд 308 redirect, build удирдана). Хуудасны эцсийн өгөгдөл content/pages/<slug>.mjs-д.
 // admin → «Эмчилгээний хуудас» цэс энэ жагсаалтыг харуулна. Долоо хоног 1 = 2026-11-09-ний долоо хоног.
 // stage: 'planned' | 'drafting' (ноорог бичиж буй) | 'review' (эмчид Google Doc илгээсэн) | 'approved' (эмч баталсан).
+// ubServiceId — хуудасны «Цаг захиалах» (/?svc=<slug>#contact) онлайн захиалгад (UB Beauty) урьдчилан сонгох үйлчилгээний id
+//   (нийтийн GET /services-ийн id; байхгүй бол юу ч сонгохгүй). Анх: эмчийн үзлэг «Арьсны оношлогоо».
 // Нийтлэгдсэн эсэхийг build өөрөө тогтооно (content/pages/<slug>.mjs шалгалтад тэнцсэн бол).
 
 export const pipeline = [
   { slug: 'batganii-sorvi', week: 1, stage: 'review', reviewer: 'onorsaikhan', category: 'scar', h1: 'Батганы сорви арилгах эмчилгээ',
     primary: 'батганы сорви арилгах', secondary: ['батганы сорви', 'сорвины төрөл', 'сорви өөрөө арилдаг уу', 'сорви салгах', 'келоид сорви'],
     catalogIds: ['scar-4', 'scar-5'], alsoIds: ['scar-1', 'scar-2', 'scar-3', 'glow-3'], related: ['nuhjilt', 'co2-lazer', 'vivace-rf'],
-    bookingOption: 'Сорви, нүхжилт', legacy: [] },
+    bookingOption: 'Сорви, нүхжилт', ubServiceId: 'af5e4f62-7ea0-4410-8c15-652c73c50f9e', legacy: [] },
   { slug: 'nuhjilt', week: 1, stage: 'review', reviewer: 'onorsaikhan', category: 'scar', h1: 'Нүхжилт арилгах эмчилгээ',
     primary: 'нүхжилт арилгах', secondary: ['сүв томрох', 'нүүрний нүхжилт', 'нүхжилтийн шалтгаан', 'карбон пийл'],
     catalogIds: ['glow-4'], alsoIds: ['scar-1', 'scar-2', 'scar-3', 'glow-2'], related: ['batganii-sorvi', 'vivace-rf', 'nuur-archilgaa'],
-    bookingOption: 'Сорви, нүхжилт', legacy: [] },
+    bookingOption: 'Сорви, нүхжилт', ubServiceId: 'af5e4f62-7ea0-4410-8c15-652c73c50f9e', legacy: [] },
   { slug: 'vivace-rf', week: 2, reviewer: null, category: 'scar', h1: 'VIVACE бичил зүүт RF ба MTS эмчилгээ',
     primary: 'vivace', secondary: ['бичил зүүт RF', 'микронидлинг', 'MTS эмчилгээ', 'needle RF'],
     catalogIds: ['scar-2', 'scar-3'], alsoIds: [], related: ['batganii-sorvi', 'nuhjilt', 'co2-lazer'],

@@ -76,6 +76,7 @@ const contentErrors = [], contentWarnings = [];
 { // content/pipeline.mjs: үйлчилгээ бүр нэг л хуудсанд, catalog-д байх ёстой
   const owner = new Map(), ids = new Set(catalog.treatments.map((t) => t.id));
   for (const p of content.pipeline) {
+    if (p.ubServiceId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(p.ubServiceId)) contentErrors.push(`content/pipeline.mjs: ${p.slug} — ubServiceId "${p.ubServiceId}" UB Beauty-ийн үйлчилгээний id (uuid) биш`);
     for (const id of [...(p.catalogIds || []), ...(p.alsoIds || [])]) if (!ids.has(id)) contentErrors.push(`content/pipeline.mjs: ${p.slug} — "${id}" catalog-defaults.js-д алга`);
     for (const id of p.catalogIds || []) {
       if (owner.has(id)) contentErrors.push(`content/pipeline.mjs: "${id}" ${owner.get(id)} ба ${p.slug} хоёуланд catalogIds-д байна`);
@@ -119,11 +120,13 @@ const linkOk = (href) => {
 // content/pages-д байгаа ч алдаатай (нийтлэх нөхцөл хангахгүй) хуудас: одоо байгаа HTML-ийг ХӨНДӨХГҮЙ
 // (устгахгүй, дахин үүсгэхгүй) — build алдаа өгч зогсоно. Санамсаргүй засвар live хуудсыг устгахаас сэргийлнэ.
 const blocked = content.pages.filter((pg) => pg._dir === 'content/pages' && !results.get(pg.slug).publishable);
-/** Нүүрний JS-д: үйлчилгээний id → хуудас, slug → захиалгын маягтын сонголт */
-const pagesIndex = { byId: {}, opt: {} };
+/** Нүүрний JS-д: үйлчилгээний id → хуудас, slug → захиалгын маягтын сонголт (нөөц маягт), slug → UB Beauty үйлчилгээ */
+const pagesIndex = { byId: {}, opt: {}, ub: {} };
 for (const pg of visible) {
   for (const id of pg.catalogIds) pagesIndex.byId[id] = '/emchilgee/' + pg.slug;
   pagesIndex.opt[pg.slug] = pg.bookingOption;
+  const ub = (content.pipeline.find((p) => p.slug === pg.slug) || {}).ubServiceId;
+  if (ub) pagesIndex.ub[pg.slug] = ub;
 }
 // Индекслэгдэх хуудсууд
 const pages = [

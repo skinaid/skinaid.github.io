@@ -177,7 +177,9 @@ function setup(form) {
     put('#f-phone', el.phone.value.trim());
     const s = svc();
     const sel = bf.querySelector('#f-service');
-    if (s && sel && !sel.value) {
+    // main.js-ийн ?svc урьдчилсан сонголтоос үйлчлүүлэгчийн онлайн маягтад сонгосон үйлчилгээ давуу
+    if (s && sel && (!sel.value || sel.dataset.preselected)) {
+      delete sel.dataset.preselected;
       const name = s.name.slice(0, 120);
       let opt = Array.from(sel.options).find((o) => o.value === name);
       if (!opt) { opt = new Option(name, name); sel.add(opt, 1); }
@@ -226,7 +228,10 @@ function setup(form) {
     el.submit.textContent = submitLabel();
     S.ready = true;
     announce('');
+    // Эмчилгээний хуудасны «Цаг захиалах» (/?svc=<slug>) → тэр хуудасны үйлчилгээ (build: SKINAID_PAGES.ub, main.js: data-svc)
+    const pre = ((window.SKINAID_PAGES || {}).ub || {})[form.dataset.svc || ''];
     if (S.services.length === 1) { el.service.value = S.services[0].id; onService(); }
+    else if (pre && S.services.some((s) => s.id === pre)) { el.service.value = pre; onService(); }
   }
 
   function renderServices() {
