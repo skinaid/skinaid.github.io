@@ -737,3 +737,74 @@ article.post:hover .post__media img { transform: none; }
   .faq__a { grid-template-rows: 1fr !important; }
   .faq__a > div { visibility: visible !important; }
 }
+
+/* ---------- Онлайн цаг захиалга (UB Beauty вэб суваг — assets/js/booking.js) ---------- */
+.booking { min-width: 0; }
+.booking [hidden] { display: none !important; }
+.ub__body { display: grid; gap: 20px; }
+.ub__group { border: 0; margin: 0; padding: 0; min-width: 0; transition: opacity .2s; }
+.ub__group legend { padding: 0; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.ub__group[disabled] { opacity: .55; }
+.ub__hint { font-size: 13.5px; color: var(--muted); }
+.ub__hint:empty { display: none; }
+.ub__loading { animation: ubPulse 1.2s ease-in-out infinite; }
+@keyframes ubPulse { 50% { opacity: .45; } }
+.ub__opt { font-weight: 500; color: var(--muted); }
+/* Радио товч (эмч, өдөр, цаг): жинхэнэ input-ийг бүтэн талбайд ил биш тавьж гар, дэлгэц уншигч ажиллана */
+.ub__chip, .ub__day, .ub__slot { position: relative; display: block; }
+.ub__chip input, .ub__day input, .ub__slot input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.ub__chip input:disabled, .ub__day input:disabled, .ub__slot input:disabled { cursor: default; }
+.ub__chip input:focus-visible + span, .ub__day input:focus-visible + span, .ub__slot input:focus-visible + span { outline: 3px solid var(--purple); outline-offset: 2px; }
+.ub__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ub__chip span {
+  display: flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 8px 16px; border-radius: 14px;
+  border: 1.5px solid var(--purple-200); background: #fff; font-weight: 700; font-size: 14px; line-height: 1.3; color: var(--purple-900); transition: all .2s;
+}
+.ub__chip small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.ub__chip:hover span { border-color: var(--purple); }
+.ub__chip input:checked + span { background: var(--purple); border-color: var(--purple); color: #fff; }
+.ub__chip input:checked + span small { color: rgba(255, 255, 255, .85); }
+.ub__cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ub__cal-head span { font-weight: 700; font-size: 14px; color: var(--purple-900); font-variant-numeric: tabular-nums; }
+.ub__nav { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--purple-200); background: #fff; color: var(--purple-900); display: grid; place-items: center; font-size: 22px; line-height: 1; transition: all .2s; }
+.ub__nav:hover:not(:disabled) { background: var(--purple); border-color: var(--purple); color: #fff; }
+.ub__nav:disabled { opacity: .35; cursor: default; }
+.ub__cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.ub__wd { text-align: center; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.ub__day span {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 46px; border-radius: 12px;
+  border: 1.5px solid transparent; background: var(--purple-50); color: var(--purple-300); font-weight: 700; font-size: 15px; line-height: 1.1;
+  font-variant-numeric: tabular-nums; transition: all .2s;
+}
+.ub__day.has-slots span { background: #fff; border-color: var(--purple-200); color: var(--purple-900); }
+.ub__day.has-slots span::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--gold); margin-top: 3px; }
+.ub__day.has-slots:hover span { border-color: var(--purple); }
+.ub__day.is-today span { box-shadow: inset 0 0 0 1.5px var(--gold); }
+.ub__day input:checked + span { background: var(--purple); border-color: var(--purple); color: #fff; box-shadow: none; }
+.ub__day input:checked + span::after { background: #fff; }
+.ub__slots { display: grid; gap: 14px; }
+.ub__day-title { font-weight: 700; font-size: 14.5px; color: var(--purple-900); }
+.ub__part { display: block; margin-bottom: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.ub__slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.ub__slot span {
+  display: grid; place-items: center; min-height: 44px; border-radius: 12px; border: 1.5px solid var(--purple-200); background: #fff;
+  font-weight: 700; font-size: 15px; color: var(--purple-900); font-variant-numeric: tabular-nums; transition: all .2s;
+}
+.ub__slot:hover span { border-color: var(--purple); }
+.ub__slot input:checked + span { background: var(--purple); border-color: var(--purple); color: #fff; }
+.ub__summary { padding: 12px 16px; border-radius: 14px; background: var(--purple-50); border: 1px solid var(--purple-200); color: var(--purple-900); font-weight: 700; font-size: 14px; line-height: 1.45; }
+.ub__alert, .form__alert { padding: 14px 16px; border-radius: 14px; background: var(--gold-100); border: 1px solid var(--gold); color: var(--purple-950); font-size: 14.5px; line-height: 1.5; }
+.ub__alert .form__channels { margin-top: 10px; }
+.ub__slots .form__channels { margin-top: 2px; }
+.form__alert { margin: 12px 0 4px; }
+.form__retry { display: inline; padding: 0; color: var(--purple); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.ub.is-sent .ub__body { display: none; }
+.ub__receipt { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 14px 0; padding: 14px 16px; border-radius: 14px; background: #fff; border: 1px solid var(--purple-200); font-size: 14.5px; }
+.ub__receipt dt { color: var(--muted); font-weight: 600; }
+.ub__receipt dd { margin: 0; font-weight: 700; color: var(--purple-900); }
+.ub__addr { margin: 8px 0 14px; font-size: 13.5px; color: var(--ink-2); }
+@media (max-width: 640px) {
+  .ub__cal { gap: 4px; }
+  .ub__receipt { grid-template-columns: 1fr; gap: 2px; }
+  .ub__receipt dd { margin-bottom: 6px; }
+}
