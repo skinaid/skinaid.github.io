@@ -31,6 +31,7 @@ export function manageRedirects(text, published, toRegExp, { liveSlugs = new Set
       const own = /^\/emchilgee(?:\/([a-z0-9-]+))?$/.exec(p);
       if (own && (!own[1] || liveSlugs.has(own[1]))) { errors.push(`${pg.slug}: legacy "${raw}" нь сайтын одоогийн зам`); continue; }
       const source = encodeURI(p);
+      if (seen.get(source) === pg.slug) continue;            // нэг хуудсанд raw + encoded хос (эсвэл pipeline-тай давхар)
       if (seen.has(source)) { errors.push(`legacy "${raw}" давхардсан (${seen.get(source)}, ${pg.slug})`); continue; }
       seen.set(source, pg.slug);
       rules.push({ source, destination: '/emchilgee/' + pg.slug, permanent: true });

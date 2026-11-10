@@ -34,6 +34,12 @@ while read -r lref lsha rref rsha; do
       echo "$leak" | sed 's/^/          /' >&2
       status=1
     fi
+    # content/pages/ = зөвхөн эмч баталсан хуудас: build-тэй ижил шалгуураар (tools/leak-scan.mjs)
+    if [ -f "$top/tools/leak-scan.mjs" ] && ! node "$top/tools/leak-scan.mjs" "$c"; then
+      echo "pre-push: commit $(git -C "$top" rev-parse --short "$c")-ийн content/pages/-д ноорогийн/дотоод тэмдэглэл байна (дээрх)." >&2
+      echo "          Сүүлийн commit-д устгах нь хангалтгүй — тухайн commit-ийг засна уу (git rebase -i / commit --amend)." >&2
+      status=1
+    fi
   done
 
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/skinaid-prepush.XXXXXX") || exit 1

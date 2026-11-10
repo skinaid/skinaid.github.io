@@ -660,7 +660,7 @@ article.post:hover .post__media img { transform: none; }
 .page-head h1 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; font-size: clamp(28px, 4.4vw, 44px); color: var(--purple-900); }
 .page-head .lead { max-width: 720px; }
 
-.crumbs ol { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 14px; color: var(--muted); margin-bottom: 18px; }
+.crumbs ol { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 14px; color: var(--muted); margin: 0 0 18px; padding-left: 0; }
 .crumbs li { display: inline-flex; gap: 8px; align-items: center; }
 .crumbs li + li::before { content: "›"; color: var(--purple-300); }
 .crumbs a { color: var(--purple); }
@@ -678,9 +678,9 @@ article.post:hover .post__media img { transform: none; }
 
 .toc { margin: 28px 0 8px; padding: 18px 22px; border: 1px solid var(--line); border-radius: var(--r-sm); background: #fff; }
 .toc h2 { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--purple-900); margin-bottom: 8px; }
-.toc ol { list-style: decimal; padding-left: 20px; columns: 2; column-gap: 32px; font-size: 15px; }
+.toc ol { list-style: decimal; padding-left: 20px; margin: 0; columns: 2; column-gap: 32px; font-size: 15px; }
 .toc li { margin: 4px 0; break-inside: avoid; }
-.toc a { color: var(--purple); }
+.toc a { color: var(--purple); text-decoration: none; }
 .toc a:hover { text-decoration: underline; }
 
 .prose { font-size: 17px; line-height: 1.75; color: var(--ink-2); padding-bottom: clamp(40px, 6vw, 72px); }
@@ -695,7 +695,8 @@ article.post:hover .post__media img { transform: none; }
 .prose :where(a:not([class])) { color: var(--purple); text-decoration: underline; text-underline-offset: 2px; }
 .prose :where(strong) { color: var(--ink); }
 .prose .list, .prose .hub-cards { font-size: 16px; line-height: 1.55; color: var(--ink); }
-.prose .row h3, .prose .hub-card h3 { margin-top: 0; }
+.prose .row h3 { margin: 0; }
+.prose .hub-card h3 { margin-top: 0; }
 .prose .row p, .prose .hub-card p { margin-bottom: 0; }
 .prose .meta { color: var(--muted); font-size: 14px; }
 

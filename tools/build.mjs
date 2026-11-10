@@ -221,6 +221,7 @@ const infoFor = (pg) => {
   const r = results.get(pg.slug);
   return { hash: reviewHash(pg), words: r.words, markers: r.markers.length, issues: [...r.errors, ...r.warnings].map((m) => m.replace(/^[^:]+:\s*/, '')) };
 };
+const previewFailed = [];
 for (const pg of visible) {
   const rel = `emchilgee/${pg.slug}/index.html`;
   const doc = content.doctors[pg.reviewer];
@@ -238,9 +239,12 @@ for (const pg of visible) {
     }));
   } catch (e) {
     if (!PREVIEW) throw e;
-    // Дутуу ноорог бусад ноорогийн preview-г зогсоохгүй: асуудлыг хэвлээд энэ хуудсыг алгасна
+    // Дутуу ноорог бусад ноорогийн preview-г зогсоохгүй. Hub, нүүр, бусад хуудас энэ URL руу аль хэдийн
+    // холбогдсон тул хуудсыг хасахгүй — оронд нь алдааг харуулах түр хуудас бичнэ.
     results.get(pg.slug).errors.push(`${pg.slug}: preview үүсгэж чадсангүй — ${e.message}`);
-    pages.splice(pages.findIndex((p) => p.file === rel), 1);
+    previewFailed.push(pg.slug);
+    const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    files.set(rel, `<!doctype html>\n<html lang="mn"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>НООРОГ — алдаа</title></head>\n<body style="font:16px/1.5 system-ui;margin:40px"><h1>${esc(pg.slug)}: preview үүсгэж чадсангүй</h1><pre style="white-space:pre-wrap">${esc(e.message)}</pre><p><a href="/emchilgee">← Эмчилгээ</a></p></body></html>\n`);
   }
 }
 if (hubLive) {
@@ -270,7 +274,8 @@ if (PREVIEW) {
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, files.get(p.file) ?? read(p.file));
   }
-  console.log(`✓ Preview: ${visible.length} эмчилгээний хуудас .preview/-д бичигдлээ (нийтлэгдэхгүй). Харах: node tools/preview.mjs`);
+  const ok = visible.length - previewFailed.length;
+  console.log(`✓ Preview: ${ok} эмчилгээний хуудас .preview/-д бичигдлээ${previewFailed.length ? ` (${previewFailed.length} нь алдаатай — ${previewFailed.join(', ')}: алдааны хуудас)` : ''} (нийтлэгдэхгүй). Харах: node tools/preview.mjs`);
   for (const pg of visible) {
     const i = infoFor(pg);
     console.log(`  • /emchilgee/${pg.slug}  [${pg.status}${pg._draft ? ', ноорог' : ''}]  hash ${i.hash} · ${i.words} үг · эмчид асуух ${i.markers} · асуудал ${i.issues.length}`);

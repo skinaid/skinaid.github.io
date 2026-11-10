@@ -345,7 +345,7 @@ const PRICE_PAGE_BY_ID = {};   // үнэ нь эмчилгээний хуудс�
 const svcRow = (s) => {
   const tr = document.createElement('tr');
   tr.dataset.id = s.id; if (s.hidden) tr.classList.add('is-hidden');
-  const page = PAGE_BY_ID[s.id];
+  const page = PAGE_BY_ID[s.id] || PRICE_PAGE_BY_ID[s.id];
   tr.innerHTML = `
     <td class="c-cat"><select aria-label="Ангилал" data-k="c">${catOptions(s.c)}</select></td>
     <td class="c-name"><input type="text" aria-label="Нэр" data-k="n" maxlength="120" value="${esc(s.n)}">${page ? `<a class="svc-page" href="${esc(page)}" target="_blank" rel="noopener" title="Энэ үйлчилгээний үнэ эмчилгээний хуудсанд ч харагдана — үнэ өөрчилбөл repo-ийн catalog-defaults.js-ийг мөн шинэчилнэ">↗ ${esc(page)}</a>` : ''}</td>

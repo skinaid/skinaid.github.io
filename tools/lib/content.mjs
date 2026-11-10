@@ -23,8 +23,42 @@ export const FACT_KEYS = ['duration', 'anesthesia', 'sessions', 'downtime'];
 const HASHED = ['title', 'description', 'h1', 'name', 'summary', 'ctaTitle', 'facts', 'headings', 'sections', 'faq', 'sources', 'schema', 'claimsAllow', 'video'];
 const KINDS = ['procedure', 'therapy', 'diagnostic', 'cosmetic'];
 const PROCEDURE_TYPES = ['NoninvasiveProcedure', 'PercutaneousProcedure'];
-// content/pages/ (нийтэд нээлттэй repo) файлд ноорогийн/дотоод тэмдэглэл үлдэх ёсгүй
-const RAW_FORBIDDEN = /НООРОГ|content\/_work|content\/drafts|\[\[эмч:|өртөг|ашиг|нийлүүлэгч|margin|\bcost\b/i;
+// content/pages/ (нийтэд нээлттэй repo) файлд ноорогийн/дотоод тэмдэглэл үлдэх ёсгүй.
+// RAW_INTERNAL — файлын хаана ч; RAW_BUSINESS — зөвхөн тайлбар (// … , /* … */) дотор: хуудасны текстэд
+// «ашиглана», эх сурвалжийн нэрэнд «Cost-effectiveness» байж болно.
+const RAW_INTERNAL = /НООРОГ|content\/_work|content\/drafts|\[\[эмч:/i;
+// өртөг/өртгийн, ашиг/ашгаас/ашгийн (ашиглах — зөвшөөрнө), нийлүүлэгч; англи cost/supplier/profit/margin/markup
+const RAW_BUSINESS = /өрт(?:өг|г)|(?<!\p{L})аш(?:иг(?!л)|г)|нийлүүлэгч|\bmargins?\b|\bcost|\bsuppl(?:y|ier)|\bprofit|\bmarkup/iu;
+
+/** JS эх кодын тайлбарууд (string доторх // -ийг алгасна; regex literal-гүй өгөгдлийн файлд зориулсан) */
+export function commentsOf(src) {
+  let out = '', i = 0, q = null;
+  while (i < src.length) {
+    const c = src[i];
+    if (q) { if (c === '\\') i++; else if (c === q) q = null; i++; continue; }
+    if (c === '"' || c === "'" || c === '`') { q = c; i++; continue; }
+    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+      const block = src[i + 1] === '*';
+      const e = block ? src.indexOf('*/', i + 2) : src.indexOf('\n', i);
+      const end = e === -1 ? src.length : e + (block ? 2 : 0);
+      out += src.slice(i, end) + '\n';
+      i = end;
+      continue;
+    }
+    i++;
+  }
+  return out;
+}
+
+/** content/pages файлын эх кодонд үлдсэн дотоод тэмдэглэл (олдсон хэсгүүд) */
+export function rawLeaks(raw) {
+  const hits = [];
+  const a = RAW_INTERNAL.exec(raw || '');
+  if (a) hits.push(a[0]);
+  const b = RAW_BUSINESS.exec(commentsOf(raw || ''));
+  if (b) hits.push(b[0]);
+  return hits;
+}
 
 async function importAll(dir) {
   if (!existsSync(dir)) return [];
@@ -97,7 +131,14 @@ export function validatePage(page, ctx) {
   if (!SLUG_RE.test(page.slug || '')) E('slug зөвхөн латин жижиг үсэг, тоо, зураас');
   if (!['draft', 'published'].includes(page.status)) E(`status "${page.status}" — 'draft' эсвэл 'published'`);
   if (page._dir === 'content/pages' && page.status !== 'published') E('ноорог content/pages/-д байж болохгүй (repo нийтэд нээлттэй) — content/drafts/-д шилжүүлнэ үү');
-  if (page._dir === 'content/pages' && RAW_FORBIDDEN.test(page._raw || '')) E('файлд ноорогийн/дотоод тэмдэглэл (НООРОГ, content/_work, [[эмч:, өртөг …) үлдсэн — толгойн тайлбарыг устгана уу (repo нийтэд нээлттэй)');
+  if (page._dir === 'content/pages') {
+    const leaks = rawLeaks(page._raw);
+    if (leaks.length) E(`файлын эх кодод ноорогийн/дотоод тэмдэглэл үлдсэн («${leaks.join('», «')}») — толгойн тайлбар, [[эмч:]] тэмдгийг устгана уу (repo нийтэд нээлттэй)`);
+  } else if (page._raw) {
+    // Ноорог нийтлэхээс өмнө: тайлбар дахь өртөг/нийлүүлэгчийн тэмдэглэлийг эрт сануулна
+    const b = RAW_BUSINESS.exec(commentsOf(page._raw));
+    if (b) W(`тайлбарт дотоод бизнесийн тэмдэглэл («${b[0]}») байна — content/pages/-д шилжүүлэхийн өмнө устгана`);
+  }
   const sch = page.schema || {};
   if (sch.kind !== undefined && !KINDS.includes(sch.kind)) E(`schema.kind "${sch.kind}" — ${KINDS.join(' | ')}`);
   if (sch.procedureType != null && !PROCEDURE_TYPES.includes(sch.procedureType)) E(`schema.procedureType "${sch.procedureType}" — ${PROCEDURE_TYPES.join(' | ')}`);
@@ -146,7 +187,7 @@ export function validatePage(page, ctx) {
     for (const k of ['summary', 'h1', 'name']) if (typeof page[k] === 'string') inline(page[k], { ...c, where: `${f} ${k}` });
     for (const k of FACT_KEYS) if (page.facts && typeof page.facts[k] === 'string') inline(page.facts[k], { ...c, where: `${f} facts.${k}` });
   } catch (e) { E(e.message); }
-  for (const k of ['title', 'description']) if (/\[\[|\*\*|\]\(/.test(page[k] || '')) E(`${k}-д markup/тэмдэг байж болохгүй`);
+  for (const k of ['title', 'description', 'ctaTitle']) if (/\[\[|\*\*|\]\(/.test(page[k] || '')) E(`${k}-д markup/тэмдэг байж болохгүй`);
 
   if (/₮\s*\d|\d[\d,.]*\s*₮|\d[\d,.]*\s*(?:мянга|сая)?\S*\s*төгрөг/u.test(text)) E('текстэд үнэ бичихгүй — үнэ catalog-defaults.js-ээс автоматаар орно');
   const claims = findClaims(text, page.claimsAllow || []);

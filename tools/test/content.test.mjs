@@ -58,12 +58,20 @@ test('claims: catches banned phrases in Mongolian word forms', () => {
   assert.deepEqual(labels('Үр дүнгийн баталгаа өгнө'), ['баталгаа өгнө']);
   assert.deepEqual(labels('гаж нөлөө гарахгүй'), ['гаж нөлөөгүй']);
   assert.deepEqual(labels('100 хувь арилна'), ['100%']);
+  assert.deepEqual(labels('100 хувийн үр дүн'), ['100%']);
+  assert.deepEqual(labels('Аюулгүй байдалтай эмчилгээ'), ['аюулгүй']);
+  assert.deepEqual(labels('аюулгүй байдал нь өндөр'), ['аюулгүй байдал өндөр']);
+  assert.deepEqual(labels('Аюулгүй байдал сайн'), ['аюулгүй байдал өндөр']);
+  for (const t of ['аюулгүй байдал нь маш өндөр', 'аюулгүй байдал маш сайн', 'аюулгүй байдал нь илүү өндөр', 'Давуу тал: өндөр аюулгүй байдал',
+    'аюулгүй байдлыг бүрэн хангасан', 'аюулгүй байдал хангагдсан', 'аюулгүй байдлаар хангагдсан']) assert.deepEqual(labels(t), ['аюулгүй байдал өндөр'], t);
 });
 
 test('claims: allows legitimate uses', () => {
   assert.deepEqual(findClaims('Эмч баталгаажуулна. Аюулгүй байдлын зөвлөмж. Аюулгүй байдал чухал.'), []);
   assert.deepEqual(findClaims('Хамгийн түгээмэл хэлбэр нь', ['хамгийн түгээмэл']), []);
   assert.deepEqual(findClaims('хамгийнхаа'), []);   // өөр үг (үсгээр үргэлжилсэн)
+  for (const t of ['Жирэмсэн үед аюулгүй байдал нь бүрэн тогтоогдоогүй', 'аюулгүй байдлыг хангахын тулд', 'аюулгүй байдалд анхаарна', 'аюулгүй байдлын үүднээс'])
+    assert.deepEqual(findClaims(t), [], t);
 });
 
 test('reviewHash: stable under key order, ignores price/links', () => {
@@ -159,10 +167,30 @@ test('validatePage: review.by must match reviewer; ctaTitle is hashed; prices in
   assert.ok(validatePage(swapped, vctx(swapped, docs)).errors.some((e) => /review\.by/.test(e)));
   const cta = { ...ok, ctaTitle: 'Шинэ гарчиг' };
   assert.ok(validatePage(cta, vctx(cta, docs)).errors.some((e) => /review\.hash/.test(e)));
+  const ctaMd = samplePage({ ctaTitle: 'Үзлэгт **үнэгүй** бүртгүүлэх' });
+  assert.ok(validatePage(ctaMd, vctx(ctaMd)).errors.some((e) => /ctaTitle-д markup/.test(e)));
   const priced = samplePage({ title: 'Туршилт 275,000₮ | SkinAid' });
   assert.ok(validatePage(priced, vctx(priced)).errors.some((e) => /үнэ бичихгүй/.test(e)));
   const raw = { ...ok, _raw: '// НООРОГ — эмч хянаагүй\nexport default {}' };
   assert.ok(validatePage(raw, vctx(raw, docs)).errors.some((e) => /НООРОГ/.test(e)));
+});
+
+test('rawLeaks: internal tokens anywhere, business words only in comments', async () => {
+  const { rawLeaks, commentsOf } = await import('../lib/content.mjs');
+  assert.deepEqual(rawLeaks('export default { a: "Лазер ашиглана", s: "Cost-effectiveness of lasers", u: "https://x.org/a" };'), []);
+  assert.equal(commentsOf('const u = "https://x.org/a"; // тайлбар\n/* блок */'), '// тайлбар\n/* блок */\n');
+  assert.deepEqual(rawLeaks('// өртөг 50k\nexport default {}'), ['өртөг']);
+  assert.deepEqual(rawLeaks('export default { u: "https://x.org/a" }; // ашиг 30%'), ['ашиг']);
+  assert.deepEqual(rawLeaks('/* supplier cost */ export default {}'), ['supplier']);
+  assert.deepEqual(rawLeaks('export default { s: "[[эмч: хэд хоног?]]" }'), ['[[эмч:']);
+  for (const t of ['// цэвэр ашгаас 30%', '// ашгийг хуваана', '// өртгийн дүн', '// supplier: Foo LLC', '// profit 20%', '// cost-price 12000'])
+    assert.equal(rawLeaks(t + '\nexport default {}').length, 1, t);
+  for (const t of ['// лазер ашигласан', '// ашиглах заавар', '// нарны туяанд өртөх', '// хашгирах']) assert.deepEqual(rawLeaks(t + '\nexport default {}'), [], t);
+  assert.deepEqual(rawLeaks('// Ноорог — эмч хянаагүй\nexport default {}'), ['Ноорог']);
+  const p = samplePage({ _raw: '// өртөг 50k\nexport default {}' });
+  const r = validatePage(p, vctx(p));
+  assert.deepEqual(r.errors, []);
+  assert.ok(r.warnings.some((w) => /өртөг/.test(w)));
 });
 
 test('manageRedirects: pre-encoded legacy is not double-encoded; old slug allowed; dropped rules warned', async () => {
@@ -176,6 +204,9 @@ test('manageRedirects: pre-encoded legacy is not double-encoded; old slug allowe
   assert.ok(!sources.some((s) => s.includes('%25')));
   assert.ok(sources.includes('/emchilgee/co2-laser'));
   assert.ok(r.warnings.some((w) => /emchilgee\/old/.test(w)));
-  const bad = manageRedirects(base, [{ slug: 'co2-lazer', legacy: ['/service-page/лазер', encodeURI('/service-page/лазер')] }], sourceToRegExp);
+  const same = manageRedirects(base, [{ slug: 'co2-lazer', legacy: ['/service-page/лазер', encodeURI('/service-page/лазер')] }], sourceToRegExp);
+  assert.deepEqual(same.errors, []);
+  assert.equal(same.rules.length, 1);
+  const bad = manageRedirects(base, [{ slug: 'co2-lazer', legacy: ['/service-page/лазер'] }, { slug: 'batga', legacy: [encodeURI('/service-page/лазер')] }], sourceToRegExp);
   assert.ok(bad.errors.some((e) => /давхардсан/.test(e)));
 });
