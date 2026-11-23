@@ -312,7 +312,7 @@
     const ok = $('.form__ok', form);
     const submitBtn = $('button[type="submit"]', form);
     const bookStatus = $('#bookStatus');
-    const nameEl = $('#f-name', form), phoneEl = $('#f-phone', form);
+    const lastNameEl = $('#f-last-name', form), nameEl = $('#f-name', form), phoneEl = $('#f-phone', form);
     let submitLabel = submitBtn ? submitBtn.textContent : '';
     let busy = false;
 
@@ -345,6 +345,7 @@
     };
     document.addEventListener('skinaid:backend-failed', manualMode);
     [nameEl, phoneEl].forEach(el => { if (el) el.addEventListener('input', () => el.setCustomValidity('')); });
+    lastNameEl?.addEventListener('input', () => nameEl?.setCustomValidity(''));
     const withTimeout = (p, ms) => new Promise((res, rej) => {
       const t = setTimeout(() => rej(new Error('timeout')), ms);
       Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, err => { clearTimeout(t); rej(err); });
@@ -414,8 +415,9 @@
       const d = Object.fromEntries(new FormData(form).entries());
       // Backend-тэй ижил хэвшүүлсэн утгаар шалгана (зөвхөн зай, 1 үсэг гэх мэт) — fallback биш талбарын алдаа харуулна
       const nameN = String(d.name || '').replace(/\s+/g, ' ').trim();
+      d.name = [String(d.last_name || '').replace(/\s+/g, ' ').trim(), nameN].filter(Boolean).join(' ');
       const phoneDigits = String(d.phone || '').replace(/[^0-9]/g, '');
-      if (nameEl) nameEl.setCustomValidity(nameN.length < 2 ? 'Нэрээ дор хаяж 2 тэмдэгтээр бичнэ үү' : '');
+      if (nameEl) nameEl.setCustomValidity(nameN.length < 2 ? 'Нэрээ дор хаяж 2 тэмдэгтээр бичнэ үү' : d.name.length > 80 ? 'Овог, нэр нийлээд 80 тэмдэгтээс ихгүй байна' : '');
       if (phoneEl) phoneEl.setCustomValidity(phoneDigits.length < 8 ? 'Утасны дугаар дор хаяж 8 оронтой байна' : '');
       if (!form.reportValidity()) return;
       const text = buildText(d);

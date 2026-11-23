@@ -118,7 +118,7 @@ function setup(form) {
     dayGroup: $('ub-day-group'), range: $('ub-range'), days: $('ub-days'),
     prev: form.querySelector('[data-ub-week="-1"]'), next: form.querySelector('[data-ub-week="1"]'),
     slotGroup: $('ub-slot-group'), slots: $('ub-slots'),
-    name: $('ub-name'), phone: $('ub-phone'), note: $('ub-note'), hp: $('ub-website'),
+    lastName: $('ub-last-name'), name: $('ub-name'), phone: $('ub-phone'), note: $('ub-note'), hp: $('ub-website'),
     summary: $('ub-summary'), alert: $('ub-alert'), status: $('ub-status'), done: $('ub-done'),
     submit: form.querySelector('button[type="submit"]'), intro: form.querySelector('[data-ub-intro]'),
   };
@@ -134,7 +134,7 @@ function setup(form) {
   const prepayText = (s) => {
     const p = S.channel.prepay || {};
     const amount = p.amount == null ? (s ? s.price : 0) : Math.min(p.amount, s ? s.price : p.amount);
-    return `${p.amount == null ? 'Төлбөр' : 'Урьдчилгаа'}: ${money(amount)} — QPay-ээр төлснөөр цаг баталгаажна`;
+    return `QPay-ээр төлөх дүн: ${money(amount)}`;
   };
   const horizon = () => { const h = Number(S.channel.horizon_days); return Number.isFinite(h) && h >= 1 ? Math.min(h, 90) : 30; };
   const lastDay = () => addDays(ubToday(), horizon());
@@ -187,6 +187,7 @@ function setup(form) {
   // Онлайн маягтад бичсэнийг хүсэлтийн маягт руу шилжүүлнэ (хоосон талбарт л)
   function prefill(bf) {
     const put = (sel, v) => { const f = bf.querySelector(sel); if (f && v && !f.value) f.value = v; };
+    put('#f-last-name', el.lastName.value.trim());
     put('#f-name', el.name.value.trim());
     put('#f-phone', el.phone.value.trim());
     const s = svc();
@@ -276,9 +277,9 @@ function setup(form) {
     S.doctor = 'any';
     const named = S.doctors.filter((d) => typeof d.name === 'string' && d.name.trim());
     if (named.length < S.doctors.length) return;   // нэр нуусан суваг: «аль ч эмч» автоматаар
-    const chip = (value, title, sub, checked) => `<label class="ub__chip"><input type="radio" name="ub-doctor" value="${esc(value)}"${checked ? ' checked' : ''}><span>${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`;
-    el.docs.innerHTML = chip('any', 'Аль нь ч болно', 'Хамгийн олон сул цаг', true)
-      + named.map((d) => chip(d.id, d.name.trim(), typeof d.title === 'string' ? d.title.trim() : '', false)).join('');
+    const chip = (value, title, sub, checked) => `<label class="ub__chip${value === 'any' ? ' ub__chip--auto' : ''}"><input type="radio" name="ub-doctor" value="${esc(value)}"${checked ? ' checked' : ''}><span>${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`;
+    el.docs.innerHTML = chip('any', 'Сул цагтай мэргэжилтэн', 'Бүх мэргэжилтний сул цагийг нэг дор харна', true)
+      + `<div class="ub__providers">${named.map((d) => chip(d.id, d.name.trim(), typeof d.title === 'string' ? d.title.trim() : '', false)).join('')}</div>`;
     el.docGroup.hidden = false;
   }
 
@@ -427,7 +428,7 @@ function setup(form) {
     S.serviceId = el.service.value;
     clearAlert();
     const s = svc();
-    el.info.textContent = s ? `Үнэ: ${priceText(s)} · Үргэлжлэх хугацаа: ${durText(s.duration_min)}${prepayMode() ? ' · ' + prepayText(s) : ''}` : '';
+    el.info.textContent = s && prepayMode() ? prepayText(s) : '';
     S.week = monday(ubToday());
     if (!s) { S.avail = null; S.slot = null; S.date = ''; renderCalendar(); renderSlots(); renderSummary(); return; }
     loadWeek(true);
@@ -458,6 +459,7 @@ function setup(form) {
     if (e.target.closest('[data-ub-new]')) { startOver(); }
   });
   [el.name, el.phone, el.note].forEach((f) => f.addEventListener('input', () => f.setCustomValidity('')));
+  el.lastName.addEventListener('input', () => el.name.setCustomValidity(''));
 
   /* ---------- Захиалга илгээх ---------- */
   function setBusy(on) {
@@ -489,10 +491,12 @@ function setup(form) {
       if (first) first.focus(); else el.service.focus();
       return;
     }
-    const name = el.name.value.replace(/\s+/g, ' ').trim();
+    const givenName = el.name.value.replace(/\s+/g, ' ').trim();
+    const lastName = el.lastName.value.replace(/\s+/g, ' ').trim();
+    const name = [lastName, givenName].filter(Boolean).join(' ');
     const phone = normPhone(el.phone.value);
     const note = el.note.value.trim();
-    el.name.setCustomValidity(name.length < 2 ? 'Нэрээ бичнэ үү' : '');
+    el.name.setCustomValidity(givenName.length < 2 ? 'Нэрээ бичнэ үү' : name.length > 100 ? 'Овог, нэр нийлээд 100 тэмдэгтээс ихгүй байна' : '');
     el.phone.setCustomValidity(/^[5-9]\d{7}$/.test(phone) ? '' : 'Гар утасны дугаараа 8 оронтойгоор бичнэ үү (жишээ нь 8800-0000)');
     el.note.setCustomValidity(note.length > NOTE_MAX ? `Нэмэлт мэдээлэл ${NOTE_MAX} тэмдэгтээс ихгүй байна` : '');
     if (!form.reportValidity()) return;
@@ -633,7 +637,7 @@ function setup(form) {
       : '';
     const banks = links.length ? `<div class="ub__banks" role="list">${links.map((d) => `<a role="listitem" class="ub__bank" href="${esc(d.link)}">${d.logo && /^https:\/\//.test(d.logo) ? `<img src="${esc(d.logo)}" alt="" loading="lazy">` : ''}<span>${esc(d.description || d.name)}</span></a>`).join('')}</div>` : '';
     el.done.innerHTML = `<div class="ub__pay">
-      <strong>Төлбөрөө ${mmss(until - Date.now())} минутын дотор төлнө үү — цаг тань хадгалагдаж байна.</strong>
+      <strong>Цаг тань хадгалагдаж байна. Хугацаа дуусахаас өмнө төлнө үү.</strong>
       <p class="ub__pay-amount">Төлөх дүн: <b>${money(pay.amount)}</b> <span class="ub__countdown" data-ub-countdown>${mmss(until - Date.now())}</span></p>
       ${html}
       <div class="ub__pay-ways">
