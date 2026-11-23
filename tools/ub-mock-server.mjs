@@ -7,7 +7,10 @@
 //   болих:                                   localStorage.removeItem('skinaid:ub-api')
 //
 // Хариуны хэлбэр = UB Beauty репо docs/API-WEB-CHANNEL.md, src/app/api/v1/web/*/route.ts.
-// Горим солих (restart-гүй): http://127.0.0.1:8787/__mock?mode=request|auto_confirm&paused=0|1&hide_names=0|1&delay=300
+// Горим солих (restart-гүй): http://127.0.0.1:8787/__mock?mode=request|auto_confirm|prepay&paused=0|1&hide_names=0|1&delay=300
+//   prepay (төлбөрөөр баталгаажих, QPay): &prepay_amount=20000 (0 = бүтэн үнэ) &hold_sec=900 (hold хугацаа — туршилтад 30)
+//   төлбөр төлөгдсөн болгох: /__mock?pay=<booking_id>;  pending-д хүчээр дуусгах: /__mock?expire=<booking_id>
+//   99000007 → захиалга үүснэ, 2 дахь «Төлбөр шалгах»-д төлөгдсөн болно
 // Тусгай утасны дугаар (POST /bookings):
 //   99000001 → 409 SLOT_TAKEN (тэр цагийг эзэлсэн болгоно)     99000004 → 500 INTERNAL (үргэлж)
 //   99000002 → 429 RATE_LIMITED                                99000005 → 429 PHONE_LIMIT
@@ -17,7 +20,7 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
 const PORT = Number(process.env.PORT || 8787);
-const state = { mode: 'auto_confirm', paused: false, hideNames: false, delay: 300 };
+const state = { mode: 'auto_confirm', paused: false, hideNames: false, delay: 300, prepayAmount: 20000, holdSec: 900 };
 const HORIZON = 30, MIN_NOTICE = 60;
 
 const services = [
@@ -33,7 +36,7 @@ const doctors = [
   { id: '7a2b3c40-0000-4000-8000-000000000002', name: 'Д.Энхжин', title: 'Гоо засалч', role: 'cosmetologist', days: [1, 2, 3, 4, 5], from: 11, to: 19 },
   { id: '7a2b3c40-0000-4000-8000-000000000003', name: 'Г.Тэмүүлэн', title: 'Арьсны эмч', days: [0, 2, 4], from: 14, to: 19 },
 ];
-const bookings = [];          // { id, doctor_id, start, end, status }
+const bookings = [];          // { id, doctor_id, start, end, status, created, pay: { amount, status, checks, phone } | null, view }
 const idem = new Map();       // Idempotency-Key → { fp, booking }
 
 const ubToday = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
@@ -42,6 +45,31 @@ const addDays = (d, n) => new Date((dayNum(d) + n) * 86400000).toISOString().sli
 const weekday = (d) => (new Date(dayNum(d) * 86400000).getUTCDay() + 6) % 7;
 const utcIso = (d, h, m) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10), h - 8, m)).toISOString();
 const label = (iso) => new Date(Date.parse(iso) + 8 * 3600000).toISOString().slice(11, 16);
+
+// Цаг эзэлж буй захиалга: confirmed / pending_confirmation, эсвэл hold дотор байгаа pending_payment (UB Beauty getSlots-тэй ижил)
+const holdExpired = (b) => b.status === 'pending_payment' && Date.now() - b.created >= state.holdSec * 1000;
+const occupies = (b) => b.status === 'confirmed' || b.status === 'pending_confirmation' || (b.status === 'pending_payment' && !holdExpired(b));
+// QPay-ийн нэхэмжлэлийн хариуг дууриасан payment объект (docs/API-WEB-CHANNEL.md «Төлбөрөөр баталгаажих»)
+const QR_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAHklEQVR4nGP4jwQYGBj+MzAwQBAyG0kOIgRRh2YWAC4dC+gVsY+UAAAAAElFTkSuQmCC';
+function paymentView(b) {
+  if (!b.pay) return null;
+  const expired = holdExpired(b);
+  if (expired && b.status === 'pending_payment') { b.status = 'cancelled'; b.pay.status = 'expired'; }
+  const status = b.status === 'confirmed' ? 'paid' : b.pay.status === 'expired' ? 'expired' : b.status === 'cancelled' ? 'cancelled' : 'pending';
+  const links = status === 'pending';
+  return {
+    provider: 'qpay', status, amount: b.pay.amount, hold_expires_at: new Date(b.created + state.holdSec * 1000).toISOString(),
+    qr_text: links ? '0002010102121531279404962794049600022310027138152045734530349654031005802MN5904TEST6011Ulaanbaatar' : null,
+    qr_image: links ? QR_PNG : null,
+    short_url: links ? 'https://s.qpay.mn/mock' : null,
+    deeplinks: links ? [
+      { name: 'Khan bank', description: 'Хаан банк', logo: 'https://qpay.mn/q/logo/khanbank.png', link: 'khanbank://q?qPay_QRcode=mock' },
+      { name: 'Social Pay', description: 'Social Pay', logo: 'https://qpay.mn/q/logo/socialpay.png', link: 'socialpay-payment://q?qPay_QRcode=mock' },
+      { name: 'Golomt bank', description: 'Голомт банк', logo: 'https://qpay.mn/q/logo/golomt.png', link: 'golomtbank://q?qPay_QRcode=mock' },
+    ] : [],
+  };
+}
+const bookingView = (b) => ({ ...b.view, status: b.status, created: false, sms_sent: false, payment: paymentView(b) });
 
 function slotsFor(service, doctor, date) {
   if (!doctor.days.includes(weekday(date))) return [];
@@ -53,7 +81,7 @@ function slotsFor(service, doctor, date) {
     if (s < now + MIN_NOTICE * 60000 || s > now + HORIZON * 86400000) continue;
     // Хуурамч «завгүй» цаг: өдөр, эмчээс хамаарсан тогтмол хэв (жагсаалт хоосон биш ч бодит харагдана)
     if ((dayNum(date) + t / 30 + doctor.from) % 5 === 0) continue;
-    if (bookings.some((b) => b.doctor_id === doctor.id && Date.parse(b.start) < e && Date.parse(b.end) > s)) continue;
+    if (bookings.some((b) => b.doctor_id === doctor.id && occupies(b) && Date.parse(b.start) < e && Date.parse(b.end) > s)) continue;
     out.push({ start, end: new Date(e).toISOString(), label: label(start) });
   }
   return out;
@@ -83,7 +111,12 @@ const server = createServer(async (req, res) => {
     if (q.has('mode')) state.mode = q.get('mode') === 'request' ? 'request' : 'auto_confirm';
     if (q.has('paused')) state.paused = q.get('paused') === '1';
     if (q.has('hide_names')) state.hideNames = q.get('hide_names') === '1';
+    if (q.has('mode')) state.mode = q.get('mode') === 'request' ? 'request' : q.get('mode') === 'prepay' ? 'prepay' : 'auto_confirm';
     if (q.has('delay')) state.delay = Math.max(0, Number(q.get('delay')) || 0);
+    if (q.has('prepay_amount')) state.prepayAmount = Math.max(0, Number(q.get('prepay_amount')) || 0);
+    if (q.has('hold_sec')) state.holdSec = Math.max(5, Number(q.get('hold_sec')) || 900);
+    if (q.has('pay')) { const b = bookings.find((x) => x.id === q.get('pay')); if (b && b.pay && b.status === 'pending_payment') { b.pay.status = 'paid'; b.status = 'confirmed'; } }
+    if (q.has('expire')) { const b = bookings.find((x) => x.id === q.get('expire')); if (b && b.pay) b.created = Date.now() - state.holdSec * 1000 - 1000; }
     if (q.has('reset')) { bookings.length = 0; idem.clear(); }
     return send(res, 200, { state, bookings }, origin);
   }
@@ -98,7 +131,11 @@ const server = createServer(async (req, res) => {
   if (req.method === 'GET' && path === '/clinic') {
     return send(res, 200, {
       clinic: { id: 'c0000000-0000-4000-8000-000000000001', name: 'SkinAid (mock)', slug: 'skinaid', phone: '76000505', address: null, district: null, brand_color: '#654186', logo_url: null },
-      channel: { booking_mode: state.mode, new_booking_status: state.mode === 'request' ? 'pending_confirmation' : 'confirmed', horizon_days: HORIZON, min_notice_min: MIN_NOTICE, show_doctor_names: !state.hideNames, timezone: 'Asia/Ulaanbaatar' },
+      channel: {
+        booking_mode: state.mode, new_booking_status: state.mode === 'request' ? 'pending_confirmation' : state.mode === 'prepay' ? 'pending_payment' : 'confirmed',
+        horizon_days: HORIZON, min_notice_min: MIN_NOTICE, show_doctor_names: !state.hideNames, timezone: 'Asia/Ulaanbaatar',
+        prepay: state.mode === 'prepay' ? { amount: state.prepayAmount || null, hold_min: Math.ceil(state.holdSec / 60), provider: 'qpay', ready: true } : null,
+      },
     }, origin);
   }
   if (req.method === 'GET' && path === '/services') return send(res, 200, { services }, origin);
@@ -130,7 +167,8 @@ const server = createServer(async (req, res) => {
     const prev = idem.get(ik);
     if (prev) {
       if (prev.fp !== fp) return fail(res, origin, 409, 'IDEMPOTENCY_MISMATCH');
-      return send(res, 200, { booking: { ...prev.booking, created: false, sms_sent: false } }, origin);
+      const row = bookings.find((x) => x.id === prev.booking.id);
+      return send(res, 200, { booking: row ? bookingView(row) : { ...prev.booking, created: false, sms_sent: false } }, origin);
     }
     if (phone === '99000002') return fail(res, origin, 429, 'RATE_LIMITED', null, { 'Retry-After': '60' });
     if (phone === '99000004') return fail(res, origin, 500, 'INTERNAL');
@@ -153,17 +191,37 @@ const server = createServer(async (req, res) => {
       if (phone === '99000001') bookings.push({ id: randomUUID(), doctor_id: doctor.id, start: startISO, end: new Date(start.getTime() + service.duration_min * 60000).toISOString(), status: 'confirmed' });
       return fail(res, origin, 409, 'SLOT_TAKEN');
     }
+    const prepay = state.mode === 'prepay';
     const booking = {
-      id: randomUUID(), status: state.mode === 'request' ? 'pending_confirmation' : 'confirmed', start: startISO,
+      id: randomUUID(), status: state.mode === 'request' ? 'pending_confirmation' : prepay ? 'pending_payment' : 'confirmed', start: startISO,
       end: new Date(start.getTime() + service.duration_min * 60000).toISOString(), label: label(startISO), date,
       service: { id: service.id, name: service.name, duration_min: service.duration_min, price: service.price },
-      doctor: { id: doctor.id, name: state.hideNames ? null : doctor.name }, created: true, sms_sent: false,
+      doctor: { id: doctor.id, name: state.hideNames ? null : doctor.name }, created: true, sms_sent: false, payment: null,
     };
-    bookings.push({ id: booking.id, doctor_id: doctor.id, start: booking.start, end: booking.end, status: booking.status });
+    const row = {
+      id: booking.id, doctor_id: doctor.id, start: booking.start, end: booking.end, status: booking.status, created: Date.now(), view: booking,
+      pay: prepay ? { amount: state.prepayAmount ? Math.min(state.prepayAmount, service.price) : service.price, status: 'pending', checks: 0, phone } : null,
+    };
+    bookings.push(row);
+    if (prepay) booking.payment = paymentView(row);
     idem.set(ik, { fp, booking });
     console.log(`   → захиалга ${booking.status}: ${date} ${booking.label}, ${service.name}, ${doctor.name}, ${name} ${phone}`);
     if (phone === '99000003' && !idem.get(ik).dropped) { idem.get(ik).dropped = true; req.socket.destroy(); return; }
     return send(res, 201, { booking }, origin);
+  }
+  const m = path.match(/^\/bookings\/([0-9a-f-]{36})(\/payment\/check)?$/);
+  if (m) {
+    const b = bookings.find((x) => x.id === m[1]);
+    if (!b) return fail(res, origin, 404, 'NOT_FOUND');
+    if (m[2] && req.method === 'POST') {
+      if (b.pay && b.status === 'pending_payment' && !holdExpired(b)) {
+        b.pay.checks += 1;
+        if (b.pay.phone === '99000007' && b.pay.checks >= 2) { b.pay.status = 'paid'; b.status = 'confirmed'; }
+      }
+      console.log(`   → төлбөр шалгав: ${b.id.slice(0, 8)} ${b.status}`);
+      return send(res, 200, { booking: bookingView(b) }, origin);
+    }
+    if (req.method === 'GET') return send(res, 200, { booking: bookingView(b) }, origin);
   }
   return fail(res, origin, 404, 'NOT_FOUND');
 });

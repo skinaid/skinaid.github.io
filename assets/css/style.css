@@ -803,6 +803,24 @@ article.post:hover .post__media img { transform: none; }
 .ub__receipt dt { color: var(--muted); font-weight: 600; }
 .ub__receipt dd { margin: 0; font-weight: 700; color: var(--purple-900); }
 .ub__addr { margin: 8px 0 14px; font-size: 13.5px; color: var(--ink-2); }
+/* Төлбөр (prepay, QPay): QR, банкны аппын холбоос, тоолуур */
+.ub__pay { display: grid; gap: 12px; }
+.ub__pay-amount { font-size: 15px; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ub__pay-amount b { font-size: 20px; color: var(--purple-900); }
+.ub__countdown { margin-left: auto; padding: 4px 12px; border-radius: 999px; background: var(--gold-100); border: 1px solid var(--gold); color: var(--purple-950); font-weight: 700; font-variant-numeric: tabular-nums; }
+.ub__pay-ways { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 640px) { .ub__pay-ways { grid-template-columns: auto 1fr; } }
+.ub__qr { display: grid; gap: 8px; justify-items: center; padding: 12px; border-radius: 14px; background: #fff; border: 1px solid var(--purple-200); }
+.ub__qr span { font-size: 12.5px; color: var(--muted); text-align: center; max-width: 220px; }
+.ub__qr-img { width: 220px; height: 220px; image-rendering: pixelated; border-radius: 8px; }
+.ub__pay-links { display: grid; gap: 10px; align-content: start; }
+.ub__banks { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.ub__bank { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px; border-radius: 12px; border: 1.5px solid var(--purple-200); background: #fff; color: var(--purple-900); font-weight: 700; font-size: 13.5px; text-decoration: none; }
+.ub__bank:hover { border-color: var(--purple); }
+.ub__bank img { width: 28px; height: 28px; border-radius: 6px; object-fit: contain; flex: none; }
+.ub__bank-details summary { cursor: pointer; font-size: 13.5px; font-weight: 700; color: var(--purple); }
+.ub__bank-details .ub__banks { margin-top: 8px; }
+.ub__paystatus { font-size: 13.5px; color: var(--ink-2); }
 @media (max-width: 640px) {
   .ub__cal { gap: 4px; }
   .ub__receipt { grid-template-columns: 1fr; gap: 2px; }

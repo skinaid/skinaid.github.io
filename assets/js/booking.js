@@ -10,6 +10,10 @@
      (сервер давхар захиалга үүсгэхгүй, анхны захиалгаа буцаана).
    - API ашиглах боломжгүй (сүлжээ, 5xx, суваг зогссон, түлхүүр хоосон…) бол #bookForm (Firestore хүсэлт,
      main.js) нөөц болж гарна. Алдааны дотоод мэдээллийг үйлчлүүлэгчид харуулахгүй — кодоор нь өөрсдийн текст.
+   - «Төлбөрөөр баталгаажих» горим (OS → Вэб суваг → prepay, UB Beauty 0202): захиалга pending_payment-ээр үүсч
+     15 минут цаг хадгалагдана; хариуны `payment` (QR зураг, банкны аппын холбоос, богино холбоос)-ийг харуулж,
+     GET /bookings/{id}-ээр (4 сек) төлөвийг, POST /bookings/{id}/payment/check-ээр (товч + 30 сек тутам) QPay-г
+     шалгана; confirmed болмогц «баталгаажлаа». Хуудас дахин ачаалагдвал sessionStorage-оос үргэлжилнэ.
    Локал хөгжүүлэлт: README → «Онлайн цаг захиалга» (tools/ub-mock-server.mjs).
    ========================================================================== */
 import { API_BASE, PUBLISHABLE_KEY } from './ubbeauty-config.js?v=8eb0f74a';
@@ -29,6 +33,9 @@ function setup(form) {
   const WD_SHORT = ['Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя', 'Ня'];
   const WD_LONG = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
   const NON_PROVIDER = new Set(['receptionist', 'manager']);
+  const PAY_POLL_MS = 4000;        // GET /bookings/{id} — зөвхөн DB (QPay руу хандахгүй)
+  const PAY_CHECK_MS = 30000;      // POST …/payment/check — QPay-ээс бодит шалгалт (захиалга бүрт ≤ 6/мин)
+  const PAY_KEY = 'skinaid:ub-pay';
   const ROLE_ORDER = ['doctor', 'cosmetologist', 'massage', 'nurse'];
 
   let apiBase = API_BASE;
@@ -74,7 +81,7 @@ function setup(form) {
     constructor(code, status, field, retryAfter) { super(code); this.code = code; this.status = status; this.field = field; this.retryAfter = retryAfter; }
   }
   // Захиалах боломжгүй (нөөц маягт руу шилжинэ): сүлжээ/CORS, серверийн алдаа, суваг зогссон, түлхүүр хүчингүй
-  const UNAVAILABLE = new Set(['NETWORK', 'INTERNAL', 'MIGRATION_PENDING', 'CHANNEL_PAUSED', 'CLINIC_UNAVAILABLE', 'INVALID_KEY', 'ORIGIN_NOT_ALLOWED']);
+  const UNAVAILABLE = new Set(['NETWORK', 'INTERNAL', 'MIGRATION_PENDING', 'CHANNEL_PAUSED', 'CLINIC_UNAVAILABLE', 'INVALID_KEY', 'ORIGIN_NOT_ALLOWED', 'PAYMENT_UNAVAILABLE']);
   // Түр зуурын: захиалга бүртгэгдсэн эсэх тодорхойгүй → ИЖИЛ Idempotency-Key-ээр дахин оролдоно
   const TRANSIENT = new Set(['NETWORK', 'INTERNAL', 'MIGRATION_PENDING']);
 
@@ -120,8 +127,15 @@ function setup(form) {
     serviceId: '', doctor: null,       // doctor: id | 'any' (аль ч эмч) | null (эмчгүй эмнэлэг)
     week: '', avail: null, date: '', slot: null,   // avail: Map<date, slot[]>; slot: { start, end, label, docs[] }
     seq: 0, pending: null, busy: false, ready: false,
+    pay: null,                         // { id, until, poll, check, name, phone, booking } — төлбөр хүлээж буй захиалга
   };
-  const submitLabel = () => (S.channel.new_booking_status === 'pending_confirmation' ? 'Хүсэлт илгээх' : 'Захиалах');
+  const prepayMode = () => S.channel.new_booking_status === 'pending_payment';
+  const submitLabel = () => (S.channel.new_booking_status === 'pending_confirmation' ? 'Хүсэлт илгээх' : prepayMode() ? 'Төлбөр төлж захиалах' : 'Захиалах');
+  const prepayText = (s) => {
+    const p = S.channel.prepay || {};
+    const amount = p.amount == null ? (s ? s.price : 0) : Math.min(p.amount, s ? s.price : p.amount);
+    return `${p.amount == null ? 'Төлбөр' : 'Урьдчилгаа'}: ${money(amount)} — QPay-ээр төлснөөр цаг баталгаажна`;
+  };
   const horizon = () => { const h = Number(S.channel.horizon_days); return Number.isFinite(h) && h >= 1 ? Math.min(h, 90) : 30; };
   const lastDay = () => addDays(ubToday(), horizon());
   const svc = () => S.services.find((s) => s.id === S.serviceId) || null;
@@ -220,6 +234,11 @@ function setup(form) {
     if (S.channel.new_booking_status === 'pending_confirmation' && el.intro) {
       el.intro.textContent = 'Үйлчилгээ, эмч, сул цагаа сонгоод хүсэлт илгээнэ үү. Ресепшн цагийг баталгаажуулаад тантай холбогдоно.';
     }
+    if (prepayMode()) {
+      // Эмнэлгийн QPay холболт бэлэн биш бол захиалга бүр PAYMENT_UNAVAILABLE болно — шууд нөөц маягт
+      if (S.channel.prepay && S.channel.prepay.ready === false) { fallback('paused'); return; }
+      if (el.intro) el.intro.textContent = 'Үйлчилгээ, эмч, сул цагаа сонгоод QPay-ээр төлнө үү — төлбөр төлөгдмөгц цаг тань баталгаажна.';
+    }
     renderServices();
     renderDoctors();
     S.week = monday(ubToday());
@@ -228,6 +247,7 @@ function setup(form) {
     el.submit.textContent = submitLabel();
     S.ready = true;
     announce('');
+    if (prepayMode() && (await resumePayment())) return;
     // Эмчилгээний хуудасны «Цаг захиалах» (/?svc=<slug>) → тэр хуудасны үйлчилгээ (build: SKINAID_PAGES.ub, main.js: data-svc)
     const pre = ((window.SKINAID_PAGES || {}).ub || {})[form.dataset.svc || ''];
     if (S.services.length === 1) { el.service.value = S.services[0].id; onService(); }
@@ -407,7 +427,7 @@ function setup(form) {
     S.serviceId = el.service.value;
     clearAlert();
     const s = svc();
-    el.info.textContent = s ? `Үнэ: ${priceText(s)} · Үргэлжлэх хугацаа: ${durText(s.duration_min)}` : '';
+    el.info.textContent = s ? `Үнэ: ${priceText(s)} · Үргэлжлэх хугацаа: ${durText(s.duration_min)}${prepayMode() ? ' · ' + prepayText(s) : ''}` : '';
     S.week = monday(ubToday());
     if (!s) { S.avail = null; S.slot = null; S.date = ''; renderCalendar(); renderSlots(); renderSummary(); return; }
     loadWeek(true);
@@ -434,6 +454,7 @@ function setup(form) {
     if (e.target.closest('[data-ub-reload]')) { loadWeek(false, true); return; }
     if (e.target.closest('[data-ub-retry-submit]')) { el.submit.click(); return; }
     if (e.target.closest('[data-ub-request]')) { fallback('failed'); return; }
+    if (e.target.closest('[data-ub-check]')) { checkPayment(true); return; }
     if (e.target.closest('[data-ub-new]')) { startOver(); }
   });
   [el.name, el.phone, el.note].forEach((f) => f.addEventListener('input', () => f.setCustomValidity('')));
@@ -495,7 +516,8 @@ function setup(form) {
       const data = await postBooking(payload, S.pending.key);
       S.pending = null;
       if (!data.booking || typeof data.booking !== 'object') throw new ApiError('INTERNAL', 200);
-      showDone(data.booking, name, phone);
+      if (data.booking.status === 'pending_payment' && data.booking.payment) showPayment(data.booking, name, phone);
+      else showDone(data.booking, name, phone);
     } catch (err) {
       submitError(err instanceof ApiError ? err : new ApiError('INTERNAL', 0));
     } finally {
@@ -554,19 +576,26 @@ function setup(form) {
   }
 
   /* ---------- Үр дүн ---------- */
-  function showDone(b, name, phone) {
-    const pending = b.status === 'pending_confirmation';
+  function receiptHtml(b, name, phone) {
     const date = typeof b.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : S.date;
     const when = `${dateLong(date)} ${esc(b.label || (S.slot && S.slot.label) || '')}`;
     const service = (b.service && b.service.name) || (svc() && svc().name) || '';
     const doctor = (b.doctor && b.doctor.name) || '';
-    el.done.innerHTML = `<strong>${pending ? 'Хүсэлтийг хүлээн авлаа.' : `Таны цаг ${when}-д баталгаажлаа.`}</strong>
-      <dl class="ub__receipt">
+    return { when, html: `<dl class="ub__receipt">
         <dt>Огноо, цаг</dt><dd>${when}</dd>
         ${service ? `<dt>Үйлчилгээ</dt><dd>${esc(service)}</dd>` : ''}
         ${doctor ? `<dt>Эмч</dt><dd>${esc(doctor)}</dd>` : ''}
-        <dt>Нэр, утас</dt><dd>${esc(name)}, ${esc(phone)}</dd>
-      </dl>
+        ${name ? `<dt>Нэр, утас</dt><dd>${esc(name)}, ${esc(phone)}</dd>` : ''}
+      </dl>` };
+  }
+
+  function showDone(b, name, phone) {
+    stopPayment();
+    const pending = b.status === 'pending_confirmation';
+    const paid = Boolean(b.payment && b.payment.status === 'paid');
+    const { when, html } = receiptHtml(b, name, phone);
+    el.done.innerHTML = `<strong>${pending ? 'Хүсэлтийг хүлээн авлаа.' : paid ? `Төлбөр төлөгдөж, таны цаг ${when}-д баталгаажлаа.` : `Таны цаг ${when}-д баталгаажлаа.`}</strong>
+      ${html}
       <p>${pending
         ? `Эмнэлэг цагийг баталгаажуулаад <strong>${esc(phone)}</strong> дугаарт тантай холбогдоно.`
         : 'Таныг хүлээж байна! Цагаа өөрчлөх, цуцлах бол утсаар холбогдоно уу.'}${b.sms_sent ? ' Захиалгын мэдээллийг SMS-ээр илгээлээ.' : ''}</p>
@@ -581,7 +610,136 @@ function setup(form) {
     form.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
   }
 
+  /* ---------- Төлбөр (prepay): QR, банкны апп, тоолуур, төлөв шалгах ---------- */
+  function stopPayment() {
+    if (!S.pay) return;
+    clearInterval(S.pay.poll); clearInterval(S.pay.check); clearInterval(S.pay.tick);
+    S.pay = null;
+    try { sessionStorage.removeItem(PAY_KEY); } catch (_) { /* хаалттай */ }
+  }
+  const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const mobile = () => window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 760;
+
+  function showPayment(b, name, phone) {
+    stopPayment();
+    const pay = b.payment;
+    const until = Date.parse(pay.hold_expires_at) || (Date.now() + 15 * 60000);
+    S.pay = { id: b.id, until, name, phone, booking: b, poll: 0, check: 0, tick: 0, busy: false };
+    try { sessionStorage.setItem(PAY_KEY, JSON.stringify({ id: b.id, until, name, phone })); } catch (_) { /* хаалттай */ }
+    const { html } = receiptHtml(b, name, phone);
+    const links = Array.isArray(pay.deeplinks) ? pay.deeplinks.filter((d) => d && typeof d.link === 'string' && typeof d.name === 'string') : [];
+    const qr = typeof pay.qr_image === 'string' && pay.qr_image
+      ? `<img class="ub__qr-img" src="data:image/png;base64,${pay.qr_image.replace(/\s/g, '')}" alt="QPay QR код" width="220" height="220">`
+      : '';
+    const banks = links.length ? `<div class="ub__banks" role="list">${links.map((d) => `<a role="listitem" class="ub__bank" href="${esc(d.link)}">${d.logo && /^https:\/\//.test(d.logo) ? `<img src="${esc(d.logo)}" alt="" loading="lazy">` : ''}<span>${esc(d.description || d.name)}</span></a>`).join('')}</div>` : '';
+    el.done.innerHTML = `<div class="ub__pay">
+      <strong>Төлбөрөө ${mmss(until - Date.now())} минутын дотор төлнө үү — цаг тань хадгалагдаж байна.</strong>
+      <p class="ub__pay-amount">Төлөх дүн: <b>${money(pay.amount)}</b> <span class="ub__countdown" data-ub-countdown>${mmss(until - Date.now())}</span></p>
+      ${html}
+      <div class="ub__pay-ways">
+        ${qr ? `<div class="ub__qr">${qr}<span>Банкны апп эсвэл QPay-ээр QR-ийг уншуулна уу</span></div>` : ''}
+        <div class="ub__pay-links">
+          ${mobile() && banks ? `<p class="ub__hint">Банкны аппаа сонгож төлнө үү:</p>${banks}` : ''}
+          ${pay.short_url ? `<a class="btn btn--primary btn--sm" href="${esc(pay.short_url)}" target="_blank" rel="noopener">QPay холбоосоор төлөх</a>` : ''}
+          ${!mobile() && banks ? `<details class="ub__bank-details"><summary>Банкны аппын холбоосууд</summary>${banks}</details>` : ''}
+        </div>
+      </div>
+      <p class="ub__paystatus" data-ub-paystatus role="status">Төлбөр төлөгдмөгц энд баталгаажна (автоматаар шалгаж байна).</p>
+      <div class="form__channels">
+        <button type="button" class="btn btn--outline btn--sm" data-ub-check>Төлбөр шалгах</button>
+        <a class="btn btn--ghost btn--sm" href="${TEL}">${PHONE_TXT} залгах</a>
+        <button class="btn btn--ghost btn--sm" type="button" data-ub-new>Болих</button>
+      </div>
+    </div>`;
+    form.classList.add('is-sent');
+    el.done.tabIndex = -1;
+    el.done.focus({ preventScroll: true });
+    form.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    const cd = el.done.querySelector('[data-ub-countdown]');
+    S.pay.tick = setInterval(() => {
+      if (!S.pay) return;
+      const left = S.pay.until - Date.now();
+      if (cd) cd.textContent = mmss(left);
+      if (left <= 0) { clearInterval(S.pay.tick); pollPayment(); }
+    }, 1000);
+    S.pay.poll = setInterval(() => { if (document.visibilityState !== 'hidden') pollPayment(); }, PAY_POLL_MS);
+    S.pay.check = setInterval(() => { if (document.visibilityState !== 'hidden') checkPayment(false); }, PAY_CHECK_MS);
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.pay) pollPayment(); });
+
+  function applyPayState(b) {
+    if (!S.pay || !b || b.id !== S.pay.id) return;
+    const ps = b.payment && b.payment.status;
+    if (b.status === 'confirmed' || ps === 'paid') {
+      const { name, phone } = S.pay;
+      showDone({ ...b, payment: { ...(b.payment || {}), status: 'paid' } }, name, phone);
+      return;
+    }
+    if (b.status === 'cancelled' || ps === 'expired' || ps === 'cancelled' || ps === 'refund_required') {
+      showExpired(ps === 'refund_required');
+    }
+  }
+  async function pollPayment() {
+    if (!S.pay || S.pay.busy) return;
+    S.pay.busy = true;
+    try {
+      const data = await api(`/bookings/${encodeURIComponent(S.pay.id)}`, { timeout: 10000 });
+      applyPayState(data.booking);
+    } catch (e) {
+      if (e.code === 'NOT_FOUND') showExpired(false);
+      // Сүлжээ/түр алдаа — дараагийн давталт
+    } finally {
+      if (S.pay) S.pay.busy = false;
+    }
+  }
+  async function checkPayment(manual) {
+    if (!S.pay || S.pay.busy) return;
+    const btn = el.done.querySelector('[data-ub-check]');
+    const st = el.done.querySelector('[data-ub-paystatus]');
+    S.pay.busy = true;
+    if (manual) { if (btn) { btn.disabled = true; btn.textContent = 'Шалгаж байна…'; } }
+    try {
+      const data = await api(`/bookings/${encodeURIComponent(S.pay.id)}/payment/check`, { method: 'POST', timeout: 20000 });
+      S.pay.busy = false;
+      applyPayState(data.booking);
+      if (S.pay && manual && st) st.textContent = 'Төлбөр хараахан бүртгэгдээгүй байна. Төлсөн бол хэдэн секундийн дараа дахин шалгана уу.';
+    } catch (e) {
+      if (S.pay) S.pay.busy = false;
+      if (e.code === 'NOT_FOUND') { showExpired(false); return; }
+      if (manual && st) st.textContent = e.code === 'RATE_LIMITED' ? 'Хэт олон шалгалт — хэдэн секунд хүлээгээд дахин дарна уу.' : 'Шалгаж чадсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу.';
+    } finally {
+      if (manual && btn) { btn.disabled = false; btn.textContent = 'Төлбөр шалгах'; }
+    }
+  }
+  function showExpired(refund) {
+    stopPayment();
+    el.done.innerHTML = `<strong>${refund ? 'Захиалга цуцлагдсаны дараа төлбөр орсон байна.' : 'Төлбөрийн хугацаа дууслаа — цаг чөлөөлөгдлөө.'}</strong>
+      <p>${refund ? `Буцаан олголтын талаар <a href="${TEL}">${PHONE_TXT}</a> утсаар холбогдоно уу.` : 'Төлбөр 15 минутын дотор бүртгэгдээгүй тул захиалга цуцлагдлаа. Дахин цаг сонгоод захиална уу.'}</p>
+      <div class="form__channels">
+        <button class="btn btn--primary btn--sm" type="button" data-ub-new>Дахин захиалах</button>
+        <a class="btn btn--outline btn--sm" href="${TEL}">${PHONE_TXT} залгах</a>
+      </div>`;
+    form.classList.add('is-sent');
+  }
+  // Хуудас дахин ачаалагдсан (эсвэл утсан дээр банкны аппаас буцаж ирсэн) — төлбөр хүлээж буй захиалгаа үргэлжлүүлнэ
+  async function resumePayment() {
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(PAY_KEY) || 'null'); } catch (_) { saved = null; }
+    if (!saved || typeof saved.id !== 'string') return false;
+    if (!(saved.until > Date.now() - 60000)) { try { sessionStorage.removeItem(PAY_KEY); } catch (_) { /* */ } return false; }
+    try {
+      const data = await api(`/bookings/${encodeURIComponent(saved.id)}`, { timeout: 10000 });
+      const b = data.booking;
+      if (!b) return false;
+      if (b.status === 'pending_payment' && b.payment && b.payment.status === 'pending') { showPayment(b, saved.name || '', saved.phone || ''); return true; }
+      if (b.status === 'confirmed') { showDone({ ...b, payment: { status: 'paid' } }, saved.name || '', saved.phone || ''); return true; }
+    } catch (_) { /* харагдахгүй — шинэ захиалга */ }
+    try { sessionStorage.removeItem(PAY_KEY); } catch (_) { /* */ }
+    return false;
+  }
+
   function startOver() {
+    stopPayment();
     form.classList.remove('is-sent');
     el.done.innerHTML = '';
     el.note.value = '';
