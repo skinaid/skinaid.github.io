@@ -78,7 +78,8 @@ function setup(form) {
 
   /* ---------- API ---------- */
   class ApiError extends Error {
-    constructor(code, status, field, retryAfter) { super(code); this.code = code; this.status = status; this.field = field; this.retryAfter = retryAfter; }
+    // detail = серверийн error объект (DUPLICATE_BOOKING-д message + duplicate) — зөвхөн тэр кодод ашиглана
+    constructor(code, status, field, retryAfter, detail) { super(code); this.code = code; this.status = status; this.field = field; this.retryAfter = retryAfter; this.detail = detail || null; }
   }
   // Захиалах боломжгүй (нөөц маягт руу шилжинэ): сүлжээ/CORS, серверийн алдаа, суваг зогссон, түлхүүр хүчингүй
   const UNAVAILABLE = new Set(['NETWORK', 'INTERNAL', 'MIGRATION_PENDING', 'CHANNEL_PAUSED', 'CLINIC_UNAVAILABLE', 'INVALID_KEY', 'ORIGIN_NOT_ALLOWED', 'PAYMENT_UNAVAILABLE']);
@@ -108,7 +109,7 @@ function setup(form) {
     const err = data && data.error;
     const code = err && typeof err.code === 'string' ? err.code : (res.status >= 500 || res.ok ? 'INTERNAL' : 'UNKNOWN');
     const ra = parseInt(res.headers.get('Retry-After') || '', 10);
-    throw new ApiError(code, res.status, err && typeof err.field === 'string' ? err.field : '', Number.isFinite(ra) ? ra : 0);
+    throw new ApiError(code, res.status, err && typeof err.field === 'string' ? err.field : '', Number.isFinite(ra) ? ra : 0, err && typeof err === 'object' ? err : null);
   }
 
   /* ---------- Элементүүд, төлөв ---------- */
@@ -128,6 +129,7 @@ function setup(form) {
     week: '', avail: null, date: '', slot: null,   // avail: Map<date, slot[]>; slot: { start, end, label, docs[] }
     seq: 0, pending: null, busy: false, ready: false,
     pay: null,                         // { id, until, poll, check, name, phone, booking } — төлбөр хүлээж буй захиалга
+    dupOk: '',                         // давхар захиалгын анхааруулгад «Тийм, дахин захиалах» дарсан `${serviceId}|${phone}`
   };
   const prepayMode = () => S.channel.new_booking_status === 'pending_payment';
   const submitLabel = () => (S.channel.new_booking_status === 'pending_confirmation' ? 'Хүсэлт илгээх' : prepayMode() ? 'Төлбөр төлж захиалах' : 'Захиалах');
@@ -454,6 +456,13 @@ function setup(form) {
     if (nav && !nav.disabled) { S.week = addDays(S.week, RANGE_DAYS * Number(nav.dataset.ubWeek)); loadWeek(false); return; }
     if (e.target.closest('[data-ub-reload]')) { loadWeek(false, true); return; }
     if (e.target.closest('[data-ub-retry-submit]')) { el.submit.click(); return; }
+    const dupGo = e.target.closest('[data-ub-dup-go]');
+    if (dupGo) { S.dupOk = dupGo.dataset.ubDupGo || ''; el.submit.click(); return; }
+    if (e.target.closest('[data-ub-dup-keep]')) {
+      S.dupOk = '';
+      showAlert('Өмнөх цаг тань хэвээр байна. Цагаа өөрчлөх бол утсаар эсвэл Messenger-ээр холбогдоно уу.' + contactsHtml());
+      return;
+    }
     if (e.target.closest('[data-ub-request]')) { fallback('failed'); return; }
     if (e.target.closest('[data-ub-check]')) { checkPayment(true); return; }
     if (e.target.closest('[data-ub-new]')) { startOver(); }
@@ -504,6 +513,7 @@ function setup(form) {
     // Honeypot: далд талбарыг зөвхөн бот бөглөнө — API руу юу ч илгээхгүй
     if (el.hp.value) { showDone({ status: 'pending_confirmation', date: S.date, label: S.slot.label, service: svc() }, name, phone); return; }
 
+    const dupKey = `${S.serviceId}|${phone}`;
     const payload = {
       service_id: S.serviceId,
       ...(S.slot.docs[0] ? { doctor_id: S.slot.docs[0] } : {}),
@@ -511,6 +521,8 @@ function setup(form) {
       customer: { name, phone },
       note,
       marketing_opt_in: false,
+      // Давхар захиалгын анхааруулгын дараа «Тийм, дахин захиалах» (UB Beauty API §2.3) — ижил үйлчилгээ, утсанд л
+      ...(S.dupOk === dupKey ? { allow_duplicate: true } : {}),
     };
     // Агуулга өөрчлөгдөөгүй (сүлжээний алдааны дараах давталт) бол хуучин түлхүүр, эс бөгөөс шинэ
     const fp = JSON.stringify(payload);
@@ -519,6 +531,7 @@ function setup(form) {
     try {
       const data = await postBooking(payload, S.pending.key);
       S.pending = null;
+      S.dupOk = '';
       if (!data.booking || typeof data.booking !== 'object') throw new ApiError('INTERNAL', 200);
       if (data.booking.status === 'pending_payment' && data.booking.payment) showPayment(data.booking, name, phone);
       else showDone(data.booking, name, phone);
@@ -560,6 +573,20 @@ function setup(form) {
       }
       showAlert('Мэдээллээ шалгаад дахин оролдоно уу.' + contactsHtml());
       loadWeek(false, true);
+      return;
+    }
+    if (code === 'DUPLICATE_BOOKING') {
+      // Энэ утас ижил үйлчилгээнд ирээдүйд цагтай (огноо, цаг, үйлчилгээ — серверийн текст). Хориглохгүй: сонголт өгнө
+      const d = err.detail || {};
+      const text = typeof d.message === 'string' && d.message
+        ? d.message
+        : 'Та энэ үйлчилгээнд ирээдүйд цаг авсан байна. Дахин захиалбал хоёр дахь цаг үүснэ.';
+      const key = `${S.serviceId}|${normPhone(el.phone.value)}`;
+      showAlert(`<strong>Танд энэ үйлчилгээний цаг аль хэдийн бий.</strong> ${esc(text)}
+        <div class="form__channels">
+          <button type="button" class="btn btn--outline btn--sm" data-ub-dup-keep>Өмнөх цагаа хадгалах</button>
+          <button type="button" class="btn btn--primary btn--sm" data-ub-dup-go="${esc(key)}">Тийм, дахин захиалах</button>
+        </div>`);
       return;
     }
     if (code === 'PHONE_LIMIT') {

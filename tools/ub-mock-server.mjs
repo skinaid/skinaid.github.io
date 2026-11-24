@@ -16,6 +16,8 @@
 //   99000002 → 429 RATE_LIMITED                                99000005 → 429 PHONE_LIMIT
 //   99000003 → захиалга үүснэ, гэвч хариу тасарна (socket)     99000006 → 403 CHANNEL_PAUSED
 //              → ИЖИЛ Idempotency-Key-ээр давтвал 200 давталт
+// Давхар захиалга (API §2.3): ижил утсаар ИЖИЛ үйлчилгээнд дахин захиалбал 409 DUPLICATE_BOOKING (огноо, цаг, үйлчилгээ);
+//   «Тийм, дахин захиалах» → allow_duplicate: true-тай дахин илгээхэд захиалга үүснэ
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
@@ -36,7 +38,25 @@ const doctors = [
   { id: '7a2b3c40-0000-4000-8000-000000000002', name: 'Д.Энхжин', title: 'Гоо засалч', role: 'cosmetologist', days: [1, 2, 3, 4, 5], from: 11, to: 19 },
   { id: '7a2b3c40-0000-4000-8000-000000000003', name: 'Г.Тэмүүлэн', title: 'Арьсны эмч', days: [0, 2, 4], from: 14, to: 19 },
 ];
-const bookings = [];          // { id, doctor_id, start, end, status, created, pay: { amount, status, checks, phone } | null, view }
+const bookings = [];          // { id, doctor_id, service_id, phone, start, end, status, created, pay: { amount, status, checks, phone } | null, view }
+const WD = ['Ням', 'Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба'];
+
+/** UB Beauty booking-duplicate.ts-ийн хялбаршуулсан хуулбар — ижил утас ∧ үйлчилгээ ∧ ирээдүйн идэвхтэй цаг */
+function duplicateOf(phone, service) {
+  const now = Date.now();
+  const live = (x) => x.phone === phone && x.service_id === service.id && Date.parse(x.start) > now
+    && (x.status === 'confirmed' || x.status === 'pending_confirmation' || (x.status === 'pending_payment' && now - x.created < state.holdSec * 1000));
+  const dup = bookings.filter(live).sort((a, c) => Date.parse(a.start) - Date.parse(c.start))[0];
+  if (!dup) return null;
+  const date = dup.view.date;
+  const v = { date, label: dup.view.label, weekday: WD[new Date(`${date}T00:00:00Z`).getUTCDay()], status: dup.status, service: { id: service.id, name: service.name } };
+  const when = `${date.replaceAll('-', '.')} (${v.weekday}) ${v.label} цагт «${service.name}» үйлчилгээнд`;
+  const head = dup.status === 'confirmed' ? `Та ${when} цаг авч баталгаажсан байна.`
+    : dup.status === 'pending_payment' ? `Та ${when} цаг захиалсан бөгөөд төлбөр нь хүлээгдэж байна.`
+      : `Та ${when} цаг авах хүсэлт илгээсэн, эмнэлэг баталгаажуулахыг хүлээж байна.`;
+  const tail = state.mode === 'prepay' ? ' Дахин захиалбал хоёр дахь цаг үүсэж, төлбөрийг дахин төлөх болно.' : ' Дахин захиалбал тусдаа хоёр дахь цаг үүснэ.';
+  return { message: head + tail, duplicate: v };
+}
 const idem = new Map();       // Idempotency-Key → { fp, booking }
 
 const ubToday = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
@@ -183,6 +203,10 @@ const server = createServer(async (req, res) => {
     const doctor = doctors.find((d) => d.id === b.doctor_id);
     if (!doctor) return fail(res, origin, 422, 'DOCTOR_UNAVAILABLE');
     const start = new Date(String(b.start)); if (Number.isNaN(start.getTime())) return fail(res, origin, 400, 'VALIDATION', 'start');
+    if (b.allow_duplicate !== true) {
+      const dup = duplicateOf(phone, service);
+      if (dup) return send(res, 409, { error: { code: 'DUPLICATE_BOOKING', ...dup } }, origin);
+    }
     const startISO = start.toISOString();
     if (start.getTime() <= Date.now()) return fail(res, origin, 422, 'SLOT_PAST');
     const date = new Date(start.getTime() + 8 * 3600000).toISOString().slice(0, 10);
@@ -199,7 +223,7 @@ const server = createServer(async (req, res) => {
       doctor: { id: doctor.id, name: state.hideNames ? null : doctor.name }, created: true, sms_sent: false, payment: null,
     };
     const row = {
-      id: booking.id, doctor_id: doctor.id, start: booking.start, end: booking.end, status: booking.status, created: Date.now(), view: booking,
+      id: booking.id, doctor_id: doctor.id, service_id: service.id, phone, start: booking.start, end: booking.end, status: booking.status, created: Date.now(), view: booking,
       pay: prepay ? { amount: state.prepayAmount ? Math.min(state.prepayAmount, service.price) : service.price, status: 'pending', checks: 0, phone } : null,
     };
     bookings.push(row);
