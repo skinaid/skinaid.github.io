@@ -5,8 +5,8 @@
    Хамгаалалт: ачаалал амжилтгүй бол түгжинэ; runTransaction-оор давхар засвар; rev (repo шинэчлэгдсэн) шалгалт.
    ========================================================================== */
 import { doc, getDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf } from './core.js?v=a484f97e';
-import { ICON, dialog, snack, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=29f3ef30';
+import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, scrollMode } from './core.js?v=3437c95b';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=7b5d9491';
 
 const HR = window.SKINAID_HOME_RENDER;
 const HOME_DATA = window.SKINAID_HOME_DATA || { rev: '', defaults: null, photos: [], internalPaths: [], claimsAllow: [] };
@@ -35,27 +35,29 @@ const photoOf = (img) => HOME_DATA.photos.find((x) => noV(x) === noV(img)) || ''
 const newPostId = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 /** content/home.json-ийн хэлбэрээр харьцуулах (?v-гүй зураг, updatedAt-гүй) */
 const homeKey = (x) => JSON.stringify(HR && x ? HR.forRepo(x) : null);
-const isDirty = () => ready && !!baseline && homeKey(current().save) !== homeKey(baseline);
+// norm() буруу зураг/холбоосыг хоосолдог тул зөвхөн хэвшүүлсэн утгыг харьцуулбал «http://…» бичсэнийг алдана —
+// алдаатай талбартай бол ч хадгалаагүй өөрчлөлт гэж тооцно (save bar, Ctrl/⌘+S, гарах үеийн анхааруулга)
+const isDirty = () => ready && !!baseline && (homeKey(current().save) !== homeKey(baseline) || homeErrors(readHome()).length > 0);
 
-/** Засварын хэсгүүдийг түгжинэ; статусын мөр (role=status) түгжээгүй үлдэнэ — дэлгэц уншигч мэдэгдлийг уншина */
+/** Засварын хэсгүүдийг түгжинэ; статусын мөр түгжээгүй үлдэнэ */
 const lock = (on) => {
   $$(':scope > .panel', form).forEach((x) => { x.inert = on; });
   form.classList.toggle('is-locked', on);
-  ['#btnHomeDefaults', '#btnHomeReload', '#btnHmJson', '#btnSaveHome', '#btnHmAdd'].forEach((id) => { $(id).disabled = on; });
+  ['#btnHomeDefaults', '#btnHomeReload', '#btnHmJson', '#btnSaveHome', '#btnHmAdd', '#btnHmLoadSaved'].forEach((id) => { $(id).disabled = on; });
 };
 lock(true);
 attachCounters(form);
 
 /* ---------- Статистик ---------- */
 const statRow = (s, i) => {
-  const el = document.createElement('div');
+  const el = document.createElement('fieldset');
   el.className = 'hm-stat';
   el.innerHTML = `
+    <legend class="sr-only">${i + 1}-р статистик</legend>
     <span class="hm-stat__no" aria-hidden="true">${i + 1}</span>
-    <div class="field"><label for="hs${i}-num">Тоо</label><input id="hs${i}-num" type="text" inputmode="numeric" data-s="num" maxlength="9" aria-describedby="hs${i}-d"></div>
+    <div class="field"><label for="hs${i}-num">Тоо</label><input id="hs${i}-num" type="text" inputmode="numeric" data-s="num" maxlength="9"></div>
     <div class="field"><label for="hs${i}-suf">Дагавар</label><input id="hs${i}-suf" type="text" data-s="suffix" maxlength="4" placeholder="+"></div>
-    <div class="field"><label for="hs${i}-lab">Тайлбар</label><input id="hs${i}-lab" type="text" data-s="label" maxlength="40" data-count-chars></div>
-    <span class="sr-only" id="hs${i}-d">${i + 1}-р статистик</span>`;
+    <div class="field"><label for="hs${i}-lab">Тайлбар</label><input id="hs${i}-lab" type="text" data-s="label" maxlength="40" data-count-chars></div>`;
   ['num', 'suffix', 'label'].forEach((k) => { $(`[data-s="${k}"]`, el).value = (s && s[k]) || ''; });
   attachCounters(el);
   return el;
@@ -198,16 +200,25 @@ function current() {
   const all = HR ? HR.norm(raw) : null;
   return { raw, all, save: all && { hero: all.hero, posts: all.posts.filter((p, i) => !blankPost(raw.posts[i])) } };
 }
-function fill(n) {
+/** Маягтыг дүүргэнэ; keepUi — хадгалсны дараа нээлттэй картууд, фокустай талбарыг сэргээнэ */
+function fill(n, { keepUi = false } = {}) {
+  const open = keepUi ? new Set($$('.hm-post.is-open', posts).map((r) => r.dataset.id)) : null;
+  const a = document.activeElement;
+  const fr = keepUi && a && form.contains(a) ? { post: a.closest('.hm-post') ? a.closest('.hm-post').dataset.id : '', k: a.dataset.k || '', id: a.id || '' } : null;
   const h = (n && n.hero) || {};
   HERO_KEYS.forEach((k) => { $(`[data-h="${k}"]`, form).value = h[k] || ''; });
   const stats = (h.stats || []).slice(0, 3);
   while (stats.length < 3) stats.push({ num: '', suffix: '', label: '' });
   $('#hmStats').replaceChildren(...stats.map(statRow));
-  posts.replaceChildren(...((n && n.posts) || []).map((p) => postRow(p)));
+  posts.replaceChildren(...((n && n.posts) || []).map((p) => postRow(p, { open: !!(open && open.has(p.id)) })));
   clearErrors(form);
   refreshCounters(form);
   renderAux();
+  if (fr) {
+    const row = fr.post ? $$('.hm-post', posts).find((r) => r.dataset.id === fr.post) : null;
+    const el = row ? (fr.k ? $(`[data-k="${fr.k}"]`, row) : $('.hm-post__toggle', row)) : (fr.id ? document.getElementById(fr.id) : null);
+    if (el && !el.closest('[hidden]')) el.focus({ preventScroll: true });
+  }
 }
 
 /* ---------- Шалгалт ---------- */
@@ -365,24 +376,33 @@ posts.addEventListener('click', (e) => {
   const tg = e.target.closest('.hm-post__toggle');
   if (tg) { const row = tg.closest('.hm-post'); setOpen(row, tg.getAttribute('aria-expanded') !== 'true'); return; }
   const b = e.target.closest('[data-act]'); if (!b) return;
-  const row = b.closest('.hm-post');
-  if (b.dataset.act === 'rm') {
-    // Хадгалах хүртэл сайтад нөлөөгүй тул баталгаажуулах цонхны оронд «Буцаах»
-    const next = row.nextElementSibling;
-    const title = $('[data-k="title"]', row).value.trim();
-    const focusTo = next || row.previousElementSibling;
-    row.remove();
-    (focusTo ? $('.hm-post__toggle', focusTo) : $('#btnHmAdd')).focus();
+  if (b.dataset.act === 'undo') {
+    const stub = b.closest('.hm-stub');
+    if ($$('.hm-post', posts).length >= HM_MAX) { snack(`Картын дээд хязгаар ${HM_MAX} — эхлээд нэг картыг хасна уу.`, { error: true }); return; }
+    stub.replaceWith(stub._row);
     renderAux();
-    snack(`${title ? `«${title}»` : 'Гарчиггүй'} карт хасагдлаа. «Хадгалах» дарах хүртэл сайтад нөлөөгүй.`, {
-      action: 'Буцаах',
-      onAction: () => { if (next && next.isConnected) posts.insertBefore(row, next); else posts.appendChild(row); renderAux(); $('.hm-post__toggle', row).focus(); },
-    });
+    $('.hm-post__toggle', stub._row).focus();
+    announce('Карт сэргээгдлээ');
     return;
   }
-  if (b.dataset.act === 'up' && row.previousElementSibling) row.previousElementSibling.before(row);
-  else if (b.dataset.act === 'down' && row.nextElementSibling) row.nextElementSibling.after(row);
-  else return;
+  const row = b.closest('.hm-post');
+  const sib = (el, dir) => { let s = dir < 0 ? el.previousElementSibling : el.nextElementSibling; while (s && !s.classList.contains('hm-post')) s = dir < 0 ? s.previousElementSibling : s.nextElementSibling; return s; };
+  if (b.dataset.act === 'rm') {
+    // Хадгалах хүртэл сайтад нөлөөгүй тул баталгаажуулах цонхны оронд тухайн байранд нь «Буцаах» (фокус түүн дээр)
+    const title = $('[data-k="title"]', row).value.trim();
+    const stub = document.createElement('div');
+    stub.className = 'hm-stub';
+    stub._row = row;
+    stub.innerHTML = `<span>${title ? `«${esc(title)}»` : 'Гарчиггүй'} карт хасагдлаа. «Хадгалах» дарах хүртэл сайтад нөлөөгүй.</span> <button class="btn btn--outline btn--sm" type="button" data-act="undo">Буцаах</button>`;
+    row.replaceWith(stub);
+    renderAux();
+    $('[data-act="undo"]', stub).focus();
+    announce(`${title ? `«${title}»` : 'Гарчиггүй'} карт хасагдлаа. Буцаах товч дээр байна.`);
+    return;
+  }
+  const target = sib(row, b.dataset.act === 'up' ? -1 : 1);
+  if (!target) return;
+  if (b.dataset.act === 'up') target.before(row); else target.after(row);
   renderAux();
   if (b.disabled) $(`[data-act="${b.dataset.act === 'up' ? 'down' : 'up'}"]`, row).focus(); else b.focus();
 });
@@ -391,12 +411,12 @@ $('#btnHmAdd').addEventListener('click', () => {
   const row = postRow({ id: newPostId(), img: '', hidden: false }, { open: true });
   posts.appendChild(row);
   renderAux();
-  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  row.scrollIntoView({ block: 'center', behavior: scrollMode() });
   $('[data-k="title"]', row).focus({ preventScroll: true });
 });
 $('#btnHomeDefaults').addEventListener('click', async () => {
   if (!ready || !HOME_DATA.defaults) return;
-  const ok = await dialog({ title: 'Сайтын үндсэн хувилбараар дүүргэх үү?', body: 'Маягт Google-ийн уншдаг үндсэн хувилбараар солигдоно. «Хадгалах» дарах хүртэл сайт өөрчлөгдөхгүй.', confirm: 'Үндсэн хувилбараар дүүргэх', cancel: 'Болих' });
+  const ok = await dialog({ title: 'Сайтын үндсэн хувилбараар дүүргэх үү?', body: 'Маягт Google-ийн уншдаг үндсэн хувилбараар солигдоно. «Хадгалах» дарах хүртэл сайт өөрчлөгдөхгүй.', confirm: 'Үндсэн хувилбараар дүүргэх', cancel: 'Болих', safe: true });
   if (!ok) return;
   fill(HOME_DATA.defaults);
   setStatus(status, 'Үндсэн хувилбар дүүргэгдлээ — хадгалахаа мартуузай.', '');
@@ -427,6 +447,7 @@ $('#btnHmJson').addEventListener('click', async () => {
   } catch (_) {
     box.value = json; box.hidden = false; box.focus(); box.select();
     setStatus(status, 'Автоматаар хуулж чадсангүй — доорх текстийг хуулна уу (Cmd/Ctrl+C).', '');
+    announce('Автоматаар хуулж чадсангүй — сонгосон текстийг Cmd эсвэл Ctrl+C-ээр хуулна уу.');
   }
 });
 
@@ -453,7 +474,7 @@ async function save() {
   const { all, save: n } = current();
   const dropped = raw.posts.length - n.posts.length;
   const warns = homeWarnings(all);
-  if (warns.length && !(await dialog({ title: `Анхааруулга (${warns.length})`, body: 'Хадгалахаас өмнө шалгана уу:', list: warns, confirm: 'Тэгсэн ч хадгалах', cancel: 'Буцаж засах' }))) return;
+  if (warns.length && !(await dialog({ title: `Анхааруулга (${warns.length})`, body: 'Хадгалахаас өмнө шалгана уу:', list: warns, confirm: 'Тэгсэн ч хадгалах', cancel: 'Буцаж засах', safe: true }))) return;
   if (!HR.visiblePosts(n.posts).length && !(await dialog({ title: 'Харагдах карт алга', body: 'Сайтын «Зөвлөгөө» хэсэгт карт харагдахгүй (гарчиг, Facebook холбоос үлдэнэ). Үргэлжлүүлэх үү?', confirm: 'Тэгсэн ч хадгалах', cancel: 'Болих' }))) return;
   const btn = $('#btnSaveHome');
   saving = true;
@@ -472,7 +493,7 @@ async function save() {
           body: ['Таныг энэ хуудсыг нээснээс хойш хөгжүүлэгч нүүр хуудсыг шинэчилсэн.', 'Таны хувилбараар хадгалбал тэр шинэчлэлт сайтаас харагдахгүй болно. Хадгалахгүй бол «Хөгжүүлэгчид илгээх JSON хуулах»-аар засвараа хуулж аваад хуудсыг дахин ачаална уу.'],
           confirm: 'Миний хувилбараар хадгалах', cancel: 'Хадгалахгүй', danger: true,
         });
-        if (!ok) { setStatus(status, 'Хадгалаагүй — сайтын үндсэн хувилбар шинэчлэгдсэн. Засвар тань маягт дээр хэвээр.', 'err'); return; }
+        if (!ok) { setStatus(status, 'Хадгалаагүй — сайтын үндсэн хувилбар шинэчлэгдсэн. Засвар тань маягт дээр хэвээр.', 'err'); announce('Хадгалаагүй. Засвар тань маягт дээр хэвээр.'); return; }
         rev = liveRev;
       }
     } catch (_) { /* сүлжээ — HOME_DATA.rev-ээр үргэлжлүүлнэ */ }
@@ -486,13 +507,13 @@ async function save() {
         body: [`${who} таныг энэ хуудсыг ачаалснаас хойш нүүр хуудсыг хадгалсан.`, 'Таны хувилбараар хадгалбал тэдний өөрчлөлт алга болно. Хадгалахгүй бол засвар тань маягт дээр үлдэнэ — «Хөгжүүлэгчид илгээх JSON хуулах»-аар хуулж аваад «Дахин ачаалах»-аар тэдний хувилбарыг харж болно.'],
         confirm: 'Миний хувилбараар дарж хадгалах', cancel: 'Хадгалахгүй', danger: true,
       });
-      if (!ok) { setStatus(status, 'Хадгалаагүй — өөр хүний хадгалсан хувилбар бий. Таны засвар маягт дээр хэвээр.', 'err'); return; }
+      if (!ok) { setStatus(status, 'Хадгалаагүй — өөр хүний хадгалсан хувилбар бий. Таны засвар маягт дээр хэвээр.', 'err'); announce('Хадгалаагүй. Засвар тань маягт дээр хэвээр.'); return; }
       r = await saveTx(payload, true);
     }
     try { const after = await getDoc(homeRef); baseMs = after.exists() ? msOf(after.data().updatedAt) : null; }
     catch (_) { baseMs = SELF; }
     baseline = n;
-    fill(n);
+    fill(n, { keepUi: true });
     live = true;
     staleDoc = null;
     showNote(homeKey(n) !== homeKey(HOME_DATA.defaults) ? 'unsynced' : null);
@@ -510,6 +531,7 @@ async function save() {
 form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
 registerForm('home', {
   isDirty, save,
-  discard: () => { if (baseline) { fill(baseline); setStatus(status, 'Өөрчлөлтийг хаялаа.', ''); } },
+  discard: () => { if (saving || !baseline) return; fill(baseline); setStatus(status, 'Өөрчлөлтийг хаялаа.', ''); },
+  reset: () => { ready = false; baseline = null; staleDoc = null; lock(true); clearErrors(form); setStatus(status, '', ''); },
   anchor: $('#homeActions'),
 });

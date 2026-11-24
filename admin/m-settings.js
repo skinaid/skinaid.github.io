@@ -2,13 +2,15 @@
    SKIN AID admin — Модуль: Тохиргоо (settings/site)
    ========================================================================== */
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { db, $, fmtDate, errText, session, setStatus, str } from './core.js?v=a484f97e';
-import { registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, snack, attachCounters, refreshCounters } from './ui.js?v=29f3ef30';
+import { db, $, $$, fmtDate, errText, session, setStatus, str } from './core.js?v=3437c95b';
+import { registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, snack, attachCounters, refreshCounters } from './ui.js?v=7b5d9491';
 
 const form = $('#siteForm'), status = $('#siteStatus'), errBox = $('#siteErr'), btn = $('#btnSaveSite');
+const loadBox = $('#siteLoad'), loadMsg = $('#siteLoadMsg');
 const ref = doc(db, 'settings', 'site');
 let saved = null;     // сүүлд ачаалсан/хадгалсан утга (хадгалаагүй өөрчлөлтийг илрүүлэх)
 let ready = false;    // ачаалал амжилтгүй бол хадгалахгүй — хоосон маягтаар бодит утгыг дарж бичихгүй
+let saving = false;
 
 const read = () => ({
   hours: $('#s-hours').value, phone: $('#s-phone').value, email: $('#s-email').value,
@@ -20,11 +22,16 @@ const fill = (s) => {
   refreshCounters(form);
 };
 const isDirty = () => ready && !!saved && JSON.stringify(read()) !== JSON.stringify(saved);
+/** Засварын хэсгийг түгжинэ (ачаалал амжилтгүй / хадгалж буй үед) — статусын мөр түгжээгүй */
+const lock = (on) => { $$(':scope > .panel', form).forEach((p) => { p.inert = on; }); form.classList.toggle('is-locked', on); btn.disabled = on; };
 attachCounters(form);
+lock(true);
 
 export async function load() {
+  if (saving) return;
   ready = false;
-  btn.disabled = true;
+  lock(true);
+  loadBox.hidden = true;
   setStatus(status, 'Ачаалж байна…', '');
   try {
     const snap = await getDoc(ref);
@@ -34,18 +41,22 @@ export async function load() {
       email: typeof s.email === 'string' ? s.email : '', bookingEnabled: s.bookingEnabled !== false, promoEnabled: s.promoEnabled !== false,
     };
     fill(saved);
+    clearErrors(form);
     ready = true;
-    btn.disabled = false;
+    lock(false);
     setStatus(status, snap.exists() ? `Сүүлд хадгалсан: ${fmtDate(s.updatedAt)} · ${s.updatedBy || ''}` : 'Одоогоор хадгалсан тохиргоо алга — сайт анхны утгаараа байна.', '');
   } catch (e) {
-    setStatus(status, `${errText(e)} Тохиргоог уншиж чадаагүй тул хадгалахыг түр хаалаа.`, 'err');
-    snack('Тохиргоог ачаалж чадсангүй.', { error: true, action: 'Дахин оролдох', onAction: load });
+    setStatus(status, '', '');
+    loadMsg.textContent = `${errText(e)} Тохиргоог уншиж чадаагүй тул засварлахыг түр хаалаа (хоосон утгаар дарж бичихгүйн тулд).`;
+    loadBox.hidden = false;
   }
   refreshDirty();
 }
+$('#btnSiteRetry').addEventListener('click', load);
 
 async function save() {
-  if (!ready) { snack('Тохиргоо ачаалагдаагүй тул хадгалах боломжгүй — дахин ачаална уу.', { error: true, action: 'Дахин ачаалах', onAction: load }); return; }
+  if (!session.user || saving) return;
+  if (!ready) { snack('Тохиргоо ачаалагдаагүй тул хадгалах боломжгүй.', { error: true }); return; }
   const v = read();
   const data = {
     hours: str(v.hours, 300), phone: str(v.phone, 30), email: str(v.email, 80),
@@ -60,7 +71,8 @@ async function save() {
   }
   if (errs.length) { showErrors(errBox, errs, form); setStatus(status, '', ''); return; }
   clearErrors(form);
-  btn.disabled = true;
+  saving = true;
+  lock(true);   // хадгалах явцад бичсэн текст алга болохгүйн тулд
   setStatus(status, 'Хадгалж байна…', '');
   try {
     await setDoc(ref, data);
@@ -69,7 +81,7 @@ async function save() {
     setStatus(status, 'Хадгалагдлаа — сайт дээр дараагийн ачааллаас харагдана.', 'ok');
     snack('Тохиргоо хадгалагдлаа');
   } catch (err) { setStatus(status, errText(err), 'err'); snack(errText(err), { error: true }); }
-  finally { btn.disabled = false; refreshDirty(); }
+  finally { saving = false; lock(false); refreshDirty(); }
 }
 
 form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
@@ -77,6 +89,7 @@ form.addEventListener('input', (e) => { clearFieldError(e.target); refreshDirty(
 form.addEventListener('change', refreshDirty);
 registerForm('settings', {
   isDirty, save,
-  discard: () => { if (saved) fill(saved); clearErrors(form); refreshDirty(); },
+  discard: () => { if (saving || !saved) return; fill(saved); clearErrors(form); refreshDirty(); },
+  reset: () => { ready = false; saved = null; lock(true); clearErrors(form); setStatus(status, '', ''); },
   anchor: $('#siteActions'),
 });

@@ -6,7 +6,7 @@
    - showErrors()/clearErrors(): маягтын дээрх алдааны хураангуй + талбарын доорх мэдэгдэл (GOV.UK error summary)
    - attachCounters(): тэмдэгт тоолуур (45/120)
    ========================================================================== */
-import { $, $$, esc } from './core.js?v=a484f97e';
+import { $, $$, session, scrollMode } from './core.js?v=3437c95b';
 
 /* ---------- Дүрс (inline SVG, Lucide маягийн 24px stroke) ---------- */
 const svg = (d, extra = '') => `<svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"${extra}>${d}</svg>`;
@@ -58,10 +58,11 @@ function ensureDialog() {
   return dlg;
 }
 /**
- * @param {{ title: string, body?: string|string[], list?: string[], confirm?: string, cancel?: string|null, danger?: boolean }} o
+ * @param {{ title: string, body?: string|string[], list?: string[], confirm?: string, cancel?: string|null, danger?: boolean, safe?: boolean }} o
+ *   danger — улаан товч; danger/safe үед анхны фокус «Болих» дээр (санамсаргүй Enter-ээр устгах/дарж бичихгүй)
  * @returns {Promise<boolean>} true = confirm товч
  */
-export function dialog({ title, body = '', list = [], confirm = 'Тийм', cancel = 'Болих', danger = false }) {
+export function dialog({ title, body = '', list = [], confirm = 'Тийм', cancel = 'Болих', danger = false, safe = false }) {
   const d = ensureDialog();
   if (dlgDone) dlgDone(false);   // өмнөх нээлттэй цонх (давхар дуудлага) — болих
   const prev = document.activeElement;
@@ -87,67 +88,106 @@ export function dialog({ title, body = '', list = [], confirm = 'Тийм', canc
       resolve(v);
     };
     d.showModal();
-    (danger && cancel ? no : ok).focus();   // устгах үйлдэлд санамсаргүй Enter дарахаас сэргийлж «Болих» дээр
+    ((danger || safe) && cancel ? no : ok).focus();
   });
 }
 
-/* ---------- Мэдэгдэл (snackbar) ---------- */
+/* ---------- Мэдэгдэл (snackbar) ----------
+   Дэлгэц уншигчид зөвхөн текст нь (тусдаа sr-only live region-оор) хүрнэ — товчнууд дахин уншигдахгүй.
+   «Буцаах»-тай мэдэгдлийг гарын хэрэглэгч Alt+Z-ээр шууд буцаана (Tab-аар хайх шаардлагагүй). */
 let host = null;
+let undoable = [];   // харагдаж буй «Буцаах»-тай мэдэгдлүүд (сүүлийнх нь Alt+Z)
 function ensureHost() {
   if (host) return host;
   host = document.createElement('div');
   host.className = 'snackbar';
-  host.innerHTML = '<div class="snackbar__polite" role="status" aria-live="polite"></div><div class="snackbar__alert" role="alert"></div>';
+  host.innerHTML = '<div class="sr-only" role="status" aria-live="polite" data-live="polite"></div><div class="sr-only" role="alert" data-live="alert"></div><div class="snackbar__list"></div>';
   document.body.appendChild(host);
   return host;
 }
 ensureHost();
+let liveT = 0;
+/** Дэлгэц уншигчид мэдэгдэнэ (ижил текстийг дахин ч уншуулна) */
+export function announce(msg, error = false) {
+  const r = $(`[data-live="${error ? 'alert' : 'polite'}"]`, ensureHost());
+  r.textContent = '';
+  clearTimeout(liveT);
+  liveT = setTimeout(() => { r.textContent = msg; }, 60);
+}
 /**
  * @param {string} msg
  * @param {{ action?: string, onAction?: () => void, error?: boolean, timeout?: number }} [o]
  */
 export function snack(msg, { action, onAction, error = false, timeout } = {}) {
   const h = ensureHost();
-  const region = $(error ? '.snackbar__alert' : '.snackbar__polite', h);
   const el = document.createElement('div');
   el.className = 'snack' + (error ? ' is-err' : '');
   const text = document.createElement('span');
   text.className = 'snack__text';
   text.textContent = msg;
   el.appendChild(text);
-  let timer = 0, left = timeout || (action ? 8000 : 4500), started = 0;
-  const dismiss = () => { clearTimeout(timer); el.classList.add('is-out'); setTimeout(() => el.remove(), 200); };
+  let timer = 0, left = timeout || (action ? 10000 : 5000), started = 0, running = false, hovered = false, focused = false, gone = false;
+  const entry = { run: () => { if (onAction) onAction(); } };
+  const dismiss = () => {
+    if (gone) return;
+    gone = true;
+    clearTimeout(timer);
+    undoable = undoable.filter((u) => u !== entry);
+    const hadFocus = el.contains(document.activeElement);
+    el.classList.add('is-out');
+    setTimeout(() => el.remove(), 200);
+    if (hadFocus) $('#main')?.focus({ preventScroll: true });   // фокус body руу унахгүй
+  };
+  entry.dismiss = dismiss;
   if (action) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'snack__act'; b.textContent = action;
+    b.setAttribute('aria-keyshortcuts', 'Alt+Z');
+    b.title = `${action} (Alt+Z)`;
     b.addEventListener('click', () => { dismiss(); if (onAction) onAction(); });
     el.appendChild(b);
+    undoable.push(entry);
   }
   const x = document.createElement('button');
   x.type = 'button'; x.className = 'snack__close'; x.setAttribute('aria-label', 'Мэдэгдлийг хаах'); x.innerHTML = ICON.close;
   x.addEventListener('click', dismiss);
   el.appendChild(x);
-  region.appendChild(el);
+  $('.snackbar__list', h).appendChild(el);
   const all = $$('.snack:not(.is-out)', h);
   if (all.length > 3) all.slice(0, all.length - 3).forEach((s) => s.remove());
+  announce(action ? `${msg} ${action}: Alt+Z.` : msg, error);
   // Алдаа хаах хүртэл үлдэнэ; бусад нь хугацаатай — hover/фокус үед зогсоно (WCAG 2.2.1)
-  const run = () => { if (error) return; started = Date.now(); timer = setTimeout(dismiss, left); };
-  const pause = () => { if (error) return; clearTimeout(timer); left -= Date.now() - started; };
-  el.addEventListener('mouseenter', pause); el.addEventListener('mouseleave', run);
-  el.addEventListener('focusin', pause); el.addEventListener('focusout', run);
-  run();
+  const sync = () => {
+    if (error || gone) return;
+    const hold = hovered || focused;
+    if (hold && running) { clearTimeout(timer); left -= Date.now() - started; running = false; }
+    else if (!hold && !running) { started = Date.now(); timer = setTimeout(dismiss, Math.max(left, 1500)); running = true; }
+  };
+  el.addEventListener('mouseenter', () => { hovered = true; sync(); });
+  el.addEventListener('mouseleave', () => { hovered = false; sync(); });
+  el.addEventListener('focusin', () => { focused = true; sync(); });
+  el.addEventListener('focusout', (e) => { if (!el.contains(e.relatedTarget)) { focused = false; sync(); } });
+  sync();
   return { dismiss };
 }
+document.addEventListener('keydown', (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.code !== 'KeyZ' || !undoable.length || document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  const u = undoable[undoable.length - 1];
+  u.dismiss();
+  u.run();
+});
 
 /* ---------- Хадгалаагүй өөрчлөлт: маягтын бүртгэл, save bar, цэсний цэг, Ctrl/⌘+S ---------- */
 const forms = new Map();   // view → { isDirty(), save(), discard(), anchor?, bar? }
 let currentView = '';
 let bar = null;
 const anchorVisible = new Map();
+// Доод 96px (save bar, утасны доод цэс)-ийн ард байгаа «Хадгалах» товчийг харагдаж байна гэж тооцохгүй
 const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
   entries.forEach((e) => anchorVisible.set(e.target, e.isIntersecting));
   refreshDirty();
-}) : null;
+}, { rootMargin: '0px 0px -96px 0px' }) : null;
 
 function ensureBar() {
   if (bar) return bar;
@@ -163,38 +203,52 @@ function ensureBar() {
   document.body.appendChild(bar);
   bar.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-act]'); if (!b) return;
-    const f = forms.get(currentView); if (!f) return;
+    const f = forms.get(currentView); if (!f || !session.user) return;
     if (b.dataset.act === 'save') { b.disabled = true; try { await f.save(); } finally { b.disabled = false; } }
-    else if (await dialog({ title: 'Өөрчлөлтийг хаях уу?', body: 'Хадгалаагүй өөрчлөлт алга болж, маягт сүүлд хадгалсан байдалдаа буцна.', confirm: 'Өөрчлөлтийг хаях', cancel: 'Үргэлжлүүлэн засах', danger: true })) f.discard();
+    else if (await dialog({ title: 'Өөрчлөлтийг хаях уу?', body: 'Хадгалаагүй өөрчлөлт алга болж, маягт сүүлд хадгалсан байдалдаа буцна.', confirm: 'Өөрчлөлтийг хаях', cancel: 'Үргэлжлүүлэн засах', danger: true })) { f.discard(); announce('Өөрчлөлтийг хаялаа.'); }
+    // Мөр нуугдсан бол фокусыг маягтын өөрийн «Хадгалах» товч руу (body руу унахгүй)
+    if (bar.hidden && (bar.contains(document.activeElement) || document.activeElement === document.body)) {
+      const t = f.anchor && f.anchor.querySelector('button:not([disabled])');
+      if (t) { t.scrollIntoView({ block: 'center' }); t.focus({ preventScroll: true }); }
+    }
   });
   return bar;
 }
 
-/** @param {string} view  @param {{ isDirty: () => boolean, save?: () => Promise<any>, discard?: () => void, anchor?: Element, bar?: boolean }} api */
+/** @param {string} view  @param {{ isDirty: () => boolean, save?: () => Promise<any>, discard?: () => void, reset?: () => void, anchor?: Element, bar?: boolean }} api */
 export function registerForm(view, api) {
   forms.set(view, api);
   if (api.anchor && io) io.observe(api.anchor);
 }
 export function setCurrentView(view) { currentView = view; refreshDirty(); }
-export const anyDirty = () => [...forms.values()].some((f) => f.isDirty());
+export const anyDirty = () => !!session.user && [...forms.values()].some((f) => f.isDirty());
+/** Гарах үед: маягтуудыг «ачаалаагүй» төлөвт оруулна (хадгалах мөр нэвтрэх хуудсан дээр гарахгүй, дараагийн нэвтрэлт цэвэр) */
+export function resetForms() {
+  forms.forEach((f) => { if (f.reset) f.reset(); });
+  refreshDirty();
+}
 export function refreshDirty() {
+  const on = !!session.user;
   $$('[data-nav]').forEach((a) => {
     const f = forms.get(a.dataset.nav);
-    const d = !!(f && f.isDirty());
+    const d = on && !!(f && f.isDirty());
     a.classList.toggle('has-dirty', d);
     const sr = $('.nav__dirty', a); if (sr) sr.textContent = d ? ' (хадгалаагүй өөрчлөлттэй)' : '';
   });
   const b = ensureBar();
   const f = forms.get(currentView);
   // Маягтын өөрийн «Хадгалах» товч дэлгэцэнд харагдаж байвал давхар мөр гаргахгүй
-  const show = !!(f && f.bar !== false && f.isDirty() && !(f.anchor && anchorVisible.get(f.anchor)));
+  const show = on && !!(f && f.bar !== false && f.isDirty() && !(f.anchor && anchorVisible.get(f.anchor)));
   b.hidden = !show;
   document.body.classList.toggle('has-savebar', show);
+  document.documentElement.classList.toggle('has-savebar', show);   // scroll-padding (фокустай талбар мөрийн ард орохгүй)
 }
 document.addEventListener('keydown', (e) => {
-  if (e.key.toLowerCase() !== 's' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+  // Монгол (кирилл) гарын байрлалд e.key = 'ы' — физик товч (KeyS)-оор шалгана
+  const isS = e.code === 'KeyS' || (typeof e.key === 'string' && e.key.toLowerCase() === 's');
+  if (!isS || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
   const f = forms.get(currentView);
-  if (!f || !f.save) return;
+  if (!f || !f.save || !session.user) return;
   e.preventDefault();
   if (f.isDirty() && !document.querySelector('dialog[open]')) f.save();
 });
@@ -205,8 +259,7 @@ let errSeq = 0;
 export function showErrors(summary, errs, scope = summary.parentElement) {
   clearErrors(scope);
   if (!errs.length) return;
-  summary.innerHTML = `<h2 class="err-summary__title" id="${summary.id || 'es'}-t">${ICON.alert}<span>Хадгалах боломжгүй — ${errs.length} зүйл засна уу</span></h2><ul></ul>`;
-  summary.setAttribute('aria-labelledby', `${summary.id || 'es'}-t`);
+  summary.innerHTML = `<div role="alert"><h2 class="err-summary__title">${ICON.alert}<span>Хадгалах боломжгүй — ${errs.length} зүйл засна уу</span></h2><ul></ul></div>`;
   const ul = $('ul', summary);
   errs.forEach((e) => {
     const li = document.createElement('li');
@@ -216,7 +269,7 @@ export function showErrors(summary, errs, scope = summary.parentElement) {
       a.addEventListener('click', (ev) => {
         ev.preventDefault();
         if (e.reveal) e.reveal();
-        e.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        e.el.scrollIntoView({ block: 'center', behavior: scrollMode() });
         e.el.focus({ preventScroll: true });
       });
       li.appendChild(a);
@@ -235,7 +288,7 @@ export function showErrors(summary, errs, scope = summary.parentElement) {
   });
   summary.hidden = false;
   summary.tabIndex = -1;
-  summary.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  summary.scrollIntoView({ block: 'start', behavior: scrollMode() });
   summary.focus({ preventScroll: true });
 }
 export function clearErrors(scope) {
@@ -288,4 +341,3 @@ export function autoGrow(ta) {
   fit();
 }
 
-export { esc };

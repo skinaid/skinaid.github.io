@@ -4,12 +4,13 @@
    ========================================================================== */
 const TZ = 'Asia/Ulaanbaatar';
 
+// Intl.DateTimeFormat үүсгэх нь үнэтэй — нэг удаа (900 мөрт render бүрт олон мянгаар дуудагдана)
+const DAY_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+const HM_FMT = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });
 /** ms → 'YYYY-MM-DD' (Улаанбаатарын цагаар) */
-export function dayKey(ms) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
-}
+export function dayKey(ms) { return DAY_FMT.format(new Date(ms)); }
 const dayIndex = (key) => Math.round(Date.UTC(+key.slice(0, 4), +key.slice(5, 7) - 1, +key.slice(8, 10)) / 864e5);
-const hhmm = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+const hhmm = (ms) => HM_FMT.format(new Date(ms));
 
 /**
  * Захиалгын жагсаалтын бүлэг: today | yesterday | week (сүүлийн 7 хоног) | older.
@@ -41,12 +42,17 @@ export function relTime(ms, now = Date.now()) {
 export function normSearch(s) {
   return String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/ү/g, 'у').replace(/ө/g, 'о').replace(/[\s\-.·,()+]/g, '');
 }
-/** Захиалга хайлттай таарах эсэх: нэр, утас (зөвхөн цифрээр ч), үйлчилгээ, мессеж, тэмдэглэл */
+/**
+ * Захиалга хайлттай таарах эсэх: нэр, утас, үйлчилгээ, мессеж, тэмдэглэл.
+ * Талбаруудыг «|»-ээр холбоно — нэг талбарын төгсгөл, дараагийнх эхлэлээр хуурамч таарахгүй.
+ * Зөвхөн цифр (зай, зураас, +)-тэй хайлтыг утасны цифрүүдтэй тулгана («9911 2233» = «9911-2233»).
+ */
 export function matchBooking(b, q) {
   const nq = normSearch(q);
   if (!nq) return true;
-  const hay = normSearch([b.name, b.phone, b.service, b.message, b.note].join(' '));
+  const hay = [b.name, b.phone, b.service, b.message, b.note].map(normSearch).join('|');
   if (hay.includes(nq)) return true;
+  if (!/^[\d\s+\-().]+$/.test(String(q).trim())) return false;
   const dq = String(q).replace(/\D/g, '');
   return dq.length >= 3 && String(b.phone || '').replace(/\D/g, '').includes(dq);
 }

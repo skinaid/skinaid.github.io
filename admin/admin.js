@@ -6,13 +6,13 @@
    m-bookings.js, m-settings.js, m-home.js, m-catalog.js, m-pages.js.
    ========================================================================== */
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-import { auth, ADMIN_EMAILS, $, $$, errText, session } from './core.js?v=a484f97e';
-import { ICON, dialog, setCurrentView, anyDirty, refreshDirty } from './ui.js?v=29f3ef30';
-import * as bookings from './m-bookings.js?v=c9968337';
-import * as settings from './m-settings.js?v=6c4326ab';
-import * as home from './m-home.js?v=fcdc3619';
-import * as catalog from './m-catalog.js?v=76a998da';
-import { renderPages } from './m-pages.js?v=e68e259c';
+import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=3437c95b';
+import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=7b5d9491';
+import * as bookings from './m-bookings.js?v=fd488194';
+import * as settings from './m-settings.js?v=809c4183';
+import * as home from './m-home.js?v=8a067690';
+import * as catalog from './m-catalog.js?v=a1b4c268';
+import { renderPages } from './m-pages.js?v=13e2b53d';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';
@@ -65,18 +65,23 @@ onAuthStateChanged(auth, async (user) => {
 function teardown() {
   session.user = null;
   bookings.teardown();
+  resetForms();   // хадгалах мөр нэвтрэх хуудсан дээр үлдэхгүй, дараагийн нэвтрэлт цэвэр эхэлнэ
+  updateTitle({ view: '', newCount: 0 });
 }
 
 /* ---------- Hash routing: #/bookings, #/settings, #/home, #/catalog, #/pages ---------- */
 const VIEWS = ['bookings', 'settings', 'home', 'catalog', 'pages'];
 let firstRoute = true;
+const viewFromHash = () => { const v = (location.hash.match(/^#\/([a-z]+)/) || [])[1]; return VIEWS.includes(v) ? v : 'bookings'; };
+let currentRoute = '';
 function route() {
-  const v = (location.hash.match(/^#\/([a-z]+)/) || [])[1];
-  const view = VIEWS.includes(v) ? v : 'bookings';
+  const view = viewFromHash();
+  currentRoute = view;
   $$('.view').forEach((s) => { s.hidden = s.id !== 'view-' + view; });
   $$('[data-nav]').forEach((a) => { if (a.dataset.nav === view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   const h1 = $(`#view-${view} h1`);
   $('#topTitle').textContent = h1 ? h1.textContent : '';
+  updateTitle({ view: h1 ? h1.textContent : '' });
   setCurrentView(view);
   if (!firstRoute && h1) {   // цэс сольсон: шинэ хэсгийн гарчиг руу фокус (дэлгэц уншигч, гарын хэрэглэгч)
     h1.tabIndex = -1;
@@ -85,7 +90,10 @@ function route() {
   }
   firstRoute = false;
 }
-window.addEventListener('hashchange', () => { if (!shell.hidden) route(); });
+// «#main» гэх мэт «#/»-гүй hash (skip link г.м.) цэсийг солихгүй
+window.addEventListener('hashchange', () => { if (!shell.hidden && /^#\//.test(location.hash) && viewFromHash() !== currentRoute) route(); });
+// Skip link: hash-ийг өөрчлөхгүйгээр үндсэн агуулга руу фокус
+$('.skip').addEventListener('click', (e) => { e.preventDefault(); const m = $('#main'); m.focus(); m.scrollIntoView({ block: 'start' }); });
 
 window.addEventListener('beforeunload', (e) => { if (session.user && anyDirty()) { e.preventDefault(); e.returnValue = ''; } });
 refreshDirty();

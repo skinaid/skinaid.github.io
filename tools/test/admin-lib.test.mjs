@@ -1,7 +1,10 @@
 // node --test 'tools/test/*.test.mjs' — admin/lib.js (захиалгын жагсаалтын цаг, бүлэг, хайлт)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayKey, dayGroup, relTime, normSearch, matchBooking, telHref } from '../../admin/lib.js';
+import { readFileSync } from 'node:fs';
+// admin/lib.js нь package.json-гүй .js ES module — Node-ийн синтакс таних (20.19+/22.7+)-аас хамаарахгүйн тулд data: URL-ээр
+const src = readFileSync(new URL('../../admin/lib.js', import.meta.url), 'utf8');
+const { dayKey, dayGroup, relTime, normSearch, matchBooking, telHref } = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(src));
 
 // 2026-11-24 15:00 Улаанбаатар = 07:00 UTC
 const NOW = Date.UTC(2026, 10, 24, 7, 0, 0);
@@ -42,6 +45,9 @@ test('search: case, ү/ө/ё, spaces and dashes in phones; digits-only phone sea
   assert.ok(matchBooking(b, 'утсаар'));
   assert.ok(!matchBooking(b, 'ботокс'));
   assert.ok(matchBooking(b, '   '));
+  assert.ok(!matchBooking(b, 'Болд 9911'), 'letters + digits must not fall back to phone digits');
+  assert.ok(!matchBooking(b, 'ь99'), 'no match across field boundaries');
+  assert.ok(matchBooking(b, '+976 9911'.slice(5)));
 });
 
 test('telHref', () => {

@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/style.css?v=9ef6c77d">
-  <link rel="stylesheet" href="/admin/admin.css?v=c81e89e5">
+  <link rel="stylesheet" href="/assets/css/style.css?v=624f1c7f">
+  <link rel="stylesheet" href="/admin/admin.css?v=b054e550">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -92,6 +92,7 @@
       <!-- Модуль: Тохиргоо -->
       <section class="view" id="view-settings" aria-labelledby="h-settings" hidden>
         <div class="main__head"><div><h1 id="h-settings">Тохиргоо</h1><p>Сайтын холбоо барих мэдээлэл, ажлын цаг, хэсгүүдийн асаалт. Хадгалмагц сайт дээр дараагийн ачааллаас шинэчлэгдэнэ.</p></div></div>
+        <div class="hm-load" id="siteLoad" role="alert" hidden><span id="siteLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnSiteRetry">Дахин оролдох</button></div>
         <form id="siteForm" novalidate>
           <div class="err-summary" id="siteErr" hidden></div>
           <div class="panel">
@@ -118,13 +119,13 @@
             <h2>Сайтын хэсгүүд</h2>
             <p>Унтраасан хэсэг сайтаас нуугдана; өгөгдөл устахгүй.</p>
             <div class="switches">
-              <label class="switch"><input type="checkbox" role="switch" id="s-booking" name="bookingEnabled" checked aria-describedby="s-booking-d"><span class="switch__track" aria-hidden="true"></span><span><strong>Онлайн захиалга</strong><small id="s-booking-d">Унтраавал маягт хүсэлтийг бүртгэхгүй, зөвхөн Messenger / и-мэйл / утас сувгуудыг санал болгоно.</small></span></label>
-              <label class="switch"><input type="checkbox" role="switch" id="s-promo" name="promoEnabled" checked aria-describedby="s-promo-d"><span class="switch__track" aria-hidden="true"></span><span><strong>Урамшууллын хэсэг</strong><small id="s-promo-d">Шинэ жилийн багцын хэсэг болон цэсний «Урамшуулал» холбоосууд.</small></span></label>
+              <label class="switch"><input type="checkbox" role="switch" id="s-booking" name="bookingEnabled" checked><span class="switch__track" aria-hidden="true"></span><span><strong>Онлайн захиалга</strong><small id="s-booking-d">Унтраавал маягт хүсэлтийг бүртгэхгүй, зөвхөн Messenger / и-мэйл / утас сувгуудыг санал болгоно.</small></span></label>
+              <label class="switch"><input type="checkbox" role="switch" id="s-promo" name="promoEnabled" checked><span class="switch__track" aria-hidden="true"></span><span><strong>Урамшууллын хэсэг</strong><small id="s-promo-d">Шинэ жилийн багцын хэсэг болон цэсний «Урамшуулал» холбоосууд.</small></span></label>
             </div>
           </div>
           <div class="actions" id="siteActions">
             <button class="btn btn--primary" type="submit" id="btnSaveSite">Хадгалах</button>
-            <span class="status" id="siteStatus" role="status"></span>
+            <span class="status" id="siteStatus"></span>
           </div>
         </form>
       </section>
@@ -191,12 +192,12 @@
             <div class="actions" id="homeActions">
               <button class="btn btn--primary" type="submit" id="btnSaveHome">Хадгалах</button>
               <button class="btn btn--ghost btn--sm" type="button" id="btnHmJson">Хөгжүүлэгчид илгээх JSON хуулах</button>
-              <span class="status" id="homeStatus" role="status"></span>
+              <span class="status" id="homeStatus"></span>
             </div>
             <textarea class="hm-json" id="hmJson" readonly hidden aria-label="content/home.json-д тавих JSON"></textarea>
           </form>
           <aside class="hm-side" aria-labelledby="hmPrevTitle">
-            <ul class="warn-list" id="hmWarn" aria-live="polite"></ul>
+            <ul class="warn-list" id="hmWarn"></ul>
             <div class="panel hm-prevpanel">
               <div class="panel__head">
                 <h2 id="hmPrevTitle">Урьдчилан харах</h2>
@@ -218,6 +219,7 @@
           <div><h1 id="h-catalog">Үйлчилгээ / Багц</h1><p>Сайтын «Онцлох эмчилгээ» жагсаалт болон Шинэ жилийн багцын нэр, үнэ. «Нуух» сонговол сайтаас харагдахгүй.</p></div>
           <button class="btn btn--outline btn--sm" type="button" id="btnCatDefaults">Анхны утгаар дүүргэх</button>
         </div>
+        <div class="hm-load" id="catLoad" role="alert" hidden><span id="catLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnCatRetry">Дахин оролдох</button></div>
         <form id="catForm" novalidate>
           <div class="err-summary" id="catErr" hidden></div>
           <div class="panel">
@@ -231,7 +233,7 @@
                 <span class="search__ic" data-icon="search"></span>
                 <input type="search" id="svcSearch" placeholder="Нэр, тайлбараар хайх" aria-label="Үйлчилгээ хайх" autocomplete="off" enterkeyhint="search">
               </div>
-              <label class="select-inline"><span>Ангилал</span><select id="svcCat" aria-label="Ангиллаар шүүх"><option value="">Бүгд</option></select></label>
+              <label class="select-inline"><span>Ангилал</span><select id="svcCat"><option value="">Бүгд</option></select></label>
               <span class="toolbar__meta" id="svcMeta" role="status"></span>
             </div>
             <div class="tbl-wrap tbl-wrap--scroll">
@@ -255,7 +257,7 @@
           </div>
           <div class="actions" id="catActions">
             <button class="btn btn--primary" type="submit" id="btnSaveCat">Хадгалах</button>
-            <span class="status" id="catStatus" role="status"></span>
+            <span class="status" id="catStatus"></span>
           </div>
         </form>
       </section>
@@ -289,6 +291,6 @@
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=bb3c7dbe"></script>
-  <script type="module" src="/admin/admin.js?v=cd77bf79"></script>
+  <script type="module" src="/admin/admin.js?v=eae115b9"></script>
 </body>
 </html>

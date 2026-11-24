@@ -20,5 +20,6 @@ export const ADMIN_EMAILS = ['hello@skinaid.mn', 'info@skinaid.mn'];
 // домэйн: skinaid.github.io, localhost). Солих: README → «App Check» (reCAPTCHA admin + Firebase console хоёуланд нь солино).
 export const RECAPTCHA_SITE_KEY = '6LcizBQuAAAAAJkT36c8uRuHoBTcxov-BALLE-qy';
 
-// SDK хувилбар — backend.js, admin/admin.js, app-check.js доторх import URL-уудтай ижил байх ёстой
+// SDK хувилбар — assets/js/*.js, admin/*.js доторх gstatic import URL бүртэй ижил байх ёстой (tools/build.mjs шалгана;
+// хоёр өөр хувилбар ачаалагдвал Firestore «Type does not match the expected instance» алдаа өгч admin эвдэрнэ)
 export const SDK_VERSION = '12.16.0';

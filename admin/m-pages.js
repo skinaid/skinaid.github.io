@@ -1,7 +1,7 @@
 /* ==========================================================================
    SKIN AID admin — Модуль: Эмчилгээний хуудас (зөвхөн харах; өгөгдөл: build-ийн admin/pages-status.js)
    ========================================================================== */
-import { $, esc, DEFAULTS } from './core.js?v=a484f97e';
+import { $, esc, DEFAULTS } from './core.js?v=3437c95b';
 
 export function renderPages(fsServices) {
   const tb = $('#pgTable tbody'); if (!tb) return;

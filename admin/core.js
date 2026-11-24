@@ -5,10 +5,10 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { firebaseConfig, ADMIN_EMAILS } from '../assets/js/firebase-config.js?v=0e85a329';
-import { attachAppCheck } from '../assets/js/app-check.js?v=5df671db';
+import { firebaseConfig, ADMIN_EMAILS } from '../assets/js/firebase-config.js?v=feaeafa8';
+import { attachAppCheck } from '../assets/js/app-check.js?v=36d581c4';
 
-export const app = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 attachAppCheck(app);   // reCAPTCHA → App Check token (Firestore-д Enforce асаалттай)
 export const auth = getAuth(app);
 export const db = getFirestore(app);
@@ -25,6 +25,16 @@ export const CATS = DEFAULTS.cats || {};
 
 /** Нэвтэрсэн admin (admin.js тохируулна) */
 export const session = { user: null };
+
+/** Хөтчийн табын гарчиг: «(2) Захиалга — SkinAid удирдлага» (цэс бүрт; WCAG 2.4.2) */
+const titleState = { view: '', newCount: 0 };
+export function updateTitle(patch = {}) {
+  Object.assign(titleState, patch);
+  const n = titleState.newCount;
+  document.title = (n ? `(${n}) ` : '') + (titleState.view ? `${titleState.view} — ` : '') + 'SkinAid удирдлага';
+}
+/** prefers-reduced-motion үед гүйлгэлт хөдөлгөөнгүй */
+export const scrollMode = () => (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
 /** 2026-11-07 18:12 (Улаанбаатарын цаг, 24 цаг) */
 export const fmtDate = (ts) => {
