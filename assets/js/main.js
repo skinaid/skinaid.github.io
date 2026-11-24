@@ -341,29 +341,36 @@
     } else {
       container.replaceChildren(...result);
     }
+    // Хасагдсан хуучин элементүүдийг reveal/тоолуурын ажиглалтаас чөлөөлнө (scroll бүрт тасархай node хэмжихгүй)
+    prev.filter(el => !result.includes(el)).forEach(el => [el, ...el.querySelectorAll('*')].forEach(x => {
+      if (pending.delete(x) && io) io.unobserve(x);
+      if (co) co.unobserve(x);
+    }));
     if (focused && !container.contains(document.activeElement)) {   // фокус body руу унахгүй (гарын хэрэглэгч)
       if (focused.isConnected) focused.focus({ preventScroll: true });
-      else { container.tabIndex = -1; container.focus({ preventScroll: true }); }
+      else {
+        container.tabIndex = -1;
+        container.addEventListener('blur', () => container.removeAttribute('tabindex'), { once: true });
+        container.focus({ preventScroll: true });
+      }
     }
     return fresh;
   };
   const applyHome = (raw) => {
     if (!HOME || !raw || typeof raw !== 'object') return;
+    const heroEl = $('[data-home="hero"]'), postsEl = $('[data-home="posts"]');
+    // Admin хадгалснаас хойш repo-ийн хувилбар (content/home.json) шинэчлэгдсэн бол статик HTML ялна:
+    // хөгжүүлэгчийн засвар, синк хийсэн хувилбарыг Firestore-ийн хуучин хуулбар дарахгүй.
+    const rev = heroEl ? heroEl.getAttribute('data-home-rev') : '';
+    if (rev && typeof raw.baseRev === 'string' && raw.baseRev && raw.baseRev !== rev) return;
     let h;
     try { h = HOME.norm(raw); } catch (_) { return; }
     if (!h) return;
-    const heroEl = $('[data-home="hero"]');
     if (heroEl && h.hero) {
       patchHome(heroEl, HOME.hero(h.hero)).forEach(el => $$('[data-count]', el).forEach(countUp));
     }
-    const postsEl = $('[data-home="posts"]');
-    if (postsEl && h.posts) {
-      patchHome(postsEl, HOME.posts(h.posts)).forEach(watchReveal);
-      if (!postsEl.children.length) {   // admin бүх картыг нуусан: хоосон хэсэг, цэсний холбоосыг харуулахгүй
-        const blog = $('#blog'); if (blog) hideEl(blog);
-        $$('a[href="#blog"]').forEach(a => hideEl(a.closest('li') || a));
-      }
-    }
+    // Бүх карт нуугдсан бол картын хэсэг хоосон үлдэнэ; гарчиг, Facebook холбоос, цэсний #blog холбоос ажилласаар
+    if (postsEl && h.posts) patchHome(postsEl, HOME.posts(h.posts)).forEach(watchReveal);
   };
   const applySettings = (s) => { if (!s) return; applySite(s.site); applyCatalog(s.catalog); applyHome(s.home); };
   document.addEventListener('skinaid:settings', (e) => applySettings(e.detail));

@@ -24,7 +24,7 @@
   const str = (v, max) => (typeof v === 'string' ? Array.from(v.replace(/\s+/g, ' ').trim()).slice(0, max).join('').trim() : '');
 
   // Сайтын зураг (assets/img/photos/…, ?v=hash байж болно) эсвэл https:// зураг
-  const PHOTO_RE = /^assets\/img\/photos\/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:jpe?g|png|webp|avif)(?:\?v=[0-9a-z]{6,12})?$/;
+  const PHOTO_RE = /^assets\/img\/photos\/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:jpe?g|JPE?G|png|PNG|webp|WEBP|avif|AVIF)(?:\?v=[0-9a-z]{6,12})?$/;   // ?v жижиг үсэг (firestore.rules validPost)
   const HTTPS_RE = /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d{1,5})?(?:[/?#][^\s"'<>\\`]*)?$/i;
   const PATH_RE = /^\/(?![/\\])[^\s"'<>\\`]*$/;   // сайтын дотоод зам (/zovlogoo/…); //host хориотой
   const OWN_HOST_RE = /^https:\/\/(?:www\.)?skinaid\.mn(?::\d+)?(?:[/?#]|$)/i;
@@ -120,8 +120,11 @@
     const src = typeof opts.src === 'function' ? opts.src : (x) => x;
     return visiblePosts(list).map((p, i) => {
       const ext = p.url && isExternal(p.url);
+      // Холбоостой карт: гарчиг дээр сум (мэдрэгч дэлгэцэд hover-гүй ч холбоос гэдэг нь харагдана);
+      // гадаад холбоос шинэ цонхонд нээгдэхийг дэлгэц уншигчид хэлнэ
       const title = p.url
-        ? '<a class="post__link" href="' + esc(p.url) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + esc(p.title) + '</a>'
+        ? '<a class="post__link" href="' + esc(p.url) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + esc(p.title) +
+          ' <span class="post__go" aria-hidden="true">→</span>' + (ext ? '<span class="sr-only"> (шинэ цонхонд нээгдэнэ)</span>' : '') + '</a>'
         : esc(p.title);
       const remote = /^https:/i.test(p.img);
       return '<article class="post reveal' + (p.url ? ' post--link' : '') + '"' + (i % 3 ? ' data-delay="' + (i % 3) + '"' : '') + '>\n' +
@@ -148,8 +151,19 @@
     return out;
   }
 
+  /**
+   * content/home.json-д бичих хэлбэр (admin «JSON хуулах», SEO 7-р үе шатны синк): hero + posts л
+   * (updatedAt, updatedBy, baseRev-гүй — updatedBy нь admin-ий и-мэйл, repo нийтэд нээлттэй), сайтын зураг ?v-гүй
+   * (build дахин тавина). raw-ийг norm()-оор хэвшүүлнэ; hero эсвэл posts буруу бол null.
+   */
+  function forRepo(raw) {
+    const n = norm(raw);
+    if (!n || !n.hero || !n.posts) return null;
+    return { hero: n.hero, posts: n.posts.map((p) => Object.assign({}, p, { img: /^https:/i.test(p.img) ? p.img : p.img.replace(/\?.*$/, '') })) };
+  }
+
   root.SKINAID_HOME_RENDER = {
     esc: esc, LIMITS: LIMITS, BTN_DEFAULT: BTN_DEFAULT, norm: norm, hero: hero, posts: posts, visiblePosts: visiblePosts,
-    validImg: validImg, validUrl: validUrl, isExternal: isExternal, fmtNum: fmtNum, texts: texts,
+    validImg: validImg, validUrl: validUrl, isExternal: isExternal, fmtNum: fmtNum, texts: texts, forRepo: forRepo,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

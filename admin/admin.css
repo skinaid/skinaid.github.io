@@ -152,7 +152,10 @@ table.hm-stats { min-width: 520px; }
 .hm-stats input[type="text"] { width: 100%; font: inherit; font-size: 13.5px; padding: 7px 9px; border: 1.5px solid var(--purple-200); border-radius: 10px; background: #fff; }
 .hm-stats input[type="text"]:focus { outline: none; border-color: var(--purple); }
 .hm-stats td.c-num { width: 110px; } .hm-stats td.c-suf { width: 90px; }
-.hm-posts { display: grid; gap: 12px; margin-bottom: 12px; }
+.hm-posts { display: grid; gap: 12px; margin-bottom: 12px; counter-reset: hmcard; }
+.hm-post__ctl::before { counter-increment: hmcard; content: counter(hmcard) "-р карт"; font-size: 12px; font-weight: 800; color: var(--purple-900); white-space: nowrap; }
+.hm-post__noimg.is-err { color: #9c2b2b; font-weight: 700; text-align: center; padding: 0 6px; }
+.hm-post .btn:disabled { opacity: .35; cursor: default; }
 .hm-post { display: grid; grid-template-columns: 150px 1fr auto; gap: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--cream-50); }
 .hm-post.is-hidden { opacity: .6; }
 .hm-post__img { aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden; background: var(--purple-100); display: grid; place-items: center; }
@@ -162,6 +165,11 @@ table.hm-stats { min-width: 520px; }
 .hm-post__ctl { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .hm-hide { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
 .hm-hide input { width: 18px; height: 18px; accent-color: var(--purple); }
+.field label small { font-weight: 600; color: var(--muted); }
+#view-home [aria-invalid="true"] { border-color: #c0392b !important; box-shadow: 0 0 0 3px rgba(192, 57, 43, .15); }
+.hm-load { margin-bottom: 18px; padding: 12px 14px; border-radius: 14px; background: #fdecec; border: 1px solid #f3b9b9; color: #7a1f1f; font-size: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+#homeForm.is-locked { opacity: .6; }
+#view-home .main__head .actions { margin-top: 0; }
 .hm-preview { border: 1px dashed var(--purple-200); border-radius: 20px; padding: clamp(16px, 2.5vw, 28px); background: linear-gradient(180deg, #fff, var(--purple-50)); display: grid; gap: 24px; }
 .hm-preview .hero__title { font-size: clamp(26px, 3vw, 38px); }
 .hm-preview .hero__stats { margin-top: 28px; padding-top: 18px; }
@@ -172,4 +180,7 @@ table.hm-stats { min-width: 520px; }
   .hm-post__img { max-width: 240px; }
   .hm-post__ctl { flex-direction: row; flex-wrap: wrap; }
   .hm-post__fields, .hm-title__row { grid-template-columns: 1fr; }
+  table.hm-stats { min-width: 0; }
+  .hm-stats th:first-child, .hm-stats td:first-child { display: none; }
+  .hm-stats td.c-num { width: 70px; } .hm-stats td.c-suf { width: 56px; }
 }

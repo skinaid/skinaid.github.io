@@ -41,6 +41,38 @@ service cloud.firestore {
         && (h.get('stats', []).size() < 2 || validStat(h.stats[1]))
         && (h.get('stats', []).size() < 3 || validStat(h.stats[2]));
     }
+    // «Зөвлөгөө» карт (settings/home.posts[i]). Зураг: сайтын assets/img/photos/… эсвэл https://; холбоос: https:// эсвэл
+    // сайтын /зам (//host биш). Нарийн шүүлт (escape, хост) home-render.js norm()-д — энд хамгаалалтын 2-р давхарга.
+    function validPost(p) {
+      return p is map
+        && p.keys().hasOnly(['id', 'cat', 'title', 'text', 'by', 'img', 'url', 'hidden'])
+        && isStr(p.get('id', ''), 0, 40)
+        && isStr(p.get('cat', ''), 0, 30)
+        && isStr(p.get('title', ''), 0, 120)
+        && isStr(p.get('text', ''), 0, 300)
+        && isStr(p.get('by', ''), 0, 60)
+        && isStr(p.get('img', ''), 0, 500)
+        && p.get('img', '').matches('^(https://[^ "<>]+|assets/img/photos/[A-Za-z0-9._-]+([?]v=[0-9a-z]+)?)?$')
+        && isStr(p.get('url', ''), 0, 500)
+        && p.get('url', '').matches('^(https://[^ "<>]+|/([^/][^ "<>]*)?)?$')
+        && p.get('hidden', false) is bool;
+    }
+    // List-ээр давталт хийх боломжгүй тул 12 байрлалыг тус тусад нь (size()-ээр богино холболттой)
+    function validPosts(ps) {
+      return ps is list && ps.size() <= 12
+        && (ps.size() < 1 || validPost(ps[0]))
+        && (ps.size() < 2 || validPost(ps[1]))
+        && (ps.size() < 3 || validPost(ps[2]))
+        && (ps.size() < 4 || validPost(ps[3]))
+        && (ps.size() < 5 || validPost(ps[4]))
+        && (ps.size() < 6 || validPost(ps[5]))
+        && (ps.size() < 7 || validPost(ps[6]))
+        && (ps.size() < 8 || validPost(ps[7]))
+        && (ps.size() < 9 || validPost(ps[8]))
+        && (ps.size() < 10 || validPost(ps[9]))
+        && (ps.size() < 11 || validPost(ps[10]))
+        && (ps.size() < 12 || validPost(ps[11]));
+    }
 
     // ---------- Захиалга ----------
     match /bookings/{id} {
@@ -95,12 +127,13 @@ service cloud.firestore {
             && incoming().services is list && incoming().services.size() <= 200
             && incoming().packages is list && incoming().packages.size() <= 30)
           ||
-          // Нүүрний hero + «Зөвлөгөө» картууд (admin «Нүүр хуудас»). Картын талбаруудыг list-ээр давтаж
-          // шалгах боломжгүй — admin болон home-render.js norm() (escape, URL шүүлт) хамгаална.
+          // Нүүрний hero + «Зөвлөгөө» картууд (admin «Нүүр хуудас»). baseRev = admin хадгалах үеийн repo-ийн
+          // content/home.json-ийн хувилбар (main.js: repo шинэ бол давхарлахгүй).
           (doc == 'home'
-            && incoming().keys().hasOnly(['hero', 'posts', 'updatedAt', 'updatedBy'])
+            && incoming().keys().hasOnly(['hero', 'posts', 'baseRev', 'updatedAt', 'updatedBy'])
             && validHero(incoming().get('hero', null))
-            && incoming().get('posts', null) is list && incoming().posts.size() <= 12)
+            && validPosts(incoming().get('posts', null))
+            && isStr(incoming().get('baseRev', ''), 0, 40))
         );
     }
 

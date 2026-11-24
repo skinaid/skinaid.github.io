@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { findClaims } from '../lib/claims.mjs';
+import { validateHome, firstDiff, homeAdminData, HOME_CLAIMS_ALLOW } from '../lib/home.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const load = (rel, key) => { const w = {}; vm.runInNewContext(readFileSync(ROOT + rel, 'utf8'), { window: w, globalThis: w }); return w[key]; };
@@ -14,7 +15,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 test('content/home.json: already normalized, valid, no banned claims', () => {
   assert.deepEqual(clone(H.norm(home)), home);
   assert.ok(H.visiblePosts(home.posts).length >= 1);
-  const claims = H.texts(H.norm(home)).flatMap(([, t]) => findClaims(t, ['хамгийн түгээмэл']));
+  const claims = H.texts(H.norm(home)).flatMap(([, t]) => findClaims(t, HOME_CLAIMS_ALLOW));
   assert.equal(claims.length, 0, JSON.stringify(claims));
 });
 
@@ -92,7 +93,9 @@ test('posts: order, hidden, missing title, data-delay, links (internal/external)
   assert.match(arts[0], /href="https:\/\/www\.facebook\.com\/x" target="_blank" rel="noopener"/);
   assert.match(arts[0], /src="\/assets\/img\/photos\/blog-1\.jpg"/);
   assert.match(arts[1], /data-delay="1"/);
-  assert.match(arts[1], /<a class="post__link" href="\/zovlogoo\/d">D &lt;b&gt;<\/a>/);
+  assert.match(arts[1], /<a class="post__link" href="\/zovlogoo\/d">D &lt;b&gt; <span class="post__go" aria-hidden="true">→<\/span><\/a>/);
+  assert.match(arts[0], /шинэ цонхонд нээгдэнэ/);
+  assert.doesNotMatch(arts[1], /шинэ цонхонд/);
   assert.match(arts[1], /referrerpolicy="no-referrer"/);
   assert.doesNotMatch(arts[2], /target=/);
   assert.match(arts[3], /^ class="post reveal">/);
@@ -106,4 +109,79 @@ test('texts(): every visible text field is checked for claims', () => {
   assert.ok(keys.includes('hero.badge') && keys.includes('hero.stats[0]') && keys.includes('posts[0].title') && keys.includes('posts[0].text'));
   const labels = t.flatMap(([, x]) => findClaims(x).map((c) => c.label));
   assert.ok(labels.includes('хамгийн') && labels.includes('шилдэг') && labels.includes('100%'));
+});
+
+// ---------- tools/lib/home.mjs (build-ийн 2c шалгалт) ----------
+const ctx = (over = {}) => ({ internalPaths: new Set(['/', '/privacy']), photoError: () => null, ...over });
+
+test('validateHome: repo file is clean; key order does not matter', () => {
+  assert.deepEqual(validateHome(clone(home), H, ctx()).errors, []);
+  const sorted = JSON.parse(JSON.stringify(home, Object.keys(home.hero).concat(['hero', 'posts', 'stats', 'num', 'suffix', 'label', 'id', 'cat', 'title', 'text', 'by', 'img', 'url', 'hidden']).sort()));
+  assert.deepEqual(validateHome(sorted, H, ctx()).errors, []);
+});
+
+test('validateHome: extra keys (updatedBy — admin e-mail in a public repo), un-normalized values, all errors at once', () => {
+  const withMeta = { ...clone(home), updatedAt: null, updatedBy: 'hello@skinaid.mn' };
+  const e1 = validateHome(withMeta, H, ctx()).errors;
+  assert.ok(e1.some((e) => /илүү түлхүүр updatedAt, updatedBy/.test(e)), e1.join('\n'));
+  const bad = clone(home);
+  bad.hero.text += '  ';
+  bad.hero.stats[0].num = '019';
+  const e2 = validateHome(bad, H, ctx()).errors;
+  assert.ok(e2.some((e) => /hero\.text/.test(e)), e2.join('\n'));
+  const multi = clone(home);
+  multi.hero.titlePre = multi.hero.titleEm = multi.hero.titlePost = '';
+  multi.posts.forEach((p) => { p.hidden = true; });
+  const e3 = validateHome(multi, H, ctx()).errors;
+  assert.ok(e3.some((e) => /h1/.test(e)) && e3.some((e) => /харагдах/.test(e)), e3.join('\n'));
+  assert.equal(validateHome(multi, H, ctx()).home, null);
+  assert.ok(validateHome('x', H, ctx()).errors.length);
+  assert.ok(validateHome({ hero: home.hero, posts: {} }, H, ctx()).errors.some((e) => /posts/.test(e)));
+});
+
+test('validateHome: internal links must exist, photos must exist, ids unique, claims, >12 cards', () => {
+  const h = clone(home);
+  h.posts[0].url = '/zovlogoo/nuhjilt';
+  h.posts[1].url = '/privacy#x';
+  h.posts[2].img = 'assets/img/photos/gone.jpg';
+  const e = validateHome(h, H, ctx({ photoError: (rel) => (rel.endsWith('gone.jpg') ? 'файл алга' : null) })).errors;
+  assert.ok(e.some((x) => /posts\[0\]\.url .*сайтад ийм хуудас алга/.test(x)), e.join('\n'));
+  assert.ok(!e.some((x) => /posts\[1\]\.url/.test(x)));
+  assert.ok(e.some((x) => /posts\[2\]\.img .*файл алга/.test(x)));
+  const d = clone(home); d.posts[1].id = d.posts[0].id;
+  assert.ok(validateHome(d, H, ctx()).errors.some((x) => /id/.test(x)));
+  const c = clone(home); c.posts[0].title = 'Хамгийн шилдэг эмчилгээ';
+  assert.ok(validateHome(c, H, ctx()).errors.some((x) => /posts\[0\]\.title — хориотой мэдэгдэл «хамгийн»/.test(x)));
+  const many = clone(home); while (many.posts.length < 13) many.posts.push({ ...clone(home.posts[0]), id: 'x' + many.posts.length });
+  assert.ok(validateHome(many, H, ctx()).errors.some((x) => /13 элемент.*12/.test(x)));
+});
+
+test('firstDiff: names extra/missing keys and type/value changes; ignores key order', () => {
+  assert.equal(firstDiff({ a: 1, b: 2 }, { b: 2, a: 1 }), null);
+  assert.match(firstDiff({ a: 1 }, { a: 1, b: 2 }), /дутуу түлхүүр b/);
+  assert.match(firstDiff({ a: [1, '2'] }, { a: [1, 2] }), /a\[1\]: string байна, number/);
+  assert.match(firstDiff({ a: 'x ' }, { a: 'x' }), /a: "x " → "x"/);
+});
+
+test('forRepo + homeAdminData: ?v round trip, Firestore meta dropped, numeric num normalized', () => {
+  const fs = { ...clone(home), updatedAt: { seconds: 1 }, updatedBy: 'hello@skinaid.mn', baseRev: 'abc' };
+  fs.posts[0].img = 'assets/img/photos/blog-1.jpg?v=f3265421';
+  fs.hero.stats[0].num = 19;   // тоо (string биш) → хоосон; build-д хэвшээгүй гэж баригдана
+  const r = clone(H.forRepo(fs));
+  assert.deepEqual(Object.keys(r), ['hero', 'posts']);
+  assert.equal(r.posts[0].img, 'assets/img/photos/blog-1.jpg');
+  assert.equal(r.hero.stats[0].num, '');
+  assert.equal(H.forRepo({ hero: { titlePre: '' }, posts: [] }), null);
+  const back = clone(H.forRepo({ ...clone(home), posts: home.posts.map((p) => ({ ...p, img: p.img + '?v=12345678' })) }));
+  assert.deepEqual(back, home);
+  const data = homeAdminData(H.norm(home), { stampImg: (i) => i + '?v=00000000', photos: ['a'], internalPaths: new Set(['/']) });
+  assert.equal(data.defaults.posts[0].img, 'assets/img/photos/blog-1.jpg?v=00000000');
+  assert.deepEqual(data.internalPaths, ['/']);
+  assert.deepEqual(data.claimsAllow, HOME_CLAIMS_ALLOW);
+});
+
+test('photo names: upper-case extensions ok, ?v must be lower-case (firestore.rules)', () => {
+  assert.ok(H.validImg('assets/img/photos/IMG_0001.JPG'));
+  assert.ok(!H.validImg('assets/img/photos/a.jpg?v=ABCDEF12'));
+  assert.ok(!H.validImg('assets/img/photos/зураг.jpg'));
 });
