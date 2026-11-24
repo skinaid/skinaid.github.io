@@ -18,6 +18,29 @@ service cloud.firestore {
       return v is string && v.size() >= min && v.size() <= max;
     }
     function incoming() { return request.resource.data; }
+    // Нүүрний статистик (settings/home.hero.stats[i]) — хязгаар assets/js/home-render.js LIMITS-тэй ижил
+    function validStat(s) {
+      return s is map
+        && s.keys().hasOnly(['num', 'suffix', 'label'])
+        && isStr(s.get('num', ''), 0, 7) && s.get('num', '').matches('^[0-9]*$')
+        && isStr(s.get('suffix', ''), 0, 4)
+        && isStr(s.get('label', ''), 0, 40);
+    }
+    function validHero(h) {
+      return h is map
+        && h.keys().hasOnly(['badge', 'titlePre', 'titleEm', 'titlePost', 'text', 'btnPrimary', 'btnSecondary', 'stats'])
+        && isStr(h.get('badge', ''), 0, 80)
+        && isStr(h.get('titlePre', ''), 0, 80)
+        && isStr(h.get('titleEm', ''), 0, 60)
+        && isStr(h.get('titlePost', ''), 0, 80)
+        && isStr(h.get('text', ''), 0, 400)
+        && isStr(h.get('btnPrimary', ''), 0, 30)
+        && isStr(h.get('btnSecondary', ''), 0, 30)
+        && h.get('stats', []) is list && h.get('stats', []).size() <= 3
+        && (h.get('stats', []).size() < 1 || validStat(h.stats[0]))
+        && (h.get('stats', []).size() < 2 || validStat(h.stats[1]))
+        && (h.get('stats', []).size() < 3 || validStat(h.stats[2]));
+    }
 
     // ---------- Захиалга ----------
     match /bookings/{id} {
@@ -55,7 +78,7 @@ service cloud.firestore {
       allow read: if true;
 
       allow write: if isAdmin()
-        && doc in ['site', 'catalog']
+        && doc in ['site', 'catalog', 'home']
         && incoming().updatedAt == request.time
         && incoming().updatedBy == request.auth.token.email
         && (
@@ -71,6 +94,13 @@ service cloud.firestore {
             && incoming().keys().hasOnly(['services', 'packages', 'updatedAt', 'updatedBy'])
             && incoming().services is list && incoming().services.size() <= 200
             && incoming().packages is list && incoming().packages.size() <= 30)
+          ||
+          // Нүүрний hero + «Зөвлөгөө» картууд (admin «Нүүр хуудас»). Картын талбаруудыг list-ээр давтаж
+          // шалгах боломжгүй — admin болон home-render.js norm() (escape, URL шүүлт) хамгаална.
+          (doc == 'home'
+            && incoming().keys().hasOnly(['hero', 'posts', 'updatedAt', 'updatedBy'])
+            && validHero(incoming().get('hero', null))
+            && incoming().get('posts', null) is list && incoming().posts.size() <= 12)
         );
     }
 

@@ -136,3 +136,40 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width
 .badge[data-stage="review"], .badge[data-stage="approved"] { background: var(--gold-100); color: #5a4214; }
 .badge[data-stage="planned"] { background: #ececec; color: #555; }
 .svc-page { display: inline-block; margin-top: 4px; font-size: 12px; color: var(--purple); }
+
+/* Модуль 5: Нүүр хуудас */
+.hm-note { background: var(--cream-50); }
+.hm-note p { color: var(--ink-2); font-size: 13.5px; margin: 0; }
+.hm-note__diff { margin-top: 10px !important; padding: 10px 12px; border-radius: 12px; background: var(--gold-100); border: 1px solid var(--gold); color: #5a4214 !important; }
+.hm-title { border: 0; padding: 0; margin: 0; min-width: 0; }
+.hm-title legend { font-size: 13px; font-weight: 700; color: var(--ink-2); margin-bottom: 6px; padding: 0; }
+.hm-title__row { display: grid; grid-template-columns: 1fr .8fr 1fr; gap: 10px; }
+.hm-title__row label { font-weight: 600; color: var(--muted); font-size: 12.5px; }
+.panel .field textarea { min-height: 84px; }
+.hm-sub { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--purple-900); margin: 20px 0 2px; }
+.hm-hint { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+table.hm-stats { min-width: 520px; }
+.hm-stats input[type="text"] { width: 100%; font: inherit; font-size: 13.5px; padding: 7px 9px; border: 1.5px solid var(--purple-200); border-radius: 10px; background: #fff; }
+.hm-stats input[type="text"]:focus { outline: none; border-color: var(--purple); }
+.hm-stats td.c-num { width: 110px; } .hm-stats td.c-suf { width: 90px; }
+.hm-posts { display: grid; gap: 12px; margin-bottom: 12px; }
+.hm-post { display: grid; grid-template-columns: 150px 1fr auto; gap: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--cream-50); }
+.hm-post.is-hidden { opacity: .6; }
+.hm-post__img { aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden; background: var(--purple-100); display: grid; place-items: center; }
+.hm-post__img img { width: 100%; height: 100%; object-fit: cover; }
+.hm-post__noimg { font-size: 12px; color: var(--muted); }
+.hm-post__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
+.hm-post__ctl { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.hm-hide { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.hm-hide input { width: 18px; height: 18px; accent-color: var(--purple); }
+.hm-preview { border: 1px dashed var(--purple-200); border-radius: 20px; padding: clamp(16px, 2.5vw, 28px); background: linear-gradient(180deg, #fff, var(--purple-50)); display: grid; gap: 24px; }
+.hm-preview .hero__title { font-size: clamp(26px, 3vw, 38px); }
+.hm-preview .hero__stats { margin-top: 28px; padding-top: 18px; }
+.hm-preview__posts:empty::before { content: "Харагдах карт алга — сайтад «Зөвлөгөө» хэсэг нуугдана."; color: var(--muted); font-size: 13.5px; }
+.hm-json { width: 100%; min-height: 220px; margin-top: 12px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 12px; border: 1.5px solid var(--purple-200); border-radius: 12px; }
+@media (max-width: 860px) {
+  .hm-post { grid-template-columns: 1fr; }
+  .hm-post__img { max-width: 240px; }
+  .hm-post__ctl { flex-direction: row; flex-wrap: wrap; }
+  .hm-post__fields, .hm-title__row { grid-template-columns: 1fr; }
+}

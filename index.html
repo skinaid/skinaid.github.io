@@ -29,7 +29,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"></noscript>
 
-  <link rel="stylesheet" href="assets/css/style.css?v=37989dbc">
+  <link rel="stylesheet" href="assets/css/style.css?v=a8f6cff7">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="48x48" href="assets/img/favicon-48.png?v=044af2e2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=af82331c">
@@ -93,28 +93,14 @@
     <!-- ===================== HERO ===================== -->
     <section class="hero">
       <div class="container hero__grid">
-        <div>
-          <div class="hero__badge">
-            <span class="dot"><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>
-            2007 оноос хойш · Улаанбаатар хот
-          </div>
-          <h1 class="hero__title">Эрүүл, гэрэлтсэн арьс бол <em>өөртөө итгэх</em> итгэлийн эхлэл</h1>
-          <p class="hero__text">
-            SkinAid бол арьсны өвчин, гоо заслын мэргэжлийн эмнэлэг. Батга, сорви, нүхжилт, үрчлээ, нөсөө — арьсны аливаа асуудлыг
-            туршлагатай эмч нар оношилж, дэвшилтэт технологиор цогцоор нь эмчилнэ.
-          </p>
-          <div class="hero__actions">
-            <a class="btn btn--primary btn--lg" href="#contact">
-              Цаг захиалах
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </a>
-            <a class="btn btn--outline btn--lg" href="#services">Үйлчилгээ үзэх</a>
-          </div>
-          <div class="hero__stats">
-            <div class="stat"><strong><span data-count="19" data-suffix="+">19+</span></strong><span>жилийн туршлага</span></div>
-            <div class="stat"><strong><span data-count="90" data-suffix="+">90+</span></strong><span>төрлийн үйлчилгээ</span></div>
-            <div class="stat"><strong><span data-count="58" data-suffix="K+">58K+</span></strong><span>Facebook дагагч</span></div>
-          </div>
+        <div data-home="hero">
+          <!-- build:home-hero -->
+            <div class="hero__badge" data-home="badge"><span class="dot"><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>2007 оноос хойш · Улаанбаатар хот</div>
+            <h1 class="hero__title" data-home="title">Эрүүл, гэрэлтсэн арьс бол <em>өөртөө итгэх</em> итгэлийн эхлэл</h1>
+            <p class="hero__text" data-home="text">SkinAid бол арьсны өвчин, гоо заслын мэргэжлийн эмнэлэг. Батга, сорви, нүхжилт, үрчлээ, нөсөө — арьсны аливаа асуудлыг туршлагатай эмч нар оношилж, дэвшилтэт технологиор цогцоор нь эмчилнэ.</p>
+            <div class="hero__actions" data-home="actions"><a class="btn btn--primary btn--lg" href="#contact">Цаг захиалах <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="btn btn--outline btn--lg" href="#services">Үйлчилгээ үзэх</a></div>
+            <div class="hero__stats" data-home="stats"><div class="stat"><strong><span data-count="19" data-suffix="+">19+</span></strong><span>жилийн туршлага</span></div><div class="stat"><strong><span data-count="90" data-suffix="+">90+</span></strong><span>төрлийн үйлчилгээ</span></div><div class="stat"><strong><span data-count="58" data-suffix="K+">58K+</span></strong><span>Facebook дагагч</span></div></div>
+          <!-- /build:home-hero -->
         </div>
 
         <div class="hero__visual">
@@ -637,34 +623,36 @@
           </div>
           <a class="link-arrow" href="https://www.facebook.com/Skinaid.mn" target="_blank" rel="noopener">Facebook дахь зөвлөгөөнүүд <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
         </div>
-        <div class="posts">
-          <article class="post reveal">
-            <div class="post__media"><img src="assets/img/photos/blog-1.jpg?v=f3265421" alt="" loading="lazy" width="1200" height="750"></div>
-            <div class="post__body">
-              <span class="post__cat">Нүхжилт</span>
-              <h3>Нүхжилтийг яаж арилгах вэ?</h3>
-              <p>Нүхжилт буюу арьсны сүв томрох нь олон хүний санааг зовоодог нийтлэг асуудал. Үндсэн 2 шалтгаан болон шийдлийн тухай.</p>
-              <span class="post__by">Э.Өнөрсайхан эмч</span>
-            </div>
-          </article>
-          <article class="post reveal" data-delay="1">
-            <div class="post__media"><img src="assets/img/photos/blog-2.jpg?v=b0a9a4a7" alt="" loading="lazy" width="1200" height="750"></div>
-            <div class="post__body">
-              <span class="post__cat">Батга</span>
-              <h3>Хоол хүнсний буруу хэрэглээнээс шалтгаалах батгашилт</h3>
-              <p>Батга нь арьсны хамгийн түгээмэл үрэвсэлт эмгэгийн нэг. Хоол хүнс батгашилтад хэрхэн нөлөөлдөг вэ?</p>
-              <span class="post__by">Даваажаргал эмч</span>
-            </div>
-          </article>
-          <article class="post reveal" data-delay="2">
-            <div class="post__media"><img src="assets/img/photos/blog-3.jpg?v=733e360f" alt="" loading="lazy" width="1200" height="750"></div>
-            <div class="post__body">
-              <span class="post__cat">Арьс арчилгаа</span>
-              <h3>Та SPF нарны тосоо зөв хэрэглэж чаддаг уу?</h3>
-              <p>Зуны наранд борлож өнгөлөг харагдах сайхан ч арьсны гүн давхаргад хэт ягаан туяаны нөлөө аль хэдийн эхэлсэн байдаг.</p>
-              <span class="post__by">SkinAid баг</span>
-            </div>
-          </article>
+        <div class="posts" data-home="posts">
+          <!-- build:home-posts -->
+            <article class="post reveal">
+              <div class="post__media"><img src="assets/img/photos/blog-1.jpg?v=f3265421" alt="" loading="lazy" width="1200" height="750"></div>
+              <div class="post__body">
+                <span class="post__cat">Нүхжилт</span>
+                <h3>Нүхжилтийг яаж арилгах вэ?</h3>
+                <p>Нүхжилт буюу арьсны сүв томрох нь олон хүний санааг зовоодог нийтлэг асуудал. Үндсэн 2 шалтгаан болон шийдлийн тухай.</p>
+                <span class="post__by">Э.Өнөрсайхан эмч</span>
+              </div>
+            </article>
+            <article class="post reveal" data-delay="1">
+              <div class="post__media"><img src="assets/img/photos/blog-2.jpg?v=b0a9a4a7" alt="" loading="lazy" width="1200" height="750"></div>
+              <div class="post__body">
+                <span class="post__cat">Батга</span>
+                <h3>Хоол хүнсний буруу хэрэглээнээс шалтгаалах батгашилт</h3>
+                <p>Батга нь арьсны хамгийн түгээмэл үрэвсэлт эмгэгийн нэг. Хоол хүнс батгашилтад хэрхэн нөлөөлдөг вэ?</p>
+                <span class="post__by">Даваажаргал эмч</span>
+              </div>
+            </article>
+            <article class="post reveal" data-delay="2">
+              <div class="post__media"><img src="assets/img/photos/blog-3.jpg?v=733e360f" alt="" loading="lazy" width="1200" height="750"></div>
+              <div class="post__body">
+                <span class="post__cat">Арьс арчилгаа</span>
+                <h3>Та SPF нарны тосоо зөв хэрэглэж чаддаг уу?</h3>
+                <p>Зуны наранд борлож өнгөлөг харагдах сайхан ч арьсны гүн давхаргад хэт ягаан туяаны нөлөө аль хэдийн эхэлсэн байдаг.</p>
+                <span class="post__by">SkinAid баг</span>
+              </div>
+            </article>
+          <!-- /build:home-posts -->
         </div>
       </div>
     </section>
@@ -917,10 +905,11 @@
   <script>window.SKINAID_PAGES={"byId":{},"opt":{},"ub":{}};</script>
   <!-- /build:pages-index -->
   <script src="assets/js/catalog-defaults.js?v=cf4cf057"></script>
+  <script src="assets/js/home-render.js?v=f8e599fe"></script>
   <script src="assets/js/catalog-render.js?v=8d0d4450"></script>
-  <script src="assets/js/main.js?v=e2e3ae41"></script>
+  <script src="assets/js/main.js?v=49d5405a"></script>
   <!-- Firebase (Firestore): захиалга бүртгэх, тохиргоо/каталог унших. Ачаалагдахгүй бол сайт анхны байдлаараа ажиллана. -->
-  <script type="module" src="assets/js/backend.js?v=90e14c2b" onerror="document.dispatchEvent(new Event('skinaid:backend-failed'))"></script>
+  <script type="module" src="assets/js/backend.js?v=fb12455a" onerror="document.dispatchEvent(new Event('skinaid:backend-failed'))"></script>
   <!-- Онлайн цаг захиалга (UB Beauty вэб суваг). Ачаалагдахгүй бол #bookForm (Firestore хүсэлт) нөөцөөр гарна. -->
   <script type="module" src="assets/js/booking.js?v=81121f01" onerror="var u=document.getElementById('ubForm'),b=document.getElementById('bookForm');if(u&&b){u.hidden=true;b.hidden=false}"></script>
 </body>
