@@ -1,16 +1,19 @@
-// vercel.json-ийн эмчилгээний хуудас руу заасан (destination нь /emchilgee/ эхэлсэн) redirect-уудыг build удирдана.
-// Нийтлэгдсэн хуудас бүрийн `legacy` (хуучин Wix URL) → 308. Vercel кирилл эхийг ЗӨВХӨН percent-encoded
-// (encodeURI, том үсгийн hex) хэлбэрээр таарна (2026-11-08 туршсан). Дүрмүүд Wix-ийн catch-all (…/:rest*)-аас өмнө орно.
+// vercel.json-ийн эмчилгээний хуудас (/emchilgee/<slug>) болон hub-ийн ангилал (/emchilgee#<cat>) руу заасан
+// redirect-уудыг build удирдана. Нийтлэгдсэн хуудас бүрийн `legacy` (хуучин Wix URL) → 308; хараахан гараагүй
+// хуудасных → hub-ийн ангилал руу 307 (build.mjs `dest`, `permanent:false` өгнө). Гараар бичсэн catch-all
+// (жишээ нь /service-page/:rest* → /emchilgee, `#`-гүй) удирдлагад ОРОХГҮЙ. Vercel кирилл эхийг ЗӨВХӨН
+// percent-encoded (encodeURI, том үсгийн hex) хэлбэрээр таарна (2026-11-08 туршсан). Дүрмүүд Wix-ийн catch-all (…/:rest*)-аас өмнө орно.
 
 import { BuildError } from './assets.mjs';
 
 const BAD = /[\s?#:()*+\\]/;
 const isCatchAll = (r) => !r.has && typeof r.source === 'string' && /\/:rest\*$/.test(r.source);
-export const isManaged = (r) => typeof r.destination === 'string' && r.destination.startsWith('/emchilgee/');
+export const isManaged = (r) => typeof r.destination === 'string' && /^\/emchilgee[/#]/.test(r.destination);
 
 /**
  * @param {string} text            одоогийн vercel.json
- * @param {{slug: string, legacy: string[]}[]} published
+ * @param {{slug: string, legacy: string[], dest?: string, permanent?: boolean}[]} published
+ *        dest — байхгүй бол '/emchilgee/<slug>'; permanent — байхгүй бол true (308)
  * @param {(src: string) => RegExp} toRegExp  check.mjs sourceToRegExp
  * @returns {{text: string, errors: string[], rules: object[]}}
  */
@@ -34,12 +37,15 @@ export function manageRedirects(text, published, toRegExp, { liveSlugs = new Set
       if (seen.get(source) === pg.slug) continue;            // нэг хуудсанд raw + encoded хос (эсвэл pipeline-тай давхар)
       if (seen.has(source)) { errors.push(`legacy "${raw}" давхардсан (${seen.get(source)}, ${pg.slug})`); continue; }
       seen.set(source, pg.slug);
-      rules.push({ source, destination: '/emchilgee/' + pg.slug, permanent: true });
+      const destination = pg.dest || '/emchilgee/' + pg.slug;
+      if (!isManaged({ destination })) { errors.push(`${pg.slug}: redirect destination "${destination}" /emchilgee/… эсвэл /emchilgee#… биш`); continue; }
+      rules.push({ source, destination, permanent: pg.permanent !== false });
     }
   }
   rules.sort((a, b) => a.source.localeCompare(b.source));
   for (const r of all.filter(isManaged)) {
-    if (!rules.some((x) => x.source === r.source && x.destination === r.destination)) {
+    // Ижил эх шинэ газар руу заасан бол (hub 307 → хуудас гарч 308) энгийн шилжилт — анхааруулахгүй
+    if (!rules.some((x) => x.source === r.source)) {
       warnings.push(`vercel.json-ийн "${r.source}" → ${r.destination} дүрмийг хасав (зөвхөн хуудасны legacy-аас үүснэ — хадгалах бол legacy-д нэмнэ үү)`);
     }
   }

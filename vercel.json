@@ -110,6 +110,351 @@
       "permanent": true
     },
     {
+      "source": "/post/%D0%BD%D2%AF%D1%85%D0%B6%D0%B8%D0%BB%D1%82%D0%B8%D0%B9%D0%B3-%D1%8F%D0%B0%D0%B6-%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0%D1%85-%D1%82%D0%B0%D0%BB%D0%B0%D0%B0%D1%80-%D1%8D-%D3%A9%D0%BD%D3%A9%D1%80%D1%81%D0%B0%D0%B9%D1%85%D0%B0%D0%BD-%D1%8D%D0%BC%D1%87-%D0%B7%D3%A9%D0%B2%D0%BB%D3%A9%D0%B6-%D0%B1%D0%B0%D0%B9%D0%BD%D0%B0",
+      "destination": "/emchilgee#scar",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B0%D1%80%D1%8C%D1%81%D0%BD%D1%8B-%D1%8D%D0%BC%D1%87%D0%B8%D0%B9%D0%BD-%D0%BE%D0%BD%D0%BB%D0%B0%D0%B9%D0%BD-%D0%B7%D3%A9%D0%B2%D0%BB%D3%A9%D0%B3%D3%A9%D3%A9",
+      "destination": "/emchilgee#exam",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B0%D1%80%D1%8C%D1%81%D0%BD%D1%8B-%D2%AF%D0%B7%D0%BB%D1%8D%D0%B3-%D0%BE%D0%BD%D0%BE%D1%88%D0%BB%D0%BE%D0%B3%D0%BE%D0%BE",
+      "destination": "/emchilgee#exam",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B0%D1%80%D1%8C%D1%81%D0%BD%D1%8B-3d-%D0%BE%D0%BD%D0%BE%D1%88%D0%BB%D0%BE%D0%B3%D0%BE%D0%BE",
+      "destination": "/emchilgee#exam",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-1-1",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-1-2",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-1-3",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-2-1",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-2-2",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-2-3",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-2-4",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D0%B1%D0%B0%D0%B3%D1%86-2-5",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%B0%D1%82%D0%B3%D0%B0-%D2%AF%D1%80%D1%8D%D0%B2%D1%81%D1%8D%D0%BB",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B1%D0%BE%D1%82%D0%BE%D0%BA%D1%81",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B4%D0%B0%D0%B2%D1%82%D0%B0%D0%BD-%D2%AF%D0%B7%D0%BB%D1%8D%D0%B3",
+      "destination": "/emchilgee#exam",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B7%D0%B0%D0%B3%D0%B0%D1%81%D0%B0%D0%BD-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0",
+      "destination": "/emchilgee#inject",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B7%D0%B0%D0%B3%D0%B0%D1%81%D0%B0%D0%BD-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0-aurora-s",
+      "destination": "/emchilgee#inject",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%B7%D0%B0%D0%B3%D0%B0%D1%81%D0%B0%D0%BD-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0-aurora-v",
+      "destination": "/emchilgee#inject",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%BA%D0%B0%D1%80%D0%B1%D0%BE%D0%BA%D1%81%D0%B8-%D0%BA%D0%B0%D1%80%D0%B1%D0%BE%D0%BD-%D0%BF%D0%B8%D0%B9%D0%BB-carboxy-carbon-peel",
+      "destination": "/emchilgee#scar",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%BA%D0%B0%D1%80%D0%B1%D0%BE%D0%BA%D1%81%D0%B8-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%BA%D0%B5%D0%BB%D0%BE%D0%B9%D0%B4-%D1%81%D0%BE%D1%80%D0%B2%D0%B8%D0%BD%D1%8B-%D1%82%D0%B0%D1%80%D0%B8%D0%B0",
+      "destination": "/emchilgee#scar",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%BD%D2%AF%D2%AF%D1%80%D0%BD%D0%B8%D0%B9-%D1%85%D1%8D%D0%BB%D0%B1%D1%8D%D1%80-%D0%B7%D0%B0%D1%81%D0%B0%D1%85-%D1%84%D0%B8%D0%BB%D0%BB%D0%B5%D1%80",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%BD%D3%A9%D1%81%D3%A9%D3%A9-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D-pigmentation-laser",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D0%BE%D0%BD%D0%BB%D0%B0%D0%B9%D0%BD-%D0%B7%D3%A9%D0%B2%D0%BB%D3%A9%D0%B3%D3%A9%D3%A9",
+      "destination": "/emchilgee#exam",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%81%D0%BE%D1%80%D0%B2%D0%B8-%D1%81%D0%B0%D0%BB%D0%B3%D0%B0%D1%85-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#scar",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%81%D1%83%D0%B3%D0%B0%D0%BD%D1%8B-%D1%85%D3%A9%D0%BB%D1%80%D3%A9%D0%BB%D1%82-%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0%D1%85-%D0%B1%D0%BE%D1%82%D0%BE%D0%BA%D1%81",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D1%84%D0%BE%D1%80%D0%BC%D0%B5%D1%80-iii",
+      "destination": "/emchilgee#lift",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%83%D1%80%D1%83%D1%83%D0%BB%D1%8B%D0%BD-%D1%84%D0%B8%D0%BB%D0%BB%D0%B5%D1%80-1-%D0%BC%D0%BB",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%84%D0%B8%D0%BB%D0%BB%D0%B5%D1%80-%D1%85%D0%B0%D0%B9%D0%BB%D1%83%D1%83%D0%BB%D0%B0%D0%B3%D1%87-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%85%D0%B0%D1%86%D1%80%D1%8B%D0%BD-%D1%83%D0%BB%D0%B0%D0%B9%D0%BB%D1%82%D1%8B%D0%BD-ipl-%D0%B3%D1%8D%D1%80%D1%8D%D0%BB-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%85%D1%83%D1%8F%D0%BD-%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0%D1%85-%D0%B1%D0%BE%D1%82%D0%BE%D0%BA%D1%81",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%85%D2%AF%D1%87%D0%B8%D0%BB%D1%8D%D1%8D%D1%80-%D0%B0%D1%80%D1%87%D0%B8%D1%85",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%86%D1%8D%D1%8D%D0%B6-%D0%BD%D1%83%D1%80%D1%83%D1%83%D0%BD%D1%8B-%D0%B1%D0%B0%D1%82%D0%B3%D0%B0%D0%BD%D1%8B-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D1%86%D1%8D%D1%8D%D0%B6-%D0%BD%D1%83%D1%80%D1%83%D1%83%D0%BD%D1%8B-%D0%B1%D0%B0%D1%82%D0%B3%D0%B0%D0%BD%D1%8B-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D-%D0%BA%D0%B0%D1%80%D0%B1%D0%BE%D0%BA%D1%81%D0%B8",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D2%AF%D1%80%D1%8D%D0%B2%D1%81%D1%8D%D0%BB%D1%82-%D0%B1%D0%B0%D1%82%D0%B3%D0%B0%D0%BD%D1%8B-%D0%BD%D1%8D%D0%B3-%D1%83%D0%B4%D0%B0%D0%B0%D0%B3%D0%B8%D0%B9%D0%BD-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/%D2%AF%D1%81-%D1%85%D1%83%D0%B9%D1%85-%D0%BE%D0%BD%D0%BE%D1%88%D0%BB%D0%BE%D0%B3%D0%BE%D0%BE",
+      "destination": "/emchilgee#inject",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/aha-70-%D1%85%D0%B8%D0%BC%D0%B8%D0%B9%D0%BD-%D0%B3%D1%83%D1%83%D0%B6%D1%83%D1%83%D0%BB%D0%B0%D0%BB%D1%82",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/cellbooster-glow-lift",
+      "destination": "/emchilgee#inject",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/cellbooster-hair-%D2%AF%D1%81%D0%BD%D0%B8%D0%B9-%D0%BC%D0%B5%D0%B7%D0%BE-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0",
+      "destination": "/emchilgee#inject",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/cooling-rf-massage",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diod-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D0%B3%D1%83%D1%8F",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diod-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-bikini-c%D1%83%D0%B3%D0%B0",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diod-laser-hair-removal-%D1%81%D0%B0%D1%85%D0%B0%D0%BB-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D0%B1%D2%AF%D1%82%D1%8D%D0%BD-%D0%B1%D0%B8%D0%B5",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D0%B3%D0%B0%D1%80-%D0%B1%D2%AF%D1%82%D1%8D%D0%BD-full-arms",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D0%B3%D0%B0%D1%80-%D1%85%D0%B0%D0%B3%D0%B0%D1%81",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D0%B3%D0%B0%D1%80-%D1%85%D3%A9%D0%BB-%D0%B1%D2%AF%D1%82%D1%8D%D0%BD",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D0%B3%D0%B0%D1%80-%D1%85%D3%A9%D0%BB-%D1%85%D0%B0%D0%B3%D0%B0%D1%81",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D0%BD%D2%AF%D2%AF%D1%80%D0%BD%D0%B8%D0%B9-%D1%85%D1%8D%D1%81%D1%8D%D0%B3",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-%D1%85%D3%A9%D0%BB-%D0%B1%D2%AF%D1%82%D1%8D%D0%BD",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80-bikini-%D0%B1%D2%AF%D1%82%D1%8D%D0%BD",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/diode-laser-hair-removal",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/facetem-caha-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0-%D1%84%D0%B8%D0%BB%D0%BB%D0%B5%D1%80%D1%82%D1%8D%D0%B9",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/facetem-caha-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0-2-%D0%B1%D2%AF%D1%82%D1%8D%D0%BD",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/glass-skin-%D0%B3%D2%AF%D0%BD%D0%B8%D0%B9-%D0%B1%D0%BE%D1%85%D0%B8%D1%80%D0%B4%D0%BE%D0%BB%D1%8B%D0%BD-%D1%86%D1%8D%D0%B2%D1%8D%D1%80%D0%BB%D1%8D%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/glass-skin-therapy-%D0%BC%D0%B0%D1%81%D1%81%D0%B0%D0%B6%D0%B3%D2%AF%D0%B9",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/ipl-%D0%B1%D0%B0%D1%82%D0%B3%D0%B0%D0%BD%D1%8B-%D0%B1%D0%B0%D0%B3%D1%86%D0%BD%D1%8B-%D1%83%D1%80%D0%B0%D0%BC%D1%88%D1%83%D1%83%D0%BB%D0%B0%D0%BB",
+      "destination": "/emchilgee#acne",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/ipl-%D0%B3%D1%8D%D1%80%D0%BB%D1%8D%D0%BD-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/ipl-%D2%AF%D1%81%D0%BD%D0%B8%D0%B9-%D1%83%D1%80%D0%B3%D0%B0%D0%BB%D1%82-%D0%B7%D0%BE%D0%B3%D1%81%D0%BE%D0%BE%D1%85-%D0%BB%D0%B0%D0%B7%D0%B5%D1%80",
+      "destination": "/emchilgee#laser",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/juvelook-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/laser-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#scar",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/mts-microneedling-therapy-%D0%B1%D0%B8%D1%87%D0%B8%D0%BB-%D0%B7%D2%AF%D2%AF%D0%BD-%D1%8D%D0%BC%D1%87%D0%B8%D0%BB%D0%B3%D1%8D%D1%8D",
+      "destination": "/emchilgee#scar",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/rejuran-4ml-%D1%82%D0%B0%D1%80%D0%B8%D0%BB%D0%B3%D0%B0",
+      "destination": "/emchilgee#inject",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/rf-%D0%BC%D0%B0%D1%81%D1%81%D0%B0%D0%B6",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/rf-%D0%BD%D2%AF%D2%AF%D1%80-%D1%85%D2%AF%D0%B7%D2%AF%D2%AF%D0%BD%D0%B8%D0%B9-%D0%BC%D0%B0%D1%81%D1%81%D0%B0%D0%B6",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/rf-%D1%85%D2%AF%D0%B9%D1%82%D1%8D%D0%BD-%D0%BC%D0%B0%D1%81%D1%81%D0%B0%D0%B6",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/tca",
+      "destination": "/emchilgee#glow",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/v-line-botox",
+      "destination": "/emchilgee#anti",
+      "permanent": false
+    },
+    {
+      "source": "/service-page/vivace",
+      "destination": "/emchilgee#scar",
+      "permanent": false
+    },
+    {
       "source": "/book-online/:rest*",
       "destination": "/#contact",
       "permanent": true
@@ -131,7 +476,7 @@
     },
     {
       "source": "/service-page/:rest*",
-      "destination": "/#treatments",
+      "destination": "/emchilgee",
       "permanent": false
     },
     {

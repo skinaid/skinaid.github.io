@@ -294,7 +294,9 @@ Datacom (manage.datacom.mn) DNS удирдлага дээр:
 
 - `trailingSlash: false` — хуудсууд ташуу зураасгүй хаягтай (`/privacy`, `/admin`). Canonical, sitemap, дотоод холбоос бүгд ташуугүй хэлбэрийг ашиглана.
 - `/index.html` → `/`, `/<хавтас>/index.html` → `/<хавтас>`, `/privacy-policy` → `/privacy`.
-- Хуучин Wix замууд: `/service-page/*` → `/#treatments`, `/post/*`, `/blog/*` → `/#blog`, `/book-online*` → `/#contact`.
+- Хуучин Wix замууд: `/service-page/*` → `/emchilgee` (hub, 307), `/post/*`, `/blog/*` → `/#blog`, `/book-online*` → `/#contact`.
+  `content/pipeline.mjs`-д тулгагдсан хуучин URL нь тухайн хуудас гарах хүртэл hub-ийн ангилал руу (`/emchilgee#<category>`, 307),
+  гарсны дараа хуудас руу 308 — хоёуланг нь build удирдана.
   `/product-page/*` (хуучин онлайн дэлгүүрийн 25 бараа) зориуд redirect-гүй — 404 өгч индексээс хурдан гарна (2026-11-24 аудит:
   нүүр рүү бөөнөөр redirect хийхийг Google «soft 404» гэж үздэг, сайт бараа зардаггүй).
   Эмчилгээний хуудас нийтлэгдэхэд `content/pipeline.mjs` / хуудасны `legacy` URL-ууд → тэр хуудас руу 308 redirect-ийг build
