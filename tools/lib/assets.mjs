@@ -104,7 +104,11 @@ export class AssetStamper {
       this.files.set(rel, stamped);
       v = sha8(Buffer.from(stamped, 'utf8'));
     } else if (/\.css$/.test(rel)) {
-      v = sha8(Buffer.from(this.read(rel), 'utf8'));
+      // url(...) доторх /assets файлд (фонт, зураг) хувилбар тавина — HTML-ийн <link rel=preload> ижил URL-тай
+      // байхгүй бол хөтөч фонтыг хоёр удаа татна. CSS-ийн hash нь хувилбарласан текстээс тооцогдоно.
+      const stamped = this.stampCss(rel, this.read(rel));
+      this.files.set(rel, stamped);
+      v = sha8(Buffer.from(stamped, 'utf8'));
     } else {
       v = sha8(readFileSync(join(this.root, rel)));
     }
@@ -129,6 +133,23 @@ export class AssetStamper {
       if (!target || target === rel) return m;
       return q + url + '?v=' + this.version(target) + q;
     });
+  }
+
+  /** CSS-ийн url(...)-д хувилбар тавина (CSS файлын байрлалаас задална; data:, гадаад URL-д хүрэхгүй).
+   *  /* тайлбар *\/ доторх url()-д хүрэхгүй; url( том/жижиг үсэг хамаагүй; ?v-ээс бусад query параметрийг хадгална. */
+  stampCss(rel, text) {
+    const baseDir = dirname(rel);
+    const stamp = (css) => css.replace(/url\(\s*(['"]?)([^'")\s]+?)\1\s*\)/gi, (m, q, url) => {
+      const target = this.resolve(baseDir, url);
+      if (!target || target === rel) return m;
+      const at = url.indexOf('#');
+      const hash = at >= 0 ? url.slice(at) : '';
+      const [base, query = ''] = (at >= 0 ? url.slice(0, at) : url).split('?');
+      const params = query.split('&').filter((p) => p && !/^v=/.test(p));
+      params.push('v=' + this.version(target));
+      return `url(${q}${base}?${params.join('&')}${hash}${q})`;
+    });
+    return text.split(/(\/\*[\s\S]*?\*\/)/).map((part, i) => (i % 2 ? part : stamp(part))).join('');
   }
 
   /** HTML-ийн src/href/srcset болон <meta content="…/assets/…"> (og:image, twitter:image)-д хувилбар тавина. */

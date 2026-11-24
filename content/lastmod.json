@@ -1,10 +1,14 @@
 {
   "/": {
-    "hash": "0180a629e1aa",
-    "date": "2026-11-23"
+    "hash": "cdd2afb3bd4e",
+    "date": "2026-11-24"
   },
   "/privacy": {
     "hash": "2d5faa346f79",
     "date": "2026-11-10"
+  },
+  "/emchilgee": {
+    "hash": "6a4428babb66",
+    "date": "2026-11-24"
   }
 }

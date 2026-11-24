@@ -38,8 +38,9 @@
   --r-lg: 28px;
   --r-xl: 36px;
 
-  --font-display: 'Montserrat', 'Manrope', system-ui, sans-serif;
-  --font-body: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* @font-face болон тааруулсан fallback (… Fallback A/R): assets/css/fonts.css */
+  --font-display: 'Montserrat', 'Montserrat Fallback A', 'Montserrat Fallback R', system-ui, sans-serif;
+  --font-body: 'Manrope', 'Manrope Fallback A', 'Manrope Fallback R', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   --container: 1200px;
   --gutter: clamp(16px, 4vw, 32px);
