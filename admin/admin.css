@@ -140,7 +140,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width
 /* Модуль 5: Нүүр хуудас */
 .hm-note { background: var(--cream-50); }
 .hm-note p { color: var(--ink-2); font-size: 13.5px; margin: 0; }
-.hm-note__diff { margin-top: 10px !important; padding: 10px 12px; border-radius: 12px; background: var(--gold-100); border: 1px solid var(--gold); color: #5a4214 !important; }
+.hm-note__diff { margin-top: 10px; font-size: 13.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; background: var(--gold-100); border: 1px solid var(--gold); color: #5a4214 !important; }
 .hm-title { border: 0; padding: 0; margin: 0; min-width: 0; }
 .hm-title legend { font-size: 13px; font-weight: 700; color: var(--ink-2); margin-bottom: 6px; padding: 0; }
 .hm-title__row { display: grid; grid-template-columns: 1fr .8fr 1fr; gap: 10px; }
@@ -173,7 +173,7 @@ table.hm-stats { min-width: 520px; }
 .hm-preview { border: 1px dashed var(--purple-200); border-radius: 20px; padding: clamp(16px, 2.5vw, 28px); background: linear-gradient(180deg, #fff, var(--purple-50)); display: grid; gap: 24px; }
 .hm-preview .hero__title { font-size: clamp(26px, 3vw, 38px); }
 .hm-preview .hero__stats { margin-top: 28px; padding-top: 18px; }
-.hm-preview__posts:empty::before { content: "Харагдах карт алга — сайтад «Зөвлөгөө» хэсэг нуугдана."; color: var(--muted); font-size: 13.5px; }
+.hm-preview__posts:empty::before { content: "Харагдах карт алга — сайтын «Зөвлөгөө» хэсэгт зөвхөн гарчиг, Facebook холбоос үлдэнэ."; color: var(--muted); font-size: 13.5px; }
 .hm-json { width: 100%; min-height: 220px; margin-top: 12px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px 12px; border: 1.5px solid var(--purple-200); border-radius: 12px; }
 @media (max-width: 860px) {
   .hm-post { grid-template-columns: 1fr; }

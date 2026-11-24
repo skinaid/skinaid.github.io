@@ -132,8 +132,11 @@ test('validateHome: extra keys (updatedBy — admin e-mail in a public repo), un
   const multi = clone(home);
   multi.hero.titlePre = multi.hero.titleEm = multi.hero.titlePost = '';
   multi.posts.forEach((p) => { p.hidden = true; });
-  const e3 = validateHome(multi, H, ctx()).errors;
-  assert.ok(e3.some((e) => /h1/.test(e)) && e3.some((e) => /харагдах/.test(e)), e3.join('\n'));
+  const r3 = validateHome(multi, H, ctx());
+  assert.ok(r3.errors.some((e) => /h1/.test(e)), r3.errors.join('\n'));
+  assert.ok(r3.warnings.some((e) => /харагдах карт алга/.test(e)), 'all hidden = warning only');
+  const allHidden = clone(home); allHidden.posts.forEach((p) => { p.hidden = true; });
+  assert.deepEqual(validateHome(allHidden, H, ctx()).errors, []);
   assert.equal(validateHome(multi, H, ctx()).home, null);
   assert.ok(validateHome('x', H, ctx()).errors.length);
   assert.ok(validateHome({ hero: home.hero, posts: {} }, H, ctx()).errors.some((e) => /posts/.test(e)));
@@ -184,4 +187,7 @@ test('photo names: upper-case extensions ok, ?v must be lower-case (firestore.ru
   assert.ok(H.validImg('assets/img/photos/IMG_0001.JPG'));
   assert.ok(!H.validImg('assets/img/photos/a.jpg?v=ABCDEF12'));
   assert.ok(!H.validImg('assets/img/photos/зураг.jpg'));
+  const n = H.norm({ posts: [{ title: 't', url: 'HTTPS://www.facebook.com/x', img: 'Https://cdn.example.com/a.jpg' }] }).posts[0];
+  assert.equal(n.url, 'https://www.facebook.com/x');
+  assert.equal(n.img, 'https://cdn.example.com/a.jpg');
 });

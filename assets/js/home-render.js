@@ -53,8 +53,9 @@
   }
   function normPost(p) {
     if (!p || typeof p !== 'object') return null;
-    const img = typeof p.img === 'string' ? p.img.trim() : '';
-    const url = typeof p.url === 'string' ? p.url.trim() : '';
+    // «HTTPS://…» → «https://…» (firestore.rules validPost том/жижиг үсэг ялгадаг)
+    const img = typeof p.img === 'string' ? p.img.trim().replace(/^https:/i, 'https:') : '';
+    const url = typeof p.url === 'string' ? p.url.trim().replace(/^https:/i, 'https:') : '';
     return {
       id: str(p.id, LIMITS.id), cat: str(p.cat, LIMITS.cat), title: str(p.title, LIMITS.title),
       text: str(p.text, LIMITS.postText), by: str(p.by, LIMITS.by),

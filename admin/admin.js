@@ -505,7 +505,14 @@ const newPostId = () => 'p' + Date.now().toString(36) + Math.random().toString(3
 const msOf = (ts) => (ts && typeof ts.toMillis === 'function' ? ts.toMillis() : null);
 /** content/home.json-ийн хэлбэрээр харьцуулах (?v-гүй зураг, updatedAt-гүй) */
 const homeKey = (x) => JSON.stringify(HR && x ? HR.forRepo(x) : null);
-const lockHome = (on) => { homeForm.inert = on; homeForm.classList.toggle('is-locked', on); $('#btnHomeDefaults').disabled = on; };
+let homeSaving = false;
+let staleDoc = null;     // repo шинэчлэгдсэнээс болж сайтад харагдахгүй байгаа хадгалалт («Хадгалсан хувилбараа ачаалах»)
+/** Засварын хэсгүүдийг түгжинэ; статусын мөр (role=status) түгжээгүй үлдэнэ — дэлгэц уншигч мэдэгдлийг уншина */
+const lockHome = (on) => {
+  $$(':scope > .panel', homeForm).forEach((x) => { x.inert = on; });
+  homeForm.classList.toggle('is-locked', on);
+  ['#btnHomeDefaults', '#btnHomeReload', '#btnHmJson', '#btnSaveHome'].forEach((id) => { $(id).disabled = on; });
+};
 lockHome(true);
 
 const statRow = (s, i) => {
@@ -729,7 +736,8 @@ const showHomeNote = (kind, when) => {
       ? 'Зочдод харагдаж буй (хадгалсан) хувилбар Google-ийн уншдаг үндсэн хувилбараас өөр байна: Google хуучин текстийг харж, нүүр ачаалахад хуучин текст хормын төдий харагдана. «Хөгжүүлэгчид илгээх JSON хуулах» дарж хөгжүүлэгчид илгээнэ үү.'
       : '';
   el.hidden = !msg;
-  el.textContent = msg;
+  $('#hmDiffMsg').textContent = msg;
+  $('#btnHmLoadSaved').hidden = kind !== 'stale';
 };
 const showLoadError = (msg) => {
   $('#hmLoadMsg').textContent = msg;
@@ -739,6 +747,7 @@ const showLoadError = (msg) => {
 
 const loadHome = async () => {
   if (!HR || !HOME_DATA.defaults) { showLoadError('Нүүр хуудасны скрипт (home-render.js / home-data.js) ачаалагдсангүй — хуудсыг дахин ачаална уу.'); return; }
+  if (homeSaving) return;
   if (homeReady && homeDirty && !confirm('Хадгалаагүй өөрчлөлт байна. Хадгалсан хувилбарыг ачаалж, өөрчлөлтөө хаях уу?\n\n«Болих» — засвараа үлдээнэ.')) return;
   $('#hmLoad').hidden = true;
   setStatus(homeStatus, 'Ачаалж байна…', '');
@@ -760,7 +769,8 @@ const loadHome = async () => {
   homeLive = !!n;
   lockHome(false);
   setStatus(homeStatus, d ? `Сүүлд хадгалсан: ${fmtDate(d.updatedAt)} · ${d.updatedBy || ''}` : 'Одоогоор энд хадгалсан зүйл алга — сайт үндсэн хувилбараараа харагдаж байна.', '');
-  if (stale && homeKey(HR.norm(d)) !== homeKey(D)) showHomeNote('stale', fmtDate(d.updatedAt));
+  staleDoc = stale && homeKey(HR.norm(d)) !== homeKey(D) ? d : null;
+  if (staleDoc) showHomeNote('stale', fmtDate(d.updatedAt));
   else showHomeNote(homeLive && homeKey(n) !== homeKey(D) ? 'unsynced' : null);
 };
 
@@ -807,6 +817,15 @@ $('#btnHomeDefaults').addEventListener('click', () => {
   setStatus(homeStatus, 'Үндсэн хувилбар дүүргэгдлээ — хадгалахаа мартуузай.', '');
 });
 $('#btnHomeReload').addEventListener('click', () => { loadHome(); });
+$('#btnHmLoadSaved').addEventListener('click', () => {
+  if (!staleDoc || !homeReady) return;
+  if (homeDirty && !confirm('Маягт дээрх хадгалаагүй өөрчлөлтийг таны өмнөх хадгалалтаар солих уу?')) return;
+  const n = HR.norm(staleDoc) || {};
+  fillHome({ hero: n.hero || HOME_DATA.defaults.hero, posts: n.posts || [] });
+  homeDirty = true;
+  showHomeNote(null);
+  setStatus(homeStatus, 'Таны өмнөх хадгалалт маягтад ачаалагдлаа — хөгжүүлэгчийн шинэчлэлттэй харьцуулж шалгаад хадгална уу.', '');
+});
 $('#btnHmRetry').addEventListener('click', () => { loadHome(); });
 $('#btnHmJson').addEventListener('click', async () => {
   if (!HR) return;
@@ -857,8 +876,23 @@ homeForm.addEventListener('submit', async (e) => {
   btn.disabled = true;
   lockHome(true);   // хадгалах явцад бичсэн текст алга болохгүйн тулд маягтыг түгжинэ
   setStatus(homeStatus, 'Хадгалж байна…', '');
-  const payload = { hero: n.hero, posts: n.posts, baseRev: HOME_DATA.rev || '', updatedAt: serverTimestamp(), updatedBy: currentUser.email };
+  homeSaving = true;
   try {
+    // Энэ хуудсыг нээснээс хойш сайт шинэ хувилбараар (repo-ийн content/home.json) байршсан бол хуучин rev-ээр
+    // хадгалбал сайт таны хадгалалтыг үл тоох байсан — одоогийн rev-ийг уншиж, хэрэглэгчээс асууна.
+    let rev = HOME_DATA.rev || '';
+    try {
+      const t = await (await fetch('/admin/home-data.js?_=' + Date.now(), { cache: 'no-store' })).text();
+      const live = (t.match(/"rev":\s*"([0-9a-f]*)"/) || [])[1];
+      if (live && live !== rev) {
+        if (!confirm('Таныг энэ хуудсыг нээснээс хойш сайтын үндсэн хувилбар шинэчлэгдсэн байна.\n\nOK — таны хувилбар сайтад гарна (шинэчлэлтийг дарна).\nБолих — хадгалахгүй; «Хөгжүүлэгчид илгээх JSON хуулах»-аар засвараа хуулж аваад хуудсыг дахин ачаална уу.')) {
+          setStatus(homeStatus, 'Хадгалаагүй — сайтын үндсэн хувилбар шинэчлэгдсэн. Засвар тань маягт дээр хэвээр.', 'err');
+          return;
+        }
+        rev = live;
+      }
+    } catch (_) { /* сүлжээ — HOME_DATA.rev-ээр үргэлжлүүлнэ */ }
+    const payload = { hero: n.hero, posts: n.posts, baseRev: rev, updatedAt: serverTimestamp(), updatedBy: currentUser.email };
     let r = await saveHomeTx(payload, false);
     if (!r.ok) {
       const c = r.conflict;
@@ -878,5 +912,5 @@ homeForm.addEventListener('submit', async (e) => {
     setStatus(homeStatus, `Хадгалагдлаа (${shown} карт харагдана${dropped ? `; огт бөглөөгүй ${dropped} карт хасагдлаа` : ''}) — сайт дээр дараагийн ачааллаас харагдана.`, 'ok');
     toast('Нүүр хуудас хадгалагдлаа');
   } catch (err) { setStatus(homeStatus, errText(err), 'err'); }
-  finally { btn.disabled = false; lockHome(false); if (document.activeElement === document.body) btn.focus(); }
+  finally { homeSaving = false; lockHome(false); if (document.activeElement === document.body) btn.focus(); }
 });

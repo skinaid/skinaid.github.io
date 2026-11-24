@@ -41,13 +41,13 @@ export function firstDiff(a, b, path = '') {
  * @param {{ internalPaths: Set<string>, photoError: (rel: string) => string|null }} ctx
  *   internalPaths — сайтын индекслэгдэх хуудсууд ('/', '/privacy', нийтлэгдсэн /emchilgee/…);
  *   photoError — assets/img/photos/… файл байхгүй/git-д бүртгэлгүй бол шалтгаан
- * @returns {{ home: {hero: object, posts: object[]}|null, errors: string[] }}
+ * @returns {{ home: {hero: object, posts: object[]}|null, errors: string[], warnings: string[] }}
  */
 export function validateHome(raw, H, { internalPaths, photoError }) {
   const W = 'content/home.json';
-  const errors = [];
+  const errors = [], warnings = [];
   const n = H.norm(raw);
-  if (!n) return { home: null, errors: [`${W}: JSON объект байх ёстой`] };
+  if (!n) return { home: null, errors: [`${W}: JSON объект байх ёстой`], warnings };
   if (!n.hero) errors.push(`${W}: hero алга эсвэл h1 (titlePre/titleEm/titlePost) хоосон`);
   if (!n.posts) errors.push(`${W}: posts массив байх ёстой`);
   if (n.hero && n.posts) {
@@ -55,7 +55,8 @@ export function validateHome(raw, H, { internalPaths, photoError }) {
     if (d) errors.push(`${W}: хэвшээгүй — ${d}. assets/js/home-render.js norm()-той тааруулна уу (admin-ий «JSON хуулах» гаргалт тохирно)`);
   }
   const posts = n.posts || [];
-  if (!H.visiblePosts(posts).length) errors.push(`${W}: дор хаяж 1 харагдах (нуугдаагүй, гарчигтай) карт хэрэгтэй`);
+  // Бүх карт нуугдсан нь зөвшөөрөгдсөн төлөв (admin confirm-оор хадгалж болно; сайт гарчиг, Facebook холбоосыг үлдээнэ)
+  if (n.posts && !H.visiblePosts(posts).length) warnings.push(`${W}: харагдах карт алга — «Зөвлөгөө» хэсэгт зөвхөн гарчиг, Facebook холбоос үлдэнэ`);
   const ids = posts.map((p) => p.id);
   if (ids.some((id) => !id) || new Set(ids).size !== ids.length) errors.push(`${W}: картын id хоосон эсвэл давхардсан`);
   posts.forEach((p, i) => {
@@ -68,7 +69,7 @@ export function validateHome(raw, H, { internalPaths, photoError }) {
     }
   });
   for (const [k, t] of H.texts(n)) for (const c of findClaims(t, HOME_CLAIMS_ALLOW)) errors.push(`${W}: ${k} — хориотой мэдэгдэл «${c.label}»: …${c.context}…`);
-  return { home: n.hero && n.posts ? n : null, errors };
+  return { home: n.hero && n.posts ? n : null, errors, warnings };
 }
 
 /**

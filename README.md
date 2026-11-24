@@ -83,9 +83,12 @@ Build юу хийдэг вэ:
 **Нүүрний hero ба «Зөвлөгөө» картууд** (admin → Нүүр хуудас). Статик HTML-ийг `content/home.json`-оос build бичнэ
 (`<!-- build:home-hero -->`, `<!-- build:home-posts -->`); admin Firestore `settings/home`-д хадгалбал `main.js` зочны
 хөтөч дээр ЗӨВХӨН ялгаатай хэсгийг сольж давхарлана (ижил бол DOM-д хүрэхгүй). Google, JS-гүй хөтөч, Firestore унасан үед
-статик хувилбар харагдана. Admin-ий өөрчлөлтийг Google-д хүргэх (7-р үе шатны синк хүртэл): admin → «Repo-д зориулж JSON
-хуулах» → `content/home.json`-д тавих → `node tools/build.mjs` → commit. Build `content/home.json`-ийг шалгана: хэвшсэн
-(`norm()`-той ижил), дор хаяж 1 харагдах карт, хориотой үггүй (`HOME_CLAIMS_ALLOW` — tools/build.mjs).
+статик хувилбар харагдана. Admin-ий өөрчлөлтийг Google-д хүргэх (7-р үе шатны синк хүртэл): admin → «Хөгжүүлэгчид илгээх
+JSON хуулах» → `content/home.json`-д тавих → `node tools/build.mjs` → commit. `content/home.json` өөрчлөгдөхөд index.html-ийн
+`data-home-rev` шинэчлэгдэж, түүнээс өмнө admin-д хадгалсан хувилбарыг сайт давхарлахаа болино (repo ялна; admin дахин
+хадгалбал буцна). Build `content/home.json`-ийг `tools/lib/home.mjs`-ээр шалгана: хэвшсэн (`norm()`-той ижил,
+updatedAt/updatedBy-гүй), дор хаяж 1 харагдах карт, дотоод холбоос байгаа хуудас руу, зураг git-д, хориотой үггүй
+(`HOME_CLAIMS_ALLOW`).
 
 ## Эмчилгээний хуудас нийтлэх (эмчийн хяналттай)
 
@@ -196,8 +199,9 @@ node tools/ub-mock-server.mjs
   Хэн ч **зөвхөн үүсгэж** чадна (талбар бүр дүрмээр шалгагдана); унших/засах/устгах — зөвхөн admin.
 - `settings/site` — `hours, phone, email, promoEnabled, bookingEnabled` — нийтэд уншигдана, admin бичнэ.
 - `settings/catalog` — `services[] (id,c,n,d,t,p,hidden), packages[] (id,name,price,hidden)` — нийтэд уншигдана, admin бичнэ.
-- `settings/home` — `hero{badge,titlePre,titleEm,titlePost,text,btnPrimary,btnSecondary,stats[≤3]{num,suffix,label}}, posts[≤12]{id,cat,title,text,by,img,url,hidden}` —
-  нийтэд уншигдана (зөвхөн нүүр хуудас), admin «Нүүр хуудас» бичнэ. Хязгаар: `assets/js/home-render.js` LIMITS = `firestore.rules` validHero.
+- `settings/home` — `hero{badge,titlePre,titleEm,titlePost,text,btnPrimary,btnSecondary,stats[≤3]{num,suffix,label}}, posts[≤12]{id,cat,title,text,by,img,url,hidden}, baseRev` —
+  нийтэд уншигдана (зөвхөн нүүр хуудас; нүүр нээх бүрт 3 read болно), admin «Нүүр хуудас» бичнэ. Хязгаар: `assets/js/home-render.js`
+  LIMITS = `firestore.rules` validHero/validPost. `baseRev` = хадгалах үеийн `content/home.json`-ийн хувилбар (index.html `data-home-rev`).
 
 ### Дүрэм шинэчлэх
 

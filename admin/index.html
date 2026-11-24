@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=9ef6c77d">
-  <link rel="stylesheet" href="/admin/admin.css?v=54662fba">
+  <link rel="stylesheet" href="/admin/admin.css?v=9a2c0e31">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -118,9 +118,9 @@
         <div class="hm-load" id="hmLoad" role="alert" hidden><span id="hmLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnHmRetry">Дахин оролдох</button></div>
         <div class="panel hm-note">
           <p><strong>Google хайлт.</strong> Энд хадгалсан өөрчлөлт зочдод шууд (дараагийн ачааллаас) харагдана. Харин Google сайтын үндсэн хувилбарыг уншдаг тул өөрчлөлтийг тэнд хүргэхийн тулд «Хөгжүүлэгчид илгээх JSON хуулах» дарж хөгжүүлэгчид илгээнэ (дараа нь автомат болно). Тэр хүртэл нүүр ачаалахад хуучин текст хормын төдий харагдаж болно.</p>
-          <p class="hm-note__diff" id="hmDiff" hidden></p>
+          <div class="hm-note__diff" id="hmDiff" hidden><span id="hmDiffMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnHmLoadSaved" hidden>Хадгалсан хувилбараа ачаалах</button></div>
         </div>
-        <form id="homeForm" novalidate inert>
+        <form id="homeForm" novalidate>
           <div class="panel">
             <h2>Hero — нүүрний эхний хэсэг</h2>
             <p>Товчны текст хоосон бол анхны текст («Цаг захиалах», «Үйлчилгээ үзэх») харагдана; товчны холбоос тогтмол. Тэмдэг, тайлбар хоосон бол сайтаас алга болно.</p>
@@ -246,8 +246,8 @@
 
   <script src="/assets/js/catalog-defaults.js?v=cf4cf057"></script>
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
-  <script src="/assets/js/home-render.js?v=ac65b3ed"></script>
+  <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=bb3c7dbe"></script>
-  <script type="module" src="/admin/admin.js?v=39b39f0f"></script>
+  <script type="module" src="/admin/admin.js?v=32f3bb6f"></script>
 </body>
 </html>

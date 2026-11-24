@@ -42,7 +42,7 @@ service cloud.firestore {
         && (h.get('stats', []).size() < 3 || validStat(h.stats[2]));
     }
     // «Зөвлөгөө» карт (settings/home.posts[i]). Зураг: сайтын assets/img/photos/… эсвэл https://; холбоос: https:// эсвэл
-    // сайтын /зам (//host биш). Нарийн шүүлт (escape, хост) home-render.js norm()-д — энд хамгаалалтын 2-р давхарга.
+    // сайтын /зам (//host, зай/tab биш). Нарийн шүүлт (\\, ' г.м., escape, хост) home-render.js norm()-д — энд хамгаалалтын 2-р давхарга.
     function validPost(p) {
       return p is map
         && p.keys().hasOnly(['id', 'cat', 'title', 'text', 'by', 'img', 'url', 'hidden'])
@@ -52,9 +52,9 @@ service cloud.firestore {
         && isStr(p.get('text', ''), 0, 300)
         && isStr(p.get('by', ''), 0, 60)
         && isStr(p.get('img', ''), 0, 500)
-        && p.get('img', '').matches('^(https://[^ "<>]+|assets/img/photos/[A-Za-z0-9._-]+([?]v=[0-9a-z]+)?)?$')
+        && p.get('img', '').matches('^(https://[^[:space:]"<>]+|assets/img/photos/[A-Za-z0-9._-]+([?]v=[0-9a-z]+)?)?$')
         && isStr(p.get('url', ''), 0, 500)
-        && p.get('url', '').matches('^(https://[^ "<>]+|/([^/][^ "<>]*)?)?$')
+        && p.get('url', '').matches('^(https://[^[:space:]"<>]+|/([^/[:space:]][^[:space:]"<>]*)?)?$')
         && p.get('hidden', false) is bool;
     }
     // List-ээр давталт хийх боломжгүй тул 12 байрлалыг тус тусад нь (size()-ээр богино холболттой)

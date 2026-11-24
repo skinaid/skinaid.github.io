@@ -155,6 +155,7 @@ const homeContent = (() => {
   const r = validateHome(raw, H, { internalPaths, photoError });
   homeIssues.push(...r.errors);
   contentErrors.push(...r.errors);
+  contentWarnings.push(...r.warnings);
   return r.home;
 })();
 // Repo-ийн хувилбарын тэмдэг: admin хадгалахдаа baseRev болгон бичнэ. Сайт дээр baseRev ≠ энэ бол repo
