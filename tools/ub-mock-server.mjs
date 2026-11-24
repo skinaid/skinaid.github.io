@@ -16,6 +16,8 @@
 //   99000002 → 429 RATE_LIMITED                                99000005 → 429 PHONE_LIMIT
 //   99000003 → захиалга үүснэ, гэвч хариу тасарна (socket)     99000006 → 403 CHANNEL_PAUSED
 //              → ИЖИЛ Idempotency-Key-ээр давтвал 200 давталт
+// Үнийг нуусан үйлчилгээ (API §2.1б): «REJURAN Healer 2 мл» — /services-д price: null, price_hidden: true; prepay-д
+//   payment.amount = жинхэнэ үнэ (эсвэл тогтмол урьдчилгаа)
 // Давхар захиалга (API §2.3): ижил утсаар ИЖИЛ үйлчилгээнд дахин захиалбал 409 DUPLICATE_BOOKING (огноо, цаг, үйлчилгээ);
 //   «Тийм, дахин захиалах» → allow_duplicate: true-тай дахин илгээхэд захиалга үүснэ
 import { createServer } from 'node:http';
@@ -31,7 +33,12 @@ const services = [
   { id: '6f1c2a10-0000-4000-8000-000000000003', name: 'Сорвины лазер эмчилгээ', category: '02. Батга, сорви', duration_min: 45, price: 150000, price_max: null },
   { id: '6f1c2a10-0000-4000-8000-000000000004', name: 'Rejuran Healer', category: '03. Тарилга', duration_min: 60, price: 450000, price_max: null },
   { id: '6f1c2a10-0000-4000-8000-000000000005', name: 'Ультраформер III (HIFU)', category: '04. Арьс чангалах', duration_min: 90, price: 300000, price_max: 900000 },
+  // Эмнэлэг үнийг НУУСАН (UB Beauty 0212 «Үнийг нийтэд харуулах» унтраалттай): API price: null, price_hidden: true;
+  // төлөх дүн (prepay) = жинхэнэ үнэ → зөвхөн payment.amount-д
+  { id: '6f1c2a10-0000-4000-8000-000000000006', name: 'REJURAN Healer 2 мл', category: '03. Тарилга', duration_min: 60, price: 750000, price_max: null, hidden: true },
 ];
+/** API-д гарах хэлбэр — нуусан үнэ null (UB Beauty src/lib/price-visibility.ts `withPublicPrice`) */
+const publicService = ({ hidden, ...s }) => (hidden ? { ...s, price: null, price_max: null, price_hidden: true } : { ...s, price_hidden: false });
 const doctors = [
   { id: '7a2b3c40-0000-4000-8000-000000000004', name: 'М.Ресепшн', title: 'Зохион байгуулагч', role: 'receptionist', days: [0, 1, 2, 3, 4, 5], from: 9, to: 20 },
   { id: '7a2b3c40-0000-4000-8000-000000000001', name: 'Б.Сарнай', title: 'Арьсны эмч', days: [0, 1, 2, 3, 4], from: 10, to: 18 },
@@ -158,7 +165,7 @@ const server = createServer(async (req, res) => {
       },
     }, origin);
   }
-  if (req.method === 'GET' && path === '/services') return send(res, 200, { services }, origin);
+  if (req.method === 'GET' && path === '/services') return send(res, 200, { services: services.map(publicService) }, origin);
   if (req.method === 'GET' && path === '/doctors') {
     const list = doctors.map((d) => ({ id: d.id, name: state.hideNames ? null : d.name, title: state.hideNames ? null : d.title, photo_url: null, staff_role: d.role || 'doctor' }));
     return send(res, 200, { doctors: list, doctor_required: true }, origin);
@@ -219,7 +226,7 @@ const server = createServer(async (req, res) => {
     const booking = {
       id: randomUUID(), status: state.mode === 'request' ? 'pending_confirmation' : prepay ? 'pending_payment' : 'confirmed', start: startISO,
       end: new Date(start.getTime() + service.duration_min * 60000).toISOString(), label: label(startISO), date,
-      service: { id: service.id, name: service.name, duration_min: service.duration_min, price: service.price },
+      service: { id: service.id, name: service.name, duration_min: service.duration_min, price: service.hidden ? null : service.price, price_hidden: Boolean(service.hidden) },
       doctor: { id: doctor.id, name: state.hideNames ? null : doctor.name }, created: true, sms_sent: false, payment: null,
     };
     const row = {
