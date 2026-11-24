@@ -1,0 +1,82 @@
+/* SKIN AID — вэб фонт (өөрийн домэйноос; Google Fonts-ийн холболтгүй).
+ *
+ * Файлууд: Google Fonts-ийн `text=` subset — Монгол кирилл (Ө ө Ү ү), латин, ₮, дээд/доод индекс (CO₂), түгээмэл цэг тэмдэг.
+ * Нэг variable файл бүх жинг хамарна. Лиценз: assets/fonts/OFL.txt (SIL OFL 1.1).
+ * Хуудас бүрийн <head>-д эдгээр хоёр файлыг <link rel="preload" as="font" crossorigin>-оор ачаална
+ * (URL нь build-ийн ?v=hash-тай яг таарна — tools/lib/assets.mjs stampCss).
+ *
+ * «… Fallback A/R» — фонт ирэхээс өмнө харагдах системийн фонтыг (A = Arial: Windows, macOS, iOS;
+ * R = Roboto: Android) вэб фонтын өргөн, өндөрт тааруулна. Ингэснээр фонт солигдоход мөр шилжиж
+ * layout хөдлөхгүй (CLS). size-adjust нь 2026-11-24-нд хөтөч дээр нүүр хуудасны текстээр хэмжсэн өргөний
+ * харьцаа; ascent/descent = вэб фонтын hhea / size-adjust (Manrope 1066/300 ‰, Montserrat 968/251 ‰).
+ * Фонт эсвэл жин солих бол энэ утгуудыг дахин хэмжинэ.
+ */
+
+@font-face {
+  font-family: 'Manrope';
+  src: url('/assets/fonts/manrope.woff2?v=4b9b79db') format('woff2');
+  font-weight: 500 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/assets/fonts/montserrat.woff2?v=57cff8bf') format('woff2');
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Manrope ← Arial */
+@font-face {
+  font-family: 'Manrope Fallback A';
+  src: local('Arial'), local('ArialMT');
+  font-weight: 100 650;
+  size-adjust: 102.8%; ascent-override: 103.7%; descent-override: 29.2%; line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Manrope Fallback A';
+  src: local('Arial Bold'), local('Arial-BoldMT');
+  font-weight: 651 1000;
+  size-adjust: 99.5%; ascent-override: 107.1%; descent-override: 30.2%; line-gap-override: 0%;
+}
+/* Manrope ← Roboto */
+@font-face {
+  font-family: 'Manrope Fallback R';
+  src: local('Roboto'), local('Roboto-Regular');
+  font-weight: 100 650;
+  size-adjust: 102.3%; ascent-override: 104.2%; descent-override: 29.3%; line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Manrope Fallback R';
+  src: local('Roboto Bold'), local('Roboto-Bold');
+  font-weight: 651 1000;
+  size-adjust: 105.3%; ascent-override: 101.2%; descent-override: 28.5%; line-gap-override: 0%;
+}
+
+/* Montserrat ← Arial */
+@font-face {
+  font-family: 'Montserrat Fallback A';
+  src: local('Arial'), local('ArialMT');
+  font-weight: 100 650;
+  size-adjust: 114.6%; ascent-override: 84.5%; descent-override: 21.9%; line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Montserrat Fallback A';
+  src: local('Arial Bold'), local('Arial-BoldMT');
+  font-weight: 651 1000;
+  size-adjust: 109.5%; ascent-override: 88.4%; descent-override: 22.9%; line-gap-override: 0%;
+}
+/* Montserrat ← Roboto */
+@font-face {
+  font-family: 'Montserrat Fallback R';
+  src: local('Roboto'), local('Roboto-Regular');
+  font-weight: 100 650;
+  size-adjust: 114%; ascent-override: 84.9%; descent-override: 22%; line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Montserrat Fallback R';
+  src: local('Roboto Bold'), local('Roboto-Bold');
+  font-weight: 651 1000;
+  size-adjust: 115.8%; ascent-override: 83.6%; descent-override: 21.7%; line-gap-override: 0%;
+}

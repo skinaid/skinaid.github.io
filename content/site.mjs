@@ -23,9 +23,10 @@ export const site = {
     postalCode: '15141',
     addressCountry: 'MN',
   },
-  // Google Business Profile баталгаажсаны дараа бөглөнө (pin-ий координат, Maps-ын CID холбоос).
-  geo: null,          // { latitude: '47.92…', longitude: '106.91…' }
-  hasMap: null,       // 'https://www.google.com/maps?cid=…'
+  // Google Maps-ын «Skin Aid Clinic» газрын pin ба CID (2026-11-24-нд Maps-аас уншсан; профайл хараахан
+  // эзэмшигчгүй). Эзэмшигч профайлаа баталгаажуулж pin-ийг зөөвөл энд болон index.html-ийн газрын зургийг шинэчилнэ.
+  geo: { latitude: 47.9221462, longitude: 106.9041337 },
+  hasMap: 'https://maps.google.com/?cid=3087328456326780587',
   // Эзэмшигч бодит цагийг баталгаажуулсны дараа бөглөнө. Жишээ:
   // [{ days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], opens: '10:00', closes: '19:00' }]
   openingHours: null,

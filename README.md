@@ -10,6 +10,7 @@ Backend: **Firebase (Spark үнэгүй багц)** — захиалга Firesto
 ```
 index.html                    — Үндсэн хуудас (бүх хэсэг)
 assets/css/style.css          — Загвар (өнгө, фонт, responsive)
+assets/css/fonts.css          — Вэб фонт (@font-face) + тааруулсан fallback (CLS); файлууд assets/fonts/ (OFL.txt лиценз)
 assets/js/main.js             — Цэс, анимаци, үйлчилгээний шүүлтүүр, FAQ, маягт (Firestore + fallback), тохиргоо унших
 assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын АНХНЫ утга (сайт + admin + build ашиглана)
 assets/js/catalog-render.js   — Үйлчилгээний мөрийн HTML загвар (main.js болон tools/build.mjs хоёулаа ашиглана)
@@ -116,6 +117,10 @@ admin → «Эмчилгээний хуудас» цэс төлөв, хуваа�
    уг маягт хүсэлтийг бэлтгээд Messenger / и-мэйл / SMS / утас сувгаар дамжуулах товчнууд харуулна. Admin-ийн тэр
    тохиргоо зөвхөн нөөц маягтад хамаарна — онлайн захиалгыг түр зогсоох бол UB Beauty OS → Холболт → Вэб суваг.
 5. **Өнгө, фонт** — `style.css` дээд хэсгийн `:root` хувьсагчид (`--purple: #654186` брэндийн ягаан).
+   Фонт (Manrope, Montserrat) өөрийн домэйноос: `assets/fonts/*.woff2` нь Google Fonts-ийн `text=` subset (Монгол кирилл, латин, ₮,
+   дээд/доод индекс). Шинэ тэмдэгт (жишээ нь өөр хэлний үсэг) хэрэгтэй бол subset-ийг дахин татна. `fonts.css`-ийн «… Fallback A/R»
+   size-adjust утгыг фонт/жин солих үед хөтөч дээр дахин хэмжинэ. HTML-ийн `<link rel="preload">` ба CSS-ийн `url()` хоёулаа build-ийн
+   `?v=hash`-тай (tools/lib/assets.mjs `stampCss`) — эс тэгвээс фонт хоёр удаа татагдана. Admin одоогоор Google Fonts-оо хэвээр ашиглана.
 
 ## Онлайн цаг захиалга (UB Beauty вэб суваг)
 
@@ -289,7 +294,9 @@ Datacom (manage.datacom.mn) DNS удирдлага дээр:
 
 - `trailingSlash: false` — хуудсууд ташуу зураасгүй хаягтай (`/privacy`, `/admin`). Canonical, sitemap, дотоод холбоос бүгд ташуугүй хэлбэрийг ашиглана.
 - `/index.html` → `/`, `/<хавтас>/index.html` → `/<хавтас>`, `/privacy-policy` → `/privacy`.
-- Хуучин Wix замууд: `/service-page/*` → `/#treatments`, `/post/*`, `/blog/*` → `/#blog`, `/product-page/*` → `/`, `/book-online*` → `/#contact`.
+- Хуучин Wix замууд: `/service-page/*` → `/#treatments`, `/post/*`, `/blog/*` → `/#blog`, `/book-online*` → `/#contact`.
+  `/product-page/*` (хуучин онлайн дэлгүүрийн 25 бараа) зориуд redirect-гүй — 404 өгч индексээс хурдан гарна (2026-11-24 аудит:
+  нүүр рүү бөөнөөр redirect хийхийг Google «soft 404» гэж үздэг, сайт бараа зардаггүй).
   Эмчилгээний хуудас нийтлэгдэхэд `content/pipeline.mjs` / хуудасны `legacy` URL-ууд → тэр хуудас руу 308 redirect-ийг build
   автоматаар `vercel.json`-д (catch-all-аас өмнө, percent-encoded) нэмнэ. `/emchilgee/` руу заасан дүрмийг гараар бүү засаарай.
 - **Кирилл URL:** Vercel кирилл замыг зөвхөн percent-encoded хэлбэрээр таардаг (2026-11-08 туршсан: `/zz-probe/тест` raw эх 404, `%D1%82%D0%B5%D1%81%D1%82` эх 307). Тиймээс кирилл эхтэй redirect-ийг `encodeURI()` хэлбэрээр (том hex) бичнэ.
