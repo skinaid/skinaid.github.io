@@ -70,7 +70,11 @@ function setup(form) {
   const monthDay = (d) => `${+d.slice(5, 7)}-р сарын ${+d.slice(8, 10)}`;
   const dateLong = (d) => `${monthDay(d)} (${WD_LONG[weekday(d)]})`;
   const money = (n) => '₮' + Math.round(n).toLocaleString('en-US');
-  const priceText = (s) => (s.price_max && s.price_max > s.price ? `${money(s.price)} – ${money(s.price_max)}` : money(s.price));
+  // Эмнэлэг үнийг нуусан үйлчилгээ (UB Beauty 0212): API `price: null, price_hidden: true` — үнийг огт харуулахгүй,
+  // төлөх дүн зөвхөн төлбөрийн алхамд (`payment.amount`)
+  const hasPrice = (s) => Boolean(s) && Number.isFinite(s.price);
+  const priceText = (s) => (!hasPrice(s) ? ''
+    : s.price_max && s.price_max > s.price ? `${money(s.price)} – ${money(s.price_max)}` : money(s.price));
   const durText = (m) => { const h = Math.floor(m / 60), r = m % 60; return h && r ? `${h}ц ${r}м` : h ? `${h} цаг` : `${r} мин`; };
   const normPhone = (v) => { let d = String(v || '').replace(/\D/g, ''); if (d.length > 8 && d.startsWith('976')) d = d.slice(3); return d; };
   const newKey = () => (crypto.randomUUID ? crypto.randomUUID()
@@ -134,6 +138,8 @@ function setup(form) {
   const prepayMode = () => S.channel.new_booking_status === 'pending_payment';
   const submitLabel = () => (S.channel.new_booking_status === 'pending_confirmation' ? 'Хүсэлт илгээх' : prepayMode() ? 'Төлбөр төлж захиалах' : 'Захиалах');
   const prepayText = (s) => {
+    // Нуусан үнэ: тогтмол урьдчилгаа ч үнээр хязгаарлагддаг тул урьдчилан тооцохгүй (үнийг задруулна)
+    if (s && !hasPrice(s)) return 'Төлөх дүн төлбөрийн алхамд харагдана';
     const p = S.channel.prepay || {};
     const amount = p.amount == null ? (s ? s.price : 0) : Math.min(p.amount, s ? s.price : p.amount);
     return `QPay-ээр төлөх дүн: ${money(amount)}`;
@@ -223,7 +229,8 @@ function setup(form) {
     }
     S.channel = (c && c.channel) || {};
     S.services = (Array.isArray(sv && sv.services) ? sv.services : []).filter((s) =>
-      s && typeof s.id === 'string' && typeof s.name === 'string' && Number.isFinite(s.price) && Number.isFinite(s.duration_min));
+      s && typeof s.id === 'string' && typeof s.name === 'string' && (Number.isFinite(s.price) || s.price === null)
+        && Number.isFinite(s.duration_min));
     // Захиалга авдаг ажилтан. Ресепшн, менежерийг сайтын сонголтоос хасна (API үйлчилгээ↔ажилтны холбоос өгдөггүй).
     // «Аль нь ч болно» үед эмч → гоо засалч → массаж → сувилагч дарааллаар (дотроо sort_order) оноогдоно.
     const all = (Array.isArray(dc && dc.doctors) ? dc.doctors : []).filter((d) => d && typeof d.id === 'string');
@@ -258,7 +265,7 @@ function setup(form) {
   }
 
   function renderServices() {
-    const opt = (s) => `<option value="${esc(s.id)}">${esc(s.name)} · ${esc(priceText(s))} · ${esc(durText(s.duration_min))}</option>`;
+    const opt = (s) => `<option value="${esc(s.id)}">${[s.name, priceText(s), durText(s.duration_min)].filter(Boolean).map(esc).join(' · ')}</option>`;
     const groups = new Map();
     S.services.forEach((s) => {
       const c = (typeof s.category === 'string' && s.category.replace(/^\s*\d+[.)]\s*/, '').trim()) || 'Бусад';   // «01. Ангилал» → «Ангилал»
