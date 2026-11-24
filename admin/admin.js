@@ -6,13 +6,13 @@
    m-bookings.js, m-settings.js, m-home.js, m-catalog.js, m-pages.js.
    ========================================================================== */
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=3437c95b';
-import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=7b5d9491';
-import * as bookings from './m-bookings.js?v=fd488194';
-import * as settings from './m-settings.js?v=809c4183';
-import * as home from './m-home.js?v=8a067690';
-import * as catalog from './m-catalog.js?v=a1b4c268';
-import { renderPages } from './m-pages.js?v=13e2b53d';
+import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
+import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=a5405b51';
+import * as bookings from './m-bookings.js?v=93408e79';
+import * as settings from './m-settings.js?v=2bf28d5f';
+import * as home from './m-home.js?v=6ecf6bd4';
+import * as catalog from './m-catalog.js?v=b80fb8aa';
+import { renderPages } from './m-pages.js?v=26a525a2';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';
@@ -90,8 +90,11 @@ function route() {
   }
   firstRoute = false;
 }
-// «#main» гэх мэт «#/»-гүй hash (skip link г.м.) цэсийг солихгүй
-window.addEventListener('hashchange', () => { if (!shell.hidden && /^#\//.test(location.hash) && viewFromHash() !== currentRoute) route(); });
+// «#/…» эсвэл хоосон hash (Буцах товчоор /admin/ руу) л цэсийг солино; «#main» гэх мэт бусад hash-ийг үл тооно
+window.addEventListener('hashchange', () => {
+  const h = location.hash;
+  if (!shell.hidden && (h === '' || h === '#' || /^#\//.test(h)) && viewFromHash() !== currentRoute) route();
+});
 // Skip link: hash-ийг өөрчлөхгүйгээр үндсэн агуулга руу фокус
 $('.skip').addEventListener('click', (e) => { e.preventDefault(); const m = $('#main'); m.focus(); m.scrollIntoView({ block: 'start' }); });
 

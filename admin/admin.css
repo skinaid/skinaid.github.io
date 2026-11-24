@@ -385,7 +385,7 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size
 /* ---------- Snackbar ---------- */
 .snackbar { position: fixed; z-index: 60; left: calc(50% + var(--side-w) / 2); transform: translateX(-50%); bottom: 20px; display: grid; gap: 8px; width: min(560px, calc(100% - 24px)); pointer-events: none; }
 body.has-savebar .snackbar { bottom: 92px; }
-.snackbar__polite, .snackbar__alert { display: grid; gap: 8px; }
+.snackbar__list { display: grid; gap: 8px; }
 .snack { pointer-events: auto; display: flex; align-items: center; gap: 10px; background: var(--purple-950); color: #fff; padding: 10px 8px 10px 16px; border-radius: 14px; font-size: 14px; box-shadow: var(--shadow-lg); animation: snackIn .2s var(--ease); }
 .snack.is-err { background: #7a1f1f; }
 .snack.is-out { opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; }
@@ -467,3 +467,4 @@ body.has-savebar .snackbar { bottom: 92px; }
   body.has-savebar .main { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 140px); }
   body.has-savebar .snackbar { bottom: calc(var(--nav-h) + var(--safe-b) + 124px); }
 }
+.hm-post__ctl .btn-icon:focus-visible { outline-offset: -3px; }

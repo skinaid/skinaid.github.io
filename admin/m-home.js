@@ -5,8 +5,8 @@
    Хамгаалалт: ачаалал амжилтгүй бол түгжинэ; runTransaction-оор давхар засвар; rev (repo шинэчлэгдсэн) шалгалт.
    ========================================================================== */
 import { doc, getDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, scrollMode } from './core.js?v=3437c95b';
-import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=7b5d9491';
+import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, scrollMode } from './core.js?v=2c361933';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters, captureFocus } from './ui.js?v=a5405b51';
 
 const HR = window.SKINAID_HOME_RENDER;
 const HOME_DATA = window.SKINAID_HOME_DATA || { rev: '', defaults: null, photos: [], internalPaths: [], claimsAllow: [] };
@@ -37,7 +37,10 @@ const newPostId = () => 'p' + Date.now().toString(36) + Math.random().toString(3
 const homeKey = (x) => JSON.stringify(HR && x ? HR.forRepo(x) : null);
 // norm() буруу зураг/холбоосыг хоосолдог тул зөвхөн хэвшүүлсэн утгыг харьцуулбал «http://…» бичсэнийг алдана —
 // алдаатай талбартай бол ч хадгалаагүй өөрчлөлт гэж тооцно (save bar, Ctrl/⌘+S, гарах үеийн анхааруулга)
-const isDirty = () => ready && !!baseline && (homeKey(current().save) !== homeKey(baseline) || homeErrors(readHome()).length > 0);
+// Харьцуулалт нь ачаалсан/хадгалсан үеийн алдаатай (жишээ нь устсан дотоод хуудас руу холбоос) байдлаас — засаагүй бол «өөрчлөгдсөн» гэхгүй
+let baselineErrs = '[]';
+const errKey = () => JSON.stringify(homeErrors(readHome()).map((e) => e.msg));
+const isDirty = () => ready && !!baseline && (homeKey(current().save) !== homeKey(baseline) || errKey() !== baselineErrs);
 
 /** Засварын хэсгүүдийг түгжинэ; статусын мөр түгжээгүй үлдэнэ */
 const lock = (on) => {
@@ -200,11 +203,12 @@ function current() {
   const all = HR ? HR.norm(raw) : null;
   return { raw, all, save: all && { hero: all.hero, posts: all.posts.filter((p, i) => !blankPost(raw.posts[i])) } };
 }
-/** Маягтыг дүүргэнэ; keepUi — хадгалсны дараа нээлттэй картууд, фокустай талбарыг сэргээнэ */
-function fill(n, { keepUi = false } = {}) {
+/**
+ * Маягтыг дүүргэнэ; keepUi — хадгалсны дараа нээлттэй картуудыг хэвээр (фокусыг save() captureFocus-оор сэргээнэ);
+ * asBaseline — ачаалсан/хадгалсан хувилбар (хадгалаагүй өөрчлөлтийн суурь)
+ */
+function fill(n, { keepUi = false, asBaseline = false } = {}) {
   const open = keepUi ? new Set($$('.hm-post.is-open', posts).map((r) => r.dataset.id)) : null;
-  const a = document.activeElement;
-  const fr = keepUi && a && form.contains(a) ? { post: a.closest('.hm-post') ? a.closest('.hm-post').dataset.id : '', k: a.dataset.k || '', id: a.id || '' } : null;
   const h = (n && n.hero) || {};
   HERO_KEYS.forEach((k) => { $(`[data-h="${k}"]`, form).value = h[k] || ''; });
   const stats = (h.stats || []).slice(0, 3);
@@ -213,12 +217,8 @@ function fill(n, { keepUi = false } = {}) {
   posts.replaceChildren(...((n && n.posts) || []).map((p) => postRow(p, { open: !!(open && open.has(p.id)) })));
   clearErrors(form);
   refreshCounters(form);
+  if (asBaseline) baselineErrs = errKey();
   renderAux();
-  if (fr) {
-    const row = fr.post ? $$('.hm-post', posts).find((r) => r.dataset.id === fr.post) : null;
-    const el = row ? (fr.k ? $(`[data-k="${fr.k}"]`, row) : $('.hm-post__toggle', row)) : (fr.id ? document.getElementById(fr.id) : null);
-    if (el && !el.closest('[hidden]')) el.focus({ preventScroll: true });
-  }
 }
 
 /* ---------- Шалгалт ---------- */
@@ -286,7 +286,7 @@ function renderAux() {
   $('#hmPrevHero').innerHTML = save && save.hero ? HR.hero(save.hero, { titleTag: 'div' }) : '<p class="muted">Гарчиг (h1) хоосон байна.</p>';
   $('#hmPrevPosts').innerHTML = save ? HR.posts(save.posts, { src: adminSrc }) : '';
   const html = homeWarnings(all).map((x) => `<li>${esc(x)}</li>`).join('');
-  if (html !== lastWarnHTML) { warnBox.innerHTML = html; lastWarnHTML = html; }   // aria-live: зөвхөн өөрчлөгдөхөд
+  if (html !== lastWarnHTML) { warnBox.innerHTML = html; lastWarnHTML = html; }   // live region биш — хадгалахад цонхоор харуулна
   const rows = $$('.hm-post', posts);
   rows.forEach((row, i) => {
     const t = $('[data-k="title"]', row).value.trim();
@@ -333,6 +333,8 @@ export async function load() {
   if (!HR || !HOME_DATA.defaults) { showLoadError('Нүүр хуудасны скрипт (home-render.js / home-data.js) ачаалагдсангүй — хуудсыг дахин ачаална уу.'); return; }
   if (saving) return;
   if (isDirty() && !(await dialog({ title: 'Хадгалаагүй өөрчлөлтийг хаях уу?', body: 'Хадгалсан хувилбарыг дахин ачаалахад одоогийн засвар алга болно.', confirm: 'Хаяад ачаалах', cancel: 'Засвараа үлдээх', danger: true }))) return;
+  const fromRetry = $('#hmLoad').contains(document.activeElement);   // «Дахин оролдох» нуугдахад фокус алга болохгүй
+  if (fromRetry) { const h = $('#h-home'); h.tabIndex = -1; h.focus(); }
   $('#hmLoad').hidden = true;
   setStatus(status, 'Ачаалж байна…', '');
   let snap;
@@ -340,6 +342,7 @@ export async function load() {
   catch (e) {
     setStatus(status, '', '');
     showLoadError(`${errText(e)} Хадгалсан хувилбарыг уншиж чадаагүй тул ${ready ? 'маягт өмнөх байдлаараа үлдлээ' : 'засварлахыг түр хаалаа (хадгалсан хувилбарыг санамсаргүй дарж бичихгүйн тулд)'}.`);
+    if (fromRetry) $('#btnHmRetry').focus();
     return;
   }
   const D = HOME_DATA.defaults;
@@ -349,11 +352,12 @@ export async function load() {
   const stale = !!(d && typeof d.baseRev === 'string' && d.baseRev && HOME_DATA.rev && d.baseRev !== HOME_DATA.rev);
   const n = d && !stale ? HR.norm(d) : null;
   baseline = n ? { hero: n.hero || D.hero, posts: n.posts || D.posts } : D;
-  fill(baseline);
   ready = true;
+  fill(baseline, { asBaseline: true });
   live = !!n;
   lock(false);
   setStatus(status, d ? `Сүүлд хадгалсан: ${fmtDate(d.updatedAt)} · ${d.updatedBy || ''}` : 'Одоогоор энд хадгалсан зүйл алга — сайт үндсэн хувилбараараа харагдаж байна.', '');
+  if (fromRetry) announce('Нүүр хуудас ачаалагдлаа');
   staleDoc = stale && homeKey(HR.norm(d)) !== homeKey(D) ? d : null;
   if (staleDoc) showNote('stale', fmtDate(d.updatedAt));
   else showNote(live && homeKey(n) !== homeKey(D) ? 'unsynced' : null);
@@ -420,6 +424,7 @@ $('#btnHomeDefaults').addEventListener('click', async () => {
   if (!ok) return;
   fill(HOME_DATA.defaults);
   setStatus(status, 'Үндсэн хувилбар дүүргэгдлээ — хадгалахаа мартуузай.', '');
+  announce('Үндсэн хувилбар дүүргэгдлээ — хадгалахаа мартуузай.');
 });
 $('#btnHomeReload').addEventListener('click', () => { load(); });
 $('#btnHmRetry').addEventListener('click', () => { load(); });
@@ -430,6 +435,7 @@ $('#btnHmLoadSaved').addEventListener('click', async () => {
   fill({ hero: n.hero || HOME_DATA.defaults.hero, posts: n.posts || [] });
   showNote(null);
   setStatus(status, 'Таны өмнөх хадгалалт маягтад ачаалагдлаа — хөгжүүлэгчийн шинэчлэлттэй харьцуулж шалгаад хадгална уу.', '');
+  announce('Таны өмнөх хадгалалт маягтад ачаалагдлаа.');
 });
 $('#btnHmJson').addEventListener('click', async () => {
   if (!HR) return;
@@ -477,6 +483,7 @@ async function save() {
   if (warns.length && !(await dialog({ title: `Анхааруулга (${warns.length})`, body: 'Хадгалахаас өмнө шалгана уу:', list: warns, confirm: 'Тэгсэн ч хадгалах', cancel: 'Буцаж засах', safe: true }))) return;
   if (!HR.visiblePosts(n.posts).length && !(await dialog({ title: 'Харагдах карт алга', body: 'Сайтын «Зөвлөгөө» хэсэгт карт харагдахгүй (гарчиг, Facebook холбоос үлдэнэ). Үргэлжлүүлэх үү?', confirm: 'Тэгсэн ч хадгалах', cancel: 'Болих' }))) return;
   const btn = $('#btnSaveHome');
+  const restore = captureFocus(form);   // Ctrl/⌘+S дарсан талбар руу буцна (түгжээ ба дахин дүүргэлт фокусыг алдуулна)
   saving = true;
   lock(true);   // хадгалах явцад бичсэн текст алга болохгүйн тулд засварын хэсгийг түгжинэ
   setStatus(status, 'Хадгалж байна…', '');
@@ -513,7 +520,7 @@ async function save() {
     try { const after = await getDoc(homeRef); baseMs = after.exists() ? msOf(after.data().updatedAt) : null; }
     catch (_) { baseMs = SELF; }
     baseline = n;
-    fill(n, { keepUi: true });
+    fill(n, { keepUi: true, asBaseline: true });
     live = true;
     staleDoc = null;
     showNote(homeKey(n) !== homeKey(HOME_DATA.defaults) ? 'unsynced' : null);
@@ -525,13 +532,13 @@ async function save() {
     saving = false;
     lock(false);
     renderAux();
-    if (document.activeElement === document.body) btn.focus();
+    restore(btn);
   }
 }
 form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
 registerForm('home', {
   isDirty, save,
-  discard: () => { if (saving || !baseline) return; fill(baseline); setStatus(status, 'Өөрчлөлтийг хаялаа.', ''); },
+  discard: () => { if (saving || !baseline) return; fill(baseline, { asBaseline: true }); setStatus(status, 'Өөрчлөлтийг хаялаа.', ''); },
   reset: () => { ready = false; baseline = null; staleDoc = null; lock(true); clearErrors(form); setStatus(status, '', ''); },
   anchor: $('#homeActions'),
 });

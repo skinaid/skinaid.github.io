@@ -4,10 +4,10 @@
    «Буцаах» товчтой мөр үлдэнэ (гарын хэрэглэгч шууд хүрнэ; хадгалах/дахин дүүргэхэд арилна).
    ========================================================================== */
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { db, $, $$, esc, str, fmtDate, errText, session, setStatus, DEFAULTS, CATS, scrollMode } from './core.js?v=3437c95b';
-import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow } from './ui.js?v=7b5d9491';
+import { db, $, $$, esc, str, fmtDate, errText, session, setStatus, DEFAULTS, CATS, scrollMode } from './core.js?v=2c361933';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow, captureFocus } from './ui.js?v=a5405b51';
 import { normSearch } from './lib.js?v=a9638bd3';
-import { renderPages } from './m-pages.js?v=13e2b53d';
+import { renderPages } from './m-pages.js?v=26a525a2';
 
 const ref = doc(db, 'settings', 'catalog');
 const form = $('#catForm'), svcBody = $('#svcTable tbody'), pkgBody = $('#pkgTable tbody'), status = $('#catStatus'), errBox = $('#catErr');
@@ -80,21 +80,14 @@ const isDirty = () => ready && JSON.stringify(readAll()) !== saved;
 const lock = (on) => { $$(':scope > .panel', form).forEach((p) => { p.inert = on; }); form.classList.toggle('is-locked', on); btnSave.disabled = on; $('#btnCatDefaults').disabled = on; };
 lock(true);
 
-/** Хүснэгтийг дахин зурна; keepFocus — хадгалсны дараа фокустай байсан талбарыг (мөрийн id + талбар) сэргээнэ */
-function fill(services, packages, { keepFocus = false } = {}) {
-  const a = document.activeElement;
-  const fr = keepFocus && a && form.contains(a) && a.closest('tr[data-id]') ? { id: a.closest('tr[data-id]').dataset.id, k: a.dataset.k, body: a.closest('tbody') } : null;
+/** Хүснэгтийг дахин зурна (фокусыг дуудагч нь captureFocus()-оор сэргээнэ) */
+function fill(services, packages) {
   svcBody.replaceChildren(...services.map(normSvc).map(svcRow));
   // Багц: id-г HTML картуудтай (p1..p5) тааруулж, анхны жагсаалтыг суурь болгоно
   const byId = new Map(packages.map(normPkg).map((p) => [p.id, p]));
   pkgBody.replaceChildren(...DEFAULTS.packages.map((d) => pkgRow(byId.get(d.id) || normPkg(d))));
   $$('textarea', svcBody).forEach(autoGrow);
   applyFilter();
-  if (fr) {
-    const tr = $$('tr[data-id]', fr.body).find((r) => r.dataset.id === fr.id);
-    const el = tr && (fr.k ? $(`[data-k="${fr.k}"]`, tr) : $('input, select, textarea, button', tr));
-    if (el) el.focus({ preventScroll: true });
-  }
 }
 function applyFilter() {
   const nq = normSearch(svcSearch.value), cat = svcCat.value;
@@ -114,8 +107,10 @@ svcCat.addEventListener('change', applyFilter);
 
 export async function load() {
   if (saving) return;
+  const fromRetry = loadBox.contains(document.activeElement);   // «Дахин оролдох» нуугдахад фокус алга болохгүй
   ready = false;
   lock(true);
+  if (fromRetry) { const h = $('#h-catalog'); h.tabIndex = -1; h.focus(); }
   loadBox.hidden = true;
   setStatus(status, 'Ачаалж байна…', '');
   try {
@@ -137,6 +132,7 @@ export async function load() {
     setStatus(status, '', '');
     loadMsg.textContent = `${errText(e)} Каталогийг уншиж чадаагүй тул засварлахыг түр хаалаа (анхны утгаар дарж бичихгүйн тулд).`;
     loadBox.hidden = false;
+    if (fromRetry) $('#btnCatRetry').focus();
   }
   refreshDirty();
 }
@@ -167,6 +163,8 @@ svcBody.addEventListener('click', (e) => {
   if (b.dataset.act === 'undo') {
     const stub = b.closest('tr'), tr = stub._row;
     stub.replaceWith(tr);
+    // Шүүлт идэвхтэй бол сэргээсэн мөр нуугдаж фокус алга болохгүйн тулд шүүлтийг цэвэрлэнэ
+    if (svcSearch.value || svcCat.value) { svcSearch.value = ''; svcCat.value = ''; }
     applyFilter();
     $('[data-k="n"]', tr).focus();
     announce('Мөр сэргээгдлээ');
@@ -211,19 +209,20 @@ async function save() {
     const ok = await dialog({ title: 'Нэг ч үйлчилгээ харагдахгүй болно', body: 'Сайтын «Онцлох эмчилгээ» жагсаалт хоосон гарна. Үргэлжлүүлэх үү?', confirm: 'Тэгсэн ч хадгалах', cancel: 'Болих', danger: true });
     if (!ok) return;
   }
+  const restore = captureFocus(form);   // Ctrl/⌘+S дарсан нүд рүү буцна (мөрүүд дахин зурагдана)
   saving = true;
   lock(true);   // хадгалах явцад бичсэн текст алга болохгүйн тулд
   setStatus(status, 'Хадгалж байна…', '');
   try {
     await setDoc(ref, { services, packages, updatedAt: serverTimestamp(), updatedBy: session.user.email });
     const dropped = all.services.length - services.length;
-    fill(services, packages, { keepFocus: true });
+    fill(services, packages);
     saved = JSON.stringify(readAll());
     renderPages(services);
     setStatus(status, `Хадгалагдлаа (${services.length} үйлчилгээ, ${packages.length} багц${dropped ? `; нэргүй ${dropped} мөр хасагдлаа` : ''}) — сайт дээр дараагийн ачааллаас харагдана.`, 'ok');
     snack('Каталог хадгалагдлаа');
   } catch (err) { setStatus(status, errText(err), 'err'); snack(errText(err), { error: true }); }
-  finally { saving = false; lock(false); refreshDirty(); }
+  finally { saving = false; lock(false); refreshDirty(); restore(btnSave); }
 }
 form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
 registerForm('catalog', {

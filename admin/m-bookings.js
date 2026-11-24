@@ -4,8 +4,8 @@
    тэмдэглэл тусдаа хадгална. Хайлт: нэр, утас, үйлчилгээ, мессеж, тэмдэглэл.
    ========================================================================== */
 import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { db, $, $$, esc, fmtDate, errText, session, msOf, updateTitle } from './core.js?v=3437c95b';
-import { ICON, dialog, snack, announce, registerForm, refreshDirty } from './ui.js?v=7b5d9491';
+import { db, $, $$, esc, fmtDate, errText, session, msOf, updateTitle } from './core.js?v=2c361933';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty } from './ui.js?v=a5405b51';
 import { dayKey, dayGroup, GROUP_ORDER, relTime, matchBooking, telHref } from './lib.js?v=a9638bd3';
 
 const STATUS = { new: 'Шинэ', contacted: 'Холбогдсон', confirmed: 'Баталгаажсан', cancelled: 'Цуцалсан' };
@@ -129,13 +129,6 @@ function setNoteState(el, b) {
   const st = $('[data-notestate]', el);
   if (st && !st.dataset.flash) st.textContent = dirty ? 'Хадгалаагүй өөрчлөлт' : '';
 }
-/** Мөр алга болох/нуугдахад фокусыг дараагийн харагдах мөр (эсвэл хайлт) руу шилжүүлэх зорилт */
-const nextFocusTarget = (el) => {
-  const rows = $$('.bk[data-id]:not([hidden])', list);
-  const i = rows.indexOf(el);
-  const n = rows[i + 1] || rows[i - 1];
-  return n ? $('.bk__sum', n) : search;
-};
 
 /* ---------- Жагсаалт зурах (огноогоор бүлэглэнэ) ---------- */
 const groupEl = (key, label) => {
@@ -148,6 +141,10 @@ const groupEl = (key, label) => {
 function render() {
   if (!loaded) return;
   const focused = document.activeElement;
+  // Фокустай мөр устсан эсвэл шүүлтээс гарсан (жишээ нь «Шинэ» шүүлттэй үед «Холбогдсон» дарсан) бол
+  // фокусыг дараагийн харагдах мөр рүү — local snapshot нь updateDoc дуусахаас өмнө ирдэг тул энд шийднэ
+  const focusRow = focused && list.contains(focused) ? focused.closest('.bk[data-id]') : null;
+  const order = $$('.bk[data-id]:not([hidden])', list).map((el) => el.dataset.id);
   const existing = new Map($$('.bk[data-id]', list).map((el) => [el.dataset.id, el]));
   const now = Date.now();
   const groups = new Map();
@@ -161,19 +158,23 @@ function render() {
     $('.bk-group__rows', groups.get(g.key)).appendChild(el);
   });
   GROUP_ORDER.forEach((k) => { if (groups.has(k)) frag.appendChild(groups.get(k)); });
-  let lostFocus = false;
   existing.forEach((el, id) => {
     // Нээлттэй/засаж байсан захиалгыг өөр хүн (эсвэл өөр таб) устгасан бол мэдэгдэнэ
     if ((expanded.has(id) || noteDraft.has(id)) && !deletingHere.has(id)) snack(`«${($('.bk__name', el) || {}).textContent || 'Нэг'}» захиалга өөр газраас устгагдсан тул жагсаалтаас хасагдлаа.`);
-    if (el.contains(focused)) lostFocus = true;
     expanded.delete(id); noteDraft.delete(id); deletingHere.delete(id); busy.delete(id);
   });
   list.replaceChildren(frag);
   list.setAttribute('aria-busy', 'false');
   if (!bookings.length) list.innerHTML = `<div class="empty">${ICON.bookings}<p><strong>Одоогоор захиалга алга</strong><br>Сайтын маягтаар ирсэн хүсэлт энд шууд харагдана.</p></div>`;
   applyFilter();
-  if (focused && list.contains(focused)) focused.focus({ preventScroll: true });   // replaceChildren фокусыг алдуулна
-  else if (lostFocus) search.focus({ preventScroll: true });
+  if (focused && list.contains(focused) && !focused.closest('[hidden]')) focused.focus({ preventScroll: true });   // replaceChildren фокусыг алдуулна
+  else if (focusRow) {
+    const i = order.indexOf(focusRow.dataset.id);
+    const cand = [...order.slice(i + 1), ...order.slice(0, Math.max(i, 0)).reverse()];
+    const rows = $$('.bk[data-id]', list);
+    const t = cand.map((id) => rows.find((r) => r.dataset.id === id && !r.hidden)).find(Boolean);
+    (t ? $('.bk__sum', t) : search).focus({ preventScroll: true });
+  }
   const n = bookings.filter((b) => b.status === 'new').length;
   $('[data-n]', newCount).textContent = String(n);
   newCount.classList.toggle('is-on', n > 0);
@@ -273,15 +274,7 @@ async function setStatus(el, b, next) {
   el.setAttribute('aria-busy', 'true');
   patchRow(el, { ...b, status: next });
   try {
-    await updateDoc(ref(id), { status: next, ...stamp() });
-    const ensureVisible = () => {
-      // Шүүлтэд таарахаа больсон мөрийг нуухад фокусыг дараагийн мөр рүү
-      const cur = byId.get(id);
-      if (el.isConnected && cur && !(filter === 'all' || cur.status === filter) && el.contains(document.activeElement)) {
-        const t = nextFocusTarget(el); applyFilter(); t.focus({ preventScroll: true });
-      }
-    };
-    setTimeout(ensureVisible, 0);
+    await updateDoc(ref(id), { status: next, ...stamp() });   // шүүлтээс гарсан мөрийн фокусыг render() шилжүүлнэ
     snack(`«${b.name}» → ${STATUS[next]}`, {
       action: 'Буцаах',
       onAction: async () => {
@@ -330,20 +323,20 @@ list.addEventListener('click', async (e) => {
     } catch (err) { snack(errText(err), { error: true }); }
     finally { btn.disabled = false; }
   } else if (act === 'del') {
+    if (btn.getAttribute('aria-disabled') === 'true') return;   // устгаж буй
     const ok = await dialog({
       title: 'Захиалгыг устгах уу?',
       body: [`«${b.name}» (${b.phone}) — ${b.service}.`, 'Бүр мөсөн устгагдана, буцаах боломжгүй. Дараа нь харах шаардлагатай бол «Цуцалсан» төлөв өгөх нь зөв.'],
       confirm: 'Устгах', cancel: 'Болих', danger: true,
     });
     if (!ok) return;
-    const target = nextFocusTarget(el);
-    btn.disabled = true;
+    // Мөр алга болоход render() фокусыг дараагийн мөр рүү шилжүүлнэ (устгах товч фокустай хэвээр байх ёстой — disabled хийхгүй)
+    btn.setAttribute('aria-disabled', 'true');
     deletingHere.add(id);
     try {
       await deleteDoc(ref(id));
       snack(`«${b.name}» захиалга устгагдлаа`);
-      setTimeout(() => { if (target.isConnected) target.focus({ preventScroll: true }); else search.focus({ preventScroll: true }); }, 0);
-    } catch (err) { deletingHere.delete(id); snack(errText(err), { error: true }); btn.disabled = false; }
+    } catch (err) { deletingHere.delete(id); snack(errText(err), { error: true }); btn.removeAttribute('aria-disabled'); }
   }
 });
 list.addEventListener('input', (e) => {
@@ -358,16 +351,17 @@ list.addEventListener('input', (e) => {
 bulk.addEventListener('click', async () => {
   if (filter === 'all' || search.value.trim()) return;
   const status = filter;
-  const count = bookings.filter((b) => b.status === status).length;
-  if (!count) return;
+  // Баталгаажуулсан жагсаалт: цонх нээлттэй байх хооронд шинээр ирсэн (жинхэнэ) захиалгыг устгахгүй
+  const ids = new Set(bookings.filter((b) => b.status === status).map((b) => b.id));
+  if (!ids.size) return;
   const ok = await dialog({
-    title: `«${STATUS[status]}» төлөвтэй ${count} захиалгыг устгах уу?`,
+    title: `«${STATUS[status]}» төлөвтэй ${ids.size} захиалгыг устгах уу?`,
     body: 'Бүгд бүр мөсөн устгагдана, буцаах боломжгүй. Ихэвчлэн спам цэвэрлэхэд ашиглана.',
-    confirm: `${count} захиалга устгах`, cancel: 'Болих', danger: true,
+    confirm: `${ids.size} захиалга устгах`, cancel: 'Болих', danger: true,
   });
   if (!ok) return;
-  // Цонх нээлттэй байх хооронд төлөв нь өөрчлөгдсөнийг устгахгүй — одоогийн байдлаар дахин сонгоно
-  const targets = bookings.filter((b) => b.status === status);
+  // …мөн энэ хооронд төлөв нь өөрчлөгдсөнийг ч устгахгүй
+  const targets = bookings.filter((b) => ids.has(b.id) && b.status === status);
   bulk.disabled = true;
   try {
     for (let i = 0; i < targets.length; i += 400) {

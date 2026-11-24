@@ -36,11 +36,14 @@ export function updateTitle(patch = {}) {
 /** prefers-reduced-motion үед гүйлгэлт хөдөлгөөнгүй */
 export const scrollMode = () => (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
+// Нэг удаа үүсгэнэ (захиалгын мөр бүрт 2–3 удаа дуудагдана)
+let DATE_FMT;
+try { DATE_FMT = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (_) { DATE_FMT = null; }
 /** 2026-11-07 18:12 (Улаанбаатарын цаг, 24 цаг) */
 export const fmtDate = (ts) => {
   const d = ts && typeof ts.toDate === 'function' ? ts.toDate() : (ts instanceof Date ? ts : null);
   if (!d) return '—';
-  try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d).replace(',', ''); }
+  try { return DATE_FMT.format(d).replace(',', ''); }
   catch (_) { return d.toISOString().slice(0, 16).replace('T', ' '); }
 };
 

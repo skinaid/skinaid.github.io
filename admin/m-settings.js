@@ -2,8 +2,8 @@
    SKIN AID admin — Модуль: Тохиргоо (settings/site)
    ========================================================================== */
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { db, $, $$, fmtDate, errText, session, setStatus, str } from './core.js?v=3437c95b';
-import { registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, snack, attachCounters, refreshCounters } from './ui.js?v=7b5d9491';
+import { db, $, $$, fmtDate, errText, session, setStatus, str } from './core.js?v=2c361933';
+import { registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, snack, attachCounters, refreshCounters, captureFocus } from './ui.js?v=a5405b51';
 
 const form = $('#siteForm'), status = $('#siteStatus'), errBox = $('#siteErr'), btn = $('#btnSaveSite');
 const loadBox = $('#siteLoad'), loadMsg = $('#siteLoadMsg');
@@ -29,8 +29,10 @@ lock(true);
 
 export async function load() {
   if (saving) return;
+  const fromRetry = loadBox.contains(document.activeElement);   // «Дахин оролдох» нуугдахад фокус алга болохгүй
   ready = false;
   lock(true);
+  if (fromRetry) { const h = $('#h-settings'); h.tabIndex = -1; h.focus(); }
   loadBox.hidden = true;
   setStatus(status, 'Ачаалж байна…', '');
   try {
@@ -49,6 +51,7 @@ export async function load() {
     setStatus(status, '', '');
     loadMsg.textContent = `${errText(e)} Тохиргоог уншиж чадаагүй тул засварлахыг түр хаалаа (хоосон утгаар дарж бичихгүйн тулд).`;
     loadBox.hidden = false;
+    if (fromRetry) $('#btnSiteRetry').focus();
   }
   refreshDirty();
 }
@@ -71,6 +74,7 @@ async function save() {
   }
   if (errs.length) { showErrors(errBox, errs, form); setStatus(status, '', ''); return; }
   clearErrors(form);
+  const restore = captureFocus(form);   // Ctrl/⌘+S дарсан талбар руу буцна (түгжээ фокусыг алдуулна)
   saving = true;
   lock(true);   // хадгалах явцад бичсэн текст алга болохгүйн тулд
   setStatus(status, 'Хадгалж байна…', '');
@@ -81,7 +85,7 @@ async function save() {
     setStatus(status, 'Хадгалагдлаа — сайт дээр дараагийн ачааллаас харагдана.', 'ok');
     snack('Тохиргоо хадгалагдлаа');
   } catch (err) { setStatus(status, errText(err), 'err'); snack(errText(err), { error: true }); }
-  finally { saving = false; lock(false); refreshDirty(); }
+  finally { saving = false; lock(false); refreshDirty(); restore(btn); }
 }
 
 form.addEventListener('submit', (e) => { e.preventDefault(); save(); });

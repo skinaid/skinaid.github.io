@@ -6,7 +6,7 @@
    - showErrors()/clearErrors(): маягтын дээрх алдааны хураангуй + талбарын доорх мэдэгдэл (GOV.UK error summary)
    - attachCounters(): тэмдэгт тоолуур (45/120)
    ========================================================================== */
-import { $, $$, session, scrollMode } from './core.js?v=3437c95b';
+import { $, $$, session, scrollMode } from './core.js?v=2c361933';
 
 /* ---------- Дүрс (inline SVG, Lucide маягийн 24px stroke) ---------- */
 const svg = (d, extra = '') => `<svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"${extra}>${d}</svg>`;
@@ -106,13 +106,33 @@ function ensureHost() {
   return host;
 }
 ensureHost();
-let liveT = 0;
-/** Дэлгэц уншигчид мэдэгдэнэ (ижил текстийг дахин ч уншуулна) */
+const liveQ = { polite: [], alert: [] }, liveT = { polite: 0, alert: 0 };
+/** Дэлгэц уншигчид мэдэгдэнэ (ижил текстийг дахин ч уншуулна; ойрхон ирсэн мэдэгдлүүдийг нэгтгэж алдахгүй) */
 export function announce(msg, error = false) {
-  const r = $(`[data-live="${error ? 'alert' : 'polite'}"]`, ensureHost());
+  const kind = error ? 'alert' : 'polite';
+  const r = $(`[data-live="${kind}"]`, ensureHost());
+  liveQ[kind].push(msg);
   r.textContent = '';
-  clearTimeout(liveT);
-  liveT = setTimeout(() => { r.textContent = msg; }, 60);
+  clearTimeout(liveT[kind]);
+  liveT[kind] = setTimeout(() => { r.textContent = liveQ[kind].join(' '); liveQ[kind] = []; }, 60);
+}
+/**
+ * Хадгалах үед фокустай талбарыг тэмдэглэж, түгжээ тайлагдсаны дараа сэргээнэ (мөр дахин зурагдсан ч
+ * data-id + data-k/h/s эсвэл id-аар олно). Олдохгүй/нуугдсан бол fallback руу.
+ */
+export function captureFocus(root) {
+  const a = document.activeElement;
+  if (!a || a === document.body || !root.contains(a)) return () => {};
+  const row = a.closest('[data-id]');
+  const key = ['k', 'h', 's'].map((d) => a.dataset[d] && `[data-${d}="${a.dataset[d]}"]`).find(Boolean) || '';
+  const rowId = row ? row.dataset.id : '', id = a.id;
+  return (fallback) => {
+    let el = null;
+    if (rowId && key) { const r = $$('[data-id]', root).find((x) => x.dataset.id === rowId); el = r ? $(key, r) : null; }
+    if (!el && id) el = document.getElementById(id);
+    if (!el || !el.isConnected || el.closest('[hidden], [inert]') || el.disabled) el = fallback;
+    if (el && el.isConnected) el.focus({ preventScroll: true });
+  };
 }
 /**
  * @param {string} msg
@@ -152,9 +172,11 @@ export function snack(msg, { action, onAction, error = false, timeout } = {}) {
   x.type = 'button'; x.className = 'snack__close'; x.setAttribute('aria-label', 'Мэдэгдлийг хаах'); x.innerHTML = ICON.close;
   x.addEventListener('click', dismiss);
   el.appendChild(x);
+  el._dismiss = dismiss;
   $('.snackbar__list', h).appendChild(el);
+  // 3-аас олон бол хамгийн хуучныг жинхэнээр хаана (Alt+Z хуучин, харагдахгүй мэдэгдлийг буцаахгүй)
   const all = $$('.snack:not(.is-out)', h);
-  if (all.length > 3) all.slice(0, all.length - 3).forEach((s) => s.remove());
+  if (all.length > 3) all.slice(0, all.length - 3).forEach((s) => s._dismiss());
   announce(action ? `${msg} ${action}: Alt+Z.` : msg, error);
   // Алдаа хаах хүртэл үлдэнэ; бусад нь хугацаатай — hover/фокус үед зогсоно (WCAG 2.2.1)
   const sync = () => {
