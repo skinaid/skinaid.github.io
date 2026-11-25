@@ -82,7 +82,8 @@ window.SKINAID_HOME_DATA = {
  ],
  "internalPaths": [
   "/",
-  "/privacy"
+  "/privacy",
+  "/emchilgee"
  ],
  "claimsAllow": [
   "хамгийн түгээмэл"
