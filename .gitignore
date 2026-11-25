@@ -11,3 +11,6 @@
 /content/drafts/
 /content/_work/
 /.preview/
+
+# Vercel Functions-ийн хамаарал (package-lock.json-оос сэргээнэ)
+/node_modules/
