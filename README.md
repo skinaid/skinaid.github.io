@@ -10,7 +10,6 @@ Backend: **Firebase (Spark үнэгүй багц)** — захиалга Firesto
 ```
 index.html                    — Үндсэн хуудас (бүх хэсэг)
 assets/css/style.css          — Загвар (өнгө, фонт, responsive)
-assets/css/fonts.css          — Вэб фонт (@font-face); файлууд assets/fonts/ (OFL.txt лиценз)
 assets/js/main.js             — Цэс, анимаци, үйлчилгээний шүүлтүүр, FAQ, маягт (Firestore + fallback), тохиргоо унших
 assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын АНХНЫ утга (сайт + admin + build ашиглана)
 assets/js/catalog-render.js   — Үйлчилгээний мөрийн HTML загвар (main.js болон tools/build.mjs хоёулаа ашиглана)
@@ -117,12 +116,10 @@ admin → «Эмчилгээний хуудас» цэс төлөв, хуваа�
    уг маягт хүсэлтийг бэлтгээд Messenger / и-мэйл / SMS / утас сувгаар дамжуулах товчнууд харуулна. Admin-ийн тэр
    тохиргоо зөвхөн нөөц маягтад хамаарна — онлайн захиалгыг түр зогсоох бол UB Beauty OS → Холболт → Вэб суваг.
 5. **Өнгө, фонт** — `style.css` дээд хэсгийн `:root` хувьсагчид (`--purple: #654186` брэндийн ягаан).
-   Фонт (Manrope, Montserrat) өөрийн домэйноос: `assets/fonts/*.woff2` нь Google Fonts-ийн `text=` subset (Монгол кирилл, латин, ₮,
-   дээд/доод индекс). Шинэ тэмдэгт (жишээ нь өөр хэлний үсэг) хэрэгтэй бол subset-ийг дахин татна. `fonts.css` асинхрон
-   (`media="print" onload`) ачаалагдана; CSS-ийн `url()` build-ийн `?v=hash`-тай (tools/lib/assets.mjs `stampCss`).
-   Фонтыг preload БҮҮ хий, fonts.css-ийг render-blocking БҮҮ болго (2026-11-25: FCP 1.0 → 6.5 с болгосон).
-   `src: local(…)`-тэй тааруулсан fallback face БҮҮ нэм: 2026-11-24-нд PageSpeed-ийн гар утасны FCP-г 1.0 → 6.3 с болгосон
-   (fonts.css-ийн тайлбар). Admin одоогоор Google Fonts-оо хэвээр ашиглана.
+   Фонт (Manrope, Montserrat) Google Fonts-оос асинхрон (`media="print" onload`) ачаалагдана. ⚠ Өөрийн домэйноос
+   ачаалах туршилт (2026-11-24/25, PR #8–#10: preload, local() size-adjust fallback, асинхрон fonts.css) гурван хэлбэрээрээ
+   PageSpeed-ийн гар утасны гүйцэтгэлийг 96 → 55–61 (FCP 1.0 → 6.3–6.7 с) болгосон тул буцаав (PR #11). Фонт солихоосоо
+   өмнө PageSpeed-ээр хэмж.
 
 ## Онлайн цаг захиалга (UB Beauty вэб суваг)
 
