@@ -317,7 +317,7 @@ Messenger → Meta → POST https://www.skinaid.mn/api/messenger
 Хадгалах хугацаа (cron устгана): event 30, ярианы мессеж 180, ноорог 180, `ai_runs` 400, echo загвар 90 хоног; audit — хязгааргүй.
 
 **Firestore** (бүгдийг admin уншина; сервер IAM-аар бичнэ — rules серверт хамаарахгүй):
-`messenger_settings/main` (admin: горим off|shadow, killSwitch, сарын таг — өөрчлөлт бүр `messenger_audit`-д нэг batch-д),
+`messenger_settings/main` (admin: горим off|shadow, killSwitch, сарын хязгаар — өөрчлөлт бүр `messenger_audit`-д нэг batch-д),
 `messenger_drafts` (сервер үүсгэнэ, admin зөвхөн `rating/note/ratedAt/ratedBy`), `messenger_threads/{psidHash}` + `messages`,
 `messenger_events`, `ai_runs`, `messenger_usage/{YYYY-MM}`, `messenger_status/main`, `messenger_echo_templates`,
 `messenger_kb`, `messenger_examples` (2-р үе шатны «Сургалт»). Query бүр composite index ШААРДАХГҮЙ.
