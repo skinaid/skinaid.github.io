@@ -10,7 +10,7 @@ Backend: **Firebase (Spark үнэгүй багц)** — захиалга Firesto
 ```
 index.html                    — Үндсэн хуудас (бүх хэсэг)
 assets/css/style.css          — Загвар (өнгө, фонт, responsive)
-assets/css/fonts.css          — Вэб фонт (@font-face) + тааруулсан fallback (CLS); файлууд assets/fonts/ (OFL.txt лиценз)
+assets/css/fonts.css          — Вэб фонт (@font-face); файлууд assets/fonts/ (OFL.txt лиценз)
 assets/js/main.js             — Цэс, анимаци, үйлчилгээний шүүлтүүр, FAQ, маягт (Firestore + fallback), тохиргоо унших
 assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын АНХНЫ утга (сайт + admin + build ашиглана)
 assets/js/catalog-render.js   — Үйлчилгээний мөрийн HTML загвар (main.js болон tools/build.mjs хоёулаа ашиглана)
@@ -118,9 +118,10 @@ admin → «Эмчилгээний хуудас» цэс төлөв, хуваа�
    тохиргоо зөвхөн нөөц маягтад хамаарна — онлайн захиалгыг түр зогсоох бол UB Beauty OS → Холболт → Вэб суваг.
 5. **Өнгө, фонт** — `style.css` дээд хэсгийн `:root` хувьсагчид (`--purple: #654186` брэндийн ягаан).
    Фонт (Manrope, Montserrat) өөрийн домэйноос: `assets/fonts/*.woff2` нь Google Fonts-ийн `text=` subset (Монгол кирилл, латин, ₮,
-   дээд/доод индекс). Шинэ тэмдэгт (жишээ нь өөр хэлний үсэг) хэрэгтэй бол subset-ийг дахин татна. `fonts.css`-ийн «… Fallback A/R»
-   size-adjust утгыг фонт/жин солих үед хөтөч дээр дахин хэмжинэ. HTML-ийн `<link rel="preload">` ба CSS-ийн `url()` хоёулаа build-ийн
-   `?v=hash`-тай (tools/lib/assets.mjs `stampCss`) — эс тэгвээс фонт хоёр удаа татагдана. Admin одоогоор Google Fonts-оо хэвээр ашиглана.
+   дээд/доод индекс). Шинэ тэмдэгт (жишээ нь өөр хэлний үсэг) хэрэгтэй бол subset-ийг дахин татна. HTML-ийн `<link rel="preload">`
+   ба CSS-ийн `url()` хоёулаа build-ийн `?v=hash`-тай (tools/lib/assets.mjs `stampCss`) — эс тэгвээс фонт хоёр удаа татагдана.
+   `src: local(…)`-тэй тааруулсан fallback face БҮҮ нэм: 2026-11-24-нд PageSpeed-ийн гар утасны FCP-г 1.0 → 6.3 с болгосон
+   (fonts.css-ийн тайлбар). Admin одоогоор Google Fonts-оо хэвээр ашиглана.
 
 ## Онлайн цаг захиалга (UB Beauty вэб суваг)
 
