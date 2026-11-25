@@ -15,7 +15,8 @@ assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын
 assets/js/catalog-render.js   — Үйлчилгээний мөрийн HTML загвар (main.js болон tools/build.mjs хоёулаа ашиглана)
 assets/js/firebase-config.js  — Firebase төслийн нийтийн тохиргоо, admin и-мэйлийн жагсаалт (UI-д), reCAPTCHA сайтын түлхүүр
 assets/js/app-check.js        — Firebase App Check (reCAPTCHA): сайт + admin хоёулаа Firestore-оос өмнө дуудна
-assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog унших
+assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog унших (main.js `loadBackend()` хуудас
+                                ачаалагдсаны дараа сул үед эсвэл нөөц маягтад хүрэхэд импортлоно — эхэнд БҮҮ ачаал: PageSpeed FCP 6+ с болдог)
 assets/js/booking.js          — Онлайн цаг захиалга: UB Beauty вэб сувгийн API (сул цаг → захиалга); доорх «Онлайн цаг захиалга»
 assets/js/ubbeauty-config.js  — UB Beauty API хаяг + НИЙТИЙН түлхүүр (pk_live_…). Нууц sk_ түлхүүр хэзээ ч энд биш
 admin/                        — Удирдлагын хэсэг (index.html, admin.js, admin.css): Google нэвтрэлт, 4 модуль
