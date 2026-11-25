@@ -321,7 +321,7 @@ Messenger → Meta → POST https://www.skinaid.mn/api/messenger
 `messenger_drafts` (сервер үүсгэнэ, admin зөвхөн `rating/note/ratedAt/ratedBy`), `messenger_threads/{psidHash}` + `messages`,
 `messenger_events`, `ai_runs`, `messenger_usage/{YYYY-MM}`, `messenger_status/main`, `messenger_echo_templates`,
 `messenger_kb`, `messenger_examples` (2-р үе шатны «Сургалт»). Query бүр composite index ШААРДАХГҮЙ.
-Spark квот: нэг хэрэглэгчийн мессежид ойролцоогоор 10 write + 8 read; admin «Ноорог» нэг нээлтэд ≤ 30 + 3 read.
+Spark квот: нэг хэрэглэгчийн мессежид ойролцоогоор 11 write + 20 read (өдөрт ~1,500 мессеж хүртэл багтана); нэг ярианд өдөрт ≤ 40 удаа AI (нэг хэрэглэгч квот, сарын хязгаарыг дуусгахгүй); admin «Ноорог» нэг нээлтэд ≤ 30 + 3 read.
 
 ### Эзэмшигчийн алхам (нэг удаа)
 
