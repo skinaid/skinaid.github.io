@@ -2,7 +2,7 @@
    SKIN AID — main.js
    Header, mobile nav, reveal animations, counters, treatment filter (rows: catalog-render.js),
    horizontal scroller, FAQ accordion, booking form (Firestore + fallback),
-   settings/catalog from Firebase (assets/js/backend.js, optional).
+   settings/catalog from Firebase (assets/js/backend.js, optional — loadBackend() хойшлуулж ачаална).
    ========================================================================== */
 (function () {
   'use strict';
@@ -376,6 +376,26 @@
   document.addEventListener('skinaid:settings', (e) => applySettings(e.detail));
   if (window.SkinAidBackend && window.SkinAidBackend.settings) applySettings(window.SkinAidBackend.settings);
 
+  /* ---------- Firebase (backend.js): хуудас зурагдсаны ДАРАА ачаална ----------
+     backend.js нь Firebase, App Check (reCAPTCHA Enterprise)-ийг ачаалж settings/site, settings/catalog-ийг уншина
+     (дээрх applySettings). Эхэнд <script type="module">-оор ачаалахад анхны зурагдалт эдгээр скриптийн ард хоцорч
+     PageSpeed-ийн гар утасны FCP 6+ с болж байсан (2026-11-25; /privacy — backend-гүй — 0.9 с). Тиймээс зөвхөн нүүрэнд
+     (#bookForm байгаа үед) `load`-ын дараа сул үед, эсвэл нөөц маягтад хүрэхэд л ачаална. Замын ?v=-г build тавина. */
+  let backendPromise = null;
+  const loadBackend = () => {
+    if (!backendPromise) {
+      backendPromise = import('/assets/js/backend.js?v=c029d1fb')
+        .then(() => window.SkinAidBackend || null)
+        .catch(() => { document.dispatchEvent(new Event('skinaid:backend-failed')); return null; });
+    }
+    return backendPromise;
+  };
+  if ($('#bookForm')) {
+    const whenIdle = () => (window.requestIdleCallback ? window.requestIdleCallback(() => loadBackend(), { timeout: 3000 }) : setTimeout(loadBackend, 2000));
+    if (document.readyState === 'complete') whenIdle(); else window.addEventListener('load', whenIdle, { once: true });
+    $('#bookForm').addEventListener('focusin', () => loadBackend(), { once: true });
+  }
+
   /* ---------- Booking form: Firestore-д бичнэ, бүтэлгүйтвэл сувгуудын panel ---------- */
   const form = $('#bookForm');
   if (form) {
@@ -495,11 +515,18 @@
       // Honeypot: далд талбарыг зөвхөн бот бөглөнө — юу ч бичилгүй "амжилттай" гэж харуулна
       if (d.website) { showSuccess(d); finish(); return; }
 
-      const backend = window.SkinAidBackend;
-      if (SITE.bookingEnabled === false || !backend || typeof backend.submitBooking !== 'function') {
-        showFallback(d, text, ''); finish(); return;
-      }
+      if (SITE.bookingEnabled === false) { showFallback(d, text, ''); finish(); return; }
       setBusy(true);
+      // backend.js хойшлон ачаалагддаг (loadBackend): маягтад хүрэхэд эхэлсэн тул ихэнхдээ бэлэн. Admin-ы тохиргоо
+      // («захиалга унтраасан» г.м.) уншигдсаны дараа л шийднэ — эс бөгөөс нөөц самбар.
+      let backend = null;
+      try {
+        backend = await withTimeout(loadBackend(), 8000);
+        if (backend && backend.ready) await withTimeout(backend.ready, 4000).catch(() => {});
+      } catch (_) { backend = null; }
+      if (SITE.bookingEnabled === false || !backend || typeof backend.submitBooking !== 'function') {
+        setBusy(false); showFallback(d, text, ''); finish(); return;
+      }
       const pending = backend.submitBooking({ name: d.name, phone: d.phone, service: d.service, date: d.date, message: d.message });
       try {
         await withTimeout(pending, 12000);

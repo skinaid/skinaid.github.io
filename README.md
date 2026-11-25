@@ -17,6 +17,8 @@ assets/js/home-render.js      — Нүүрний hero + «Зөвлөгөө» к�
 assets/js/firebase-config.js  — Firebase төслийн нийтийн тохиргоо, admin и-мэйлийн жагсаалт (UI-д), reCAPTCHA сайтын түлхүүр
 assets/js/app-check.js        — Firebase App Check (reCAPTCHA): сайт + admin хоёулаа Firestore-оос өмнө дуудна
 assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog (+ нүүрэнд settings/home) унших
+                                (main.js `loadBackend()` хуудас ачаалагдсаны дараа сул үед эсвэл нөөц маягтад хүрэхэд импортлоно —
+                                эхэнд БҮҮ ачаал: PageSpeed FCP 6+ с болдог)
 assets/js/booking.js          — Онлайн цаг захиалга: UB Beauty вэб сувгийн API (сул цаг → захиалга); доорх «Онлайн цаг захиалга»
 assets/js/ubbeauty-config.js  — UB Beauty API хаяг + НИЙТИЙН түлхүүр (pk_live_…). Нууц sk_ түлхүүр хэзээ ч энд биш
 admin/                        — Удирдлагын хэсэг: index.html, admin.css, admin.js (эхлэл: нэвтрэлт, #/hash routing),
@@ -133,6 +135,10 @@ admin → «Эмчилгээний хуудас» цэс төлөв, хуваа�
    уг маягт хүсэлтийг бэлтгээд Messenger / и-мэйл / SMS / утас сувгаар дамжуулах товчнууд харуулна. Admin-ийн тэр
    тохиргоо зөвхөн нөөц маягтад хамаарна — онлайн захиалгыг түр зогсоох бол UB Beauty OS → Холболт → Вэб суваг.
 5. **Өнгө, фонт** — `style.css` дээд хэсгийн `:root` хувьсагчид (`--purple: #654186` брэндийн ягаан).
+   Фонт (Manrope, Montserrat) Google Fonts-оос асинхрон (`media="print" onload`) ачаалагдана. ⚠ Өөрийн домэйноос
+   ачаалах туршилт (2026-11-24/25, PR #8–#10: preload, local() size-adjust fallback, асинхрон fonts.css) гурван хэлбэрээрээ
+   PageSpeed-ийн гар утасны гүйцэтгэлийг 96 → 55–61 (FCP 1.0 → 6.3–6.7 с) болгосон тул буцаав (PR #11). Фонт солихоосоо
+   өмнө PageSpeed-ээр хэмж.
 
 ## Онлайн цаг захиалга (UB Beauty вэб суваг)
 
@@ -309,7 +315,11 @@ Datacom (manage.datacom.mn) DNS удирдлага дээр:
 
 - `trailingSlash: false` — хуудсууд ташуу зураасгүй хаягтай (`/privacy`, `/admin`). Canonical, sitemap, дотоод холбоос бүгд ташуугүй хэлбэрийг ашиглана.
 - `/index.html` → `/`, `/<хавтас>/index.html` → `/<хавтас>`, `/privacy-policy` → `/privacy`.
-- Хуучин Wix замууд: `/service-page/*` → `/#treatments`, `/post/*`, `/blog/*` → `/#blog`, `/product-page/*` → `/`, `/book-online*` → `/#contact`.
+- Хуучин Wix замууд: `/service-page/*` → `/emchilgee` (hub, 307), `/post/*`, `/blog/*` → `/#blog`, `/book-online*` → `/#contact`.
+  `content/pipeline.mjs`-д тулгагдсан хуучин URL нь тухайн хуудас гарах хүртэл hub-ийн ангилал руу (`/emchilgee#<category>`, 307),
+  гарсны дараа хуудас руу 308 — хоёуланг нь build удирдана.
+  `/product-page/*` (хуучин онлайн дэлгүүрийн 25 бараа) зориуд redirect-гүй — 404 өгч индексээс хурдан гарна (2026-11-24 аудит:
+  нүүр рүү бөөнөөр redirect хийхийг Google «soft 404» гэж үздэг, сайт бараа зардаггүй).
   Эмчилгээний хуудас нийтлэгдэхэд `content/pipeline.mjs` / хуудасны `legacy` URL-ууд → тэр хуудас руу 308 redirect-ийг build
   автоматаар `vercel.json`-д (catch-all-аас өмнө, percent-encoded) нэмнэ. `/emchilgee/` руу заасан дүрмийг гараар бүү засаарай.
 - **Кирилл URL:** Vercel кирилл замыг зөвхөн percent-encoded хэлбэрээр таардаг (2026-11-08 туршсан: `/zz-probe/тест` raw эх 404, `%D1%82%D0%B5%D1%81%D1%82` эх 307). Тиймээс кирилл эхтэй redirect-ийг `encodeURI()` хэлбэрээр (том hex) бичнэ.

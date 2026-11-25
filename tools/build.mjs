@@ -95,6 +95,8 @@ const contentErrors = [...sdkErrors], contentWarnings = [];
   for (const p of content.pipeline) {
     if (p.ubServiceId != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(p.ubServiceId)) contentErrors.push(`content/pipeline.mjs: ${p.slug} — ubServiceId "${p.ubServiceId}" UB Beauty-ийн үйлчилгээний id (uuid) биш`);
     for (const id of [...(p.catalogIds || []), ...(p.alsoIds || [])]) if (!ids.has(id)) contentErrors.push(`content/pipeline.mjs: ${p.slug} — "${id}" catalog-defaults.js-д алга`);
+    // category = hub-ийн хэсгийн id (/emchilgee#<category>) — нүүрний карт ба хуучин URL-ын буух газар
+    if (!Object.prototype.hasOwnProperty.call(catalog.cats, p.category)) contentErrors.push(`content/pipeline.mjs: ${p.slug} — category "${p.category}" catalog-defaults.js cats-д алга`);
     for (const id of p.catalogIds || []) {
       if (owner.has(id)) contentErrors.push(`content/pipeline.mjs: "${id}" ${owner.get(id)} ба ${p.slug} хоёуланд catalogIds-д байна`);
       owner.set(id, p.slug);
@@ -126,7 +128,10 @@ const visible = content.pages
   .sort((a, b) => catOrder.indexOf(a.category) - catOrder.indexOf(b.category) || (a.order || 0) - (b.order || 0) || a.slug.localeCompare(b.slug));
 const visibleSlugs = new Set(visible.map((p) => p.slug));
 const pageUrl = (slug) => (visibleSlugs.has(slug) ? '/emchilgee/' + slug : null);
-const hubLive = visible.length > 0 && !!content.hub;
+// Hub (/emchilgee) эмнэлгийн мэдэгдэлгүй (catalog-ийн нэр, тайлбар, үнэ + чиглүүлэх текст) тул эмчийн хяналт
+// шаардахгүй — эмчилгээний хуудсыг хүлээлгүй нийтэлнэ (2026-11-24 SEO төлөвлөгөө 0.2: хуучин Wix хаягийн буух газар).
+const hubLive = !!content.hub;
+const pipelineCat = (slug) => (content.pipeline.find((p) => p.slug === slug) || {}).category;
 /** Контентын дотоод холбоос: /emchilgee… нь зөвхөн харагдах (нийтлэгдсэн) хуудас руу */
 const linkOk = (href) => {
   const p = href.split('#')[0];
@@ -238,7 +243,8 @@ const asset = (p) => stamper.withVersion('.', p);   // JSON-LD-ийн logo/image
 
 /**
  * Гараар бичсэн нүүрний картууд: <a … data-page="slug|hub#cat" data-fallback="#treatments" href="…">.
- * Нийтлэгдсэн хуудас → /emchilgee/slug; hub#cat → hub нийтлэгдсэн бол /emchilgee#cat; үгүй бол data-fallback.
+ * Нийтлэгдсэн хуудас → /emchilgee/slug; хуудас хараахан гараагүй бол hub-ийн ангилал (/emchilgee#<pipeline category>);
+ * hub#cat → /emchilgee#cat; hub нийтлэгдээгүй бол data-fallback.
  */
 function applyPageLinks(html) {
   return html.replace(/<a\b[^>]*\bdata-page="([^"]+)"[^>]*>/g, (tag, key) => {
@@ -249,6 +255,7 @@ function applyPageLinks(html) {
     if (slug === 'hub') { if (hubLive && anchor) href = '/emchilgee#' + anchor; }
     else if (!content.pipelineSlugs.has(slug)) throw new BuildError(`index.html: data-page="${key}" — content/pipeline.mjs-д ийм хуудас алга`);
     else if (pageUrl(slug)) href = pageUrl(slug);
+    else if (hubLive) href = '/emchilgee#' + pipelineCat(slug);
     return tag.replace(/\bhref="[^"]*"/, `href="${href}"`);
   });
 }
@@ -354,13 +361,21 @@ if (PREVIEW) {
   process.exit(0);
 }
 
-/* ---------- 5c. vercel.json: нийтлэгдсэн хуудасны хуучин (Wix) URL → 308 ---------- */
+/* ---------- 5c. vercel.json: хуучин (Wix) URL → нийтлэгдсэн хуудас (308) эсвэл hub-ийн ангилал (307) ---------- */
 {
   // Хуучин URL: хуудасны legacy + content/pipeline.mjs-ийн legacy (нэгтгэж)
   const pipeLegacy = (slug) => ((content.pipeline.find((p) => p.slug === slug) || {}).legacy || []);
+  // Хараахан гараагүй хуудасны хуучин URL → hub-ийн тухайн ангилал руу ТҮР (307) redirect: Google хуучин URL-ыг
+  // индексэд үлдээсээр байгаад хуудас гармагц 308 болж тэр хуудас руу шилжинэ (hub руу байнгын redirect хийвэл
+  // хуучин хаягийн жин ангиллын хуудсанд «түгжигдэнэ»). content/pages-д байгаа ч алдаатай (blocked) хуудсыг хөндөхгүй.
+  const blockedSlugs = new Set(blocked.map((b) => b.slug));
+  const pending = hubLive
+    ? content.pipeline.filter((p) => !visibleSlugs.has(p.slug) && !blockedSlugs.has(p.slug))
+      .map((p) => ({ slug: p.slug, legacy: p.legacy || [], dest: '/emchilgee#' + p.category, permanent: false }))
+    : [];
   const r = manageRedirects(read('vercel.json'),
-    visible.map((pg) => ({ slug: pg.slug, legacy: [...new Set([...(pg.legacy || []), ...pipeLegacy(pg.slug)])] })),
-    sourceToRegExp, { liveSlugs: new Set([...visibleSlugs, ...blocked.map((b) => b.slug)]) });
+    [...visible.map((pg) => ({ slug: pg.slug, legacy: [...new Set([...(pg.legacy || []), ...pipeLegacy(pg.slug)])] })), ...pending],
+    sourceToRegExp, { liveSlugs: new Set([...visibleSlugs, ...blockedSlugs]) });
   contentErrors.push(...r.errors.map((e) => 'vercel.json: ' + e));
   contentWarnings.push(...r.warnings);
   files.set('vercel.json', r.text);
