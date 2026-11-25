@@ -1,0 +1,15 @@
+{
+  "name": "skinaid-functions",
+  "private": true,
+  "type": "module",
+  "description": "SkinAid.mn — зөвхөн Vercel Functions (api/) хамаарал. Сайтын build (tools/build.mjs) хамааралгүй хэвээр.",
+  "scripts": {
+    "test": "node --test 'tools/test/*.test.mjs'"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
+    "@vercel/functions": "^3.11.3",
+    "@vercel/oidc": "^4.0.9",
+    "google-auth-library": "^11.3.4"
+  }
+}
