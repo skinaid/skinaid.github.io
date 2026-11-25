@@ -2,13 +2,16 @@
  *
  * Файлууд: Google Fonts-ийн `text=` subset — Монгол кирилл (Ө ө Ү ү), латин, ₮, дээд/доод индекс (CO₂), түгээмэл цэг тэмдэг.
  * Нэг variable файл бүх жинг хамарна. Лиценз: assets/fonts/OFL.txt (SIL OFL 1.1).
- * Хуудас бүрийн <head>-д эдгээр хоёр файлыг <link rel="preload" as="font" crossorigin>-оор ачаална
- * (URL нь build-ийн ?v=hash-тай яг таарна — tools/lib/assets.mjs stampCss).
+ * Энэ файлыг <head>-д асинхрон (media="print" onload) ачаална: текст эхлээд системийн фонтоор шууд зурагдаж,
+ * фонт ирэхэд солигдоно (swap). url() нь build-ийн ?v=hash-тай (tools/lib/assets.mjs stampCss).
  *
- * ⚠ src: local(…)-тэй «тааруулсан fallback» face (size-adjust/ascent-override) БҮҮ нэм. 2026-11-24-нд
- * Arial/Roboto-гийн local() fallback нэмэхэд PageSpeed-ийн (Linux Chrome) хэмжилтэд текстийн анхны зурагдалт
- * 0.3 с-ээс 2.3 с болж хоцорч, гар утасны FCP/LCP 1.0 с → 6.3 с, гүйцэтгэл 96 → 55 болсон (local() фонт хайлт
- * зурагдалтыг хаадаг). CLS-ийг preload-оор (фонт анхны зурагдалтаас өмнө ирнэ) бууруулна.
+ * ⚠ PageSpeed (гар утас, Linux Chrome) хэмжилтийн түүх — эдгээрийг БҮҮ давт:
+ *   • 2026-11-24: preload + render-blocking fonts.css + src: local('Arial'/'Roboto') size-adjust fallback →
+ *     H1 2.3 с хоцорч зурагдан FCP/LCP 1.0 → 6.3 с, гүйцэтгэл 96 → 55.
+ *   • 2026-11-25: local() fallback-гүй, preload хэвээр → H1 1.3 с хоцорч FCP 6.5 с, гүйцэтгэл 61.
+ * Өмнөх (Google Fonts асинхрон, preload-гүй) загвар FCP 1.0 с, гүйцэтгэл 96 байсан — яг тэр ачааллын загварыг
+ * хадгална: фонтыг <link rel="preload" as="font">-оор БҮҮ ачаал, fonts.css-ийг render-blocking БҮҮ болго,
+ * local() fallback face БҮҮ нэм.
  */
 
 @font-face {
