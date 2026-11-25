@@ -24,8 +24,6 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"></noscript>
 
@@ -918,9 +916,8 @@
   <!-- /build:pages-index -->
   <script src="assets/js/catalog-defaults.js?v=cf4cf057"></script>
   <script src="assets/js/catalog-render.js?v=8d0d4450"></script>
-  <script src="assets/js/main.js?v=e2e3ae41"></script>
-  <!-- Firebase (Firestore): захиалга бүртгэх, тохиргоо/каталог унших. Ачаалагдахгүй бол сайт анхны байдлаараа ажиллана. -->
-  <script type="module" src="assets/js/backend.js?v=90e14c2b" onerror="document.dispatchEvent(new Event('skinaid:backend-failed'))"></script>
+  <script src="assets/js/main.js?v=036ded5a"></script>
+  <!-- Firebase (backend.js: захиалга бүртгэх, admin-ы тохиргоо/каталог) нь хуудас зурагдсаны дараа main.js-ийн loadBackend()-ээр ачаалагдана. -->
   <!-- Онлайн цаг захиалга (UB Beauty вэб суваг). Ачаалагдахгүй бол #bookForm (Firestore хүсэлт) нөөцөөр гарна. -->
   <script type="module" src="assets/js/booking.js?v=81121f01" onerror="var u=document.getElementById('ubForm'),b=document.getElementById('bookForm');if(u&&b){u.hidden=true;b.hidden=false}"></script>
 </body>
