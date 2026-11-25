@@ -180,6 +180,7 @@ test('урсгал: текст → event → нууцалсан мессеж →
   const d = s.fake.read(drafts[0]);
   assert.equal(d.route, 'auto_candidate');
   assert.equal(d.rating, null);
+  assert.deepEqual(d.labels, { route: 'Автомат боломжтой', intent: 'Мэндчилгээ', reasons: [] }, 'admin-д харуулах шошго');
   assert.match(d.wouldSend, /AI туслах/, 'анхны хариунд тодруулга');
   assert.match(d.userText, /\[утас\]/);
   assert.ok(!d.userText.includes('99112233'));

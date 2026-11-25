@@ -15,6 +15,7 @@ import { composeBotReply, HANDOFF_REPLY, MEDIA_REPLY, needsDisclosure, urgentRep
 import { decideReply, parseProposal } from './social/policy.js';
 import { detectRiskSignals } from './social/intents.js';
 import { buildSocialRequest, SOCIAL_PROMPT_VERSION } from './social/prompt.js';
+import { socialIntentText, socialReasonText, socialRouteText } from './social/labels.js';
 
 /** Захиалгын холбоос нэмэх сэдэв */
 const LINK_INTENTS = new Set(['booking', 'price', 'service_info', 'promotion']);
@@ -22,6 +23,15 @@ const LINK_INTENTS = new Set(['booking', 'price', 'service_info', 'promotion']);
 const CONTEXT_TURNS = 6;
 
 const roundConf = (n) => Math.round(Math.min(1, Math.max(0, Number(n) || 0)) * 100) / 100;
+
+/** Admin-д харагдах шошго (хөтөч api/_lib-ийг импортолж чадахгүй тул серверт тооцож хадгална) */
+const labelsFor = (route, intent, reasons) => ({
+  route: socialRouteText(route),
+  intent: socialIntentText(intent),
+  reasons: reasons.map(socialReasonText),
+});
+/** saveDraft-ийн өмнө: шошго нэмнэ */
+const withLabels = (d) => ({ ...d, labels: labelsFor(d.route, d.intent, d.reasons) });
 
 /** Хүнд шилжих үед бот юу хэлэх байсан (код бичнэ) */
 function templateFor(intent, signals, phone) {
@@ -54,12 +64,12 @@ export function createAgent(deps) {
     async mediaDraft({ psidHash, replyToEventId }) {
       const turns = await store.recentTurns(psidHash, CONTEXT_TURNS);
       await store.saveDraft({
-        draft: {
+        draft: withLabels({
           ...baseDraft(psidHash, replyToEventId, turns),
           route: 'handoff', intent: 'media', signals: [], reasons: ['media'], lint: [], sourceIds: [],
           reply: '', templateReply: MEDIA_REPLY, wouldSend: MEDIA_REPLY, link: null, quickReplies: [],
           confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION,
-        },
+        }),
         run: null,
       });
       return { route: 'handoff' };
@@ -93,7 +103,7 @@ export function createAgent(deps) {
       if (usage.runs >= settings.monthlyRunCap || usage.costMicroUsd >= settings.monthlyCostCapUsd * 1e6) {
         const tpl = templateFor('other', signals, phone);
         await store.saveDraft({
-          draft: { ...base, route: 'handoff', intent: 'other', signals, reasons: ['cap_reached'], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION },
+          draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: ['cap_reached'], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION }),
           run: { ...runBase, status: 'cap', billable: false, durationMs: 0 },
           month,
         });
@@ -133,7 +143,7 @@ export function createAgent(deps) {
         const reason = result.status === 'refusal' ? 'refusal' : 'invalid_output';
         const tpl = templateFor('other', signals, phone);
         await store.saveDraft({
-          draft: { ...base, route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: result.model, promptVersion: SOCIAL_PROMPT_VERSION },
+          draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: result.model, promptVersion: SOCIAL_PROMPT_VERSION }),
           run,
           month,
         });
@@ -162,7 +172,7 @@ export function createAgent(deps) {
       }
 
       await store.saveDraft({
-        draft: {
+        draft: withLabels({
           ...base,
           route: decision.route,
           intent: decision.intent,
@@ -179,7 +189,7 @@ export function createAgent(deps) {
           aiReason: proposal.reason,
           model: result.model,
           promptVersion: SOCIAL_PROMPT_VERSION,
-        },
+        }),
         run,
         month,
       });

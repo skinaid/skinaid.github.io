@@ -1,18 +1,20 @@
 /* ==========================================================================
    SKIN AID — admin.js (ES module, backoffice-ийн эхлэл)
-   Google нэвтрэлт (allowlist) → модулиуд: Захиалга (realtime), Тохиргоо, Нүүр хуудас, Үйлчилгээ/Багц, Эмчилгээний хуудас.
+   Google нэвтрэлт (allowlist) → модулиуд: Захиалга (realtime), Тохиргоо, Нүүр хуудас, Үйлчилгээ/Багц, Эмчилгээний хуудас,
+   Messenger AI.
    Hash routing (#/bookings …), утсан дээр доод navigation bar, хадгалаагүй өөрчлөлтийн хамгаалалт (ui.js).
    Модулиуд: core.js (Firebase, туслах), ui.js (dialog, snackbar, save bar, алдааны хураангуй), lib.js (цэвэр функц),
-   m-bookings.js, m-settings.js, m-home.js, m-catalog.js, m-pages.js.
+   m-bookings.js, m-settings.js, m-home.js, m-catalog.js, m-pages.js, m-messenger.js (+ messenger-lib.js).
    ========================================================================== */
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
-import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=a5405b51';
-import * as bookings from './m-bookings.js?v=93408e79';
-import * as settings from './m-settings.js?v=2bf28d5f';
-import * as home from './m-home.js?v=6ecf6bd4';
-import * as catalog from './m-catalog.js?v=b80fb8aa';
+import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=70a601a4';
+import * as bookings from './m-bookings.js?v=ea9f10de';
+import * as settings from './m-settings.js?v=f1fb88b4';
+import * as home from './m-home.js?v=ccfdded6';
+import * as catalog from './m-catalog.js?v=8e3d7ba0';
 import { renderPages } from './m-pages.js?v=26a525a2';
+import * as messenger from './m-messenger.js?v=d93d5dc7';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';
@@ -61,16 +63,18 @@ onAuthStateChanged(auth, async (user) => {
   home.load();
   renderPages(null);
   catalog.load();
+  messenger.load();
 });
 function teardown() {
   session.user = null;
   bookings.teardown();
+  messenger.teardown();
   resetForms();   // хадгалах мөр нэвтрэх хуудсан дээр үлдэхгүй, дараагийн нэвтрэлт цэвэр эхэлнэ
   updateTitle({ view: '', newCount: 0 });
 }
 
-/* ---------- Hash routing: #/bookings, #/settings, #/home, #/catalog, #/pages ---------- */
-const VIEWS = ['bookings', 'settings', 'home', 'catalog', 'pages'];
+/* ---------- Hash routing: #/bookings, #/settings, #/home, #/catalog, #/pages, #/messenger ---------- */
+const VIEWS = ['bookings', 'settings', 'home', 'catalog', 'pages', 'messenger'];
 let firstRoute = true;
 const viewFromHash = () => { const v = (location.hash.match(/^#\/([a-z]+)/) || [])[1]; return VIEWS.includes(v) ? v : 'bookings'; };
 let currentRoute = '';
