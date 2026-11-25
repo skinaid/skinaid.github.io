@@ -38,9 +38,8 @@
   --r-lg: 28px;
   --r-xl: 36px;
 
-  /* @font-face: assets/css/fonts.css (local() fallback бүү нэм — тэнд тайлбартай) */
   --font-display: 'Montserrat', 'Manrope', system-ui, sans-serif;
-  --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   --container: 1200px;
   --gutter: clamp(16px, 4vw, 32px);
