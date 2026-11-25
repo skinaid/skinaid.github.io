@@ -10,10 +10,11 @@ import { isSocialMode } from './labels.js';
 export const SOCIAL_CAP_LIMITS = Object.freeze({ runsMax: 100_000, usdMax: 1000 });
 export const SOCIAL_DEFAULTS = Object.freeze({ mode: 'off', runs: 3000, usd: 50 });
 
-/** Маягтын таг → тоо (хоосон = анхдагч); хүрээнээс гадуур бол null */
+/** Маягтын хязгаар → тоо (хоосон = анхдагч); хүрээнээс гадуур бол null. Доллар: «12,5» = 12.5, «1,000» = 1000 (аудит 2026-11-25). */
 export function parseSocialCaps(runsRaw, usdRaw) {
   const r = String(runsRaw ?? '').replace(/[\s,]/g, '');
-  const u = String(usdRaw ?? '').replace(/[\s,$]/g, '');
+  const u0 = String(usdRaw ?? '').replace(/[\s$]/g, '');
+  const u = /^\d+,\d{1,2}$/.test(u0) ? u0.replace(',', '.') : u0.replace(/,/g, '');
   const runs = r === '' ? SOCIAL_DEFAULTS.runs : /^\d{1,6}$/.test(r) ? Number(r) : NaN;
   const usd = u === '' ? SOCIAL_DEFAULTS.usd : /^\d{1,4}(\.\d{1,2})?$/.test(u) ? Number(u) : NaN;
   if (!Number.isFinite(runs) || runs < 0 || runs > SOCIAL_CAP_LIMITS.runsMax) return null;

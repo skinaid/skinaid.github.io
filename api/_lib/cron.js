@@ -1,8 +1,9 @@
 /**
  * Өдөр бүрийн cron (vercel.json → /api/cron/daily, УБ 04:00). Vercel нь `Authorization: Bearer <CRON_SECRET>`
- * толгойг автоматаар илгээнэ. Хийх ажил (хугацааны төсөв ~45 с, maxDuration 60):
+ * толгойг автоматаар илгээнэ. Хийх ажил (хугацааны төсөв ~55 с, maxDuration 60):
  *   1. Гацсан event-тэй яриа (retryAt өнгөрсөн) — webhook-ийн waitUntil тасарсан бол нөхнө
  *   2. Хадгалах хугацаа: event 30, ноорог 180, ai_runs 400, echo загвар 90 хоног; ярианы мессеж 180 хоног
+ *      (200-аар хуудаслан, хугацаа дуустал — өдрийн хязгааргүй)
  *   3. messenger_status/main: lastCronAt, env «тохируулсан эсэх» (boolean), Meta token-ийн шалгалт (байвал)
  * Хариунд зөвхөн тоо (хувийн мэдээлэлгүй).
  */
@@ -27,15 +28,29 @@ export function createCronHandler(deps) {
     const rt = deps.getRuntime();
     if (!rt) return json({ ok: false, reason: 'not_configured' }, 503);
 
-    const deadline = Date.now() + (deps.budgetMs ?? 45_000);
+    const start = Date.now();
+    // maxDuration 60 с: гацсан event (Claude-ийг ≤ start+15 с хүртэл эхлүүлнэ — pipeline AGENT_MIN_MS) → ≤ 45 с, дараа нь
+    // хадгалах хугацааны цэвэрлэгээ өөрийн төсөвтэй (≤ 55 с)
+    const deadline = start + (deps.budgetMs ?? 55_000);
+    const sweepUntil = deadline - 10_000;
     const out = { ok: true, sweptThreads: 0, purged: {}, metaToken: null };
     try {
-      out.sweptThreads = await rt.pipeline.sweepStale({ maxThreads: 20, deadline: deadline - 15_000 });
+      out.sweptThreads = await rt.pipeline.sweepStale({ maxThreads: 20, deadline: sweepUntil });
+      // Хуудаслан устгана (өдрийн хязгааргүй — хоцрогдол хуримтлагдахгүй), хугацаа дуустал
       for (const c of [COL.events, COL.drafts, COL.runs, COL.echo]) {
-        if (Date.now() > deadline) break;
-        out.purged[c] = await rt.store.purgeExpired(c, 200);
+        let n = 0;
+        for (let page = 200; page === 200 && Date.now() < deadline - 3000;) {
+          page = await rt.store.purgeExpired(c, 200);
+          n += page;
+        }
+        out.purged[c] = n;
       }
-      if (Date.now() < deadline) out.purged.messages = await rt.store.purgeThreadMessages(20);
+      let msgs = 0;
+      for (let r = { threads: 20 }; r.threads === 20 && Date.now() < deadline - 3000;) {
+        r = await rt.store.purgeThreadMessages(20);
+        msgs += r.deleted;
+      }
+      out.purged.messages = msgs;
       const m = metaConfig(env);
       if (m.pageToken && m.pageId && Date.now() < deadline) {
         try {

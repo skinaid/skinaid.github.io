@@ -10,7 +10,7 @@
  * нэр/ангилал/хугацаа/тайлбар/үнэ, багц. Эмнэлгийн утас ОРОХГҮЙ (assertNoPii; хэрэгтэй бол КОД залгана —
  * disclosure.js). Баримт бүр id-тай — агент хариундаа иш заана (policy.js `no_source`).
  */
-import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, redactForLlm } from '../guardrails.js';
+import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMentions, redactForLlm } from '../guardrails.js';
 
 /**
  * @typedef {{ id: string, name: string, category?: string|null, description?: string|null, duration?: string|null,
@@ -20,7 +20,8 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, redactFo
  *   packages: readonly CatalogPackageRow[], voiceBrief?: string|null }} CatalogInput
  * @typedef {'clinic'|'address'|'hours'|'service'|'package'} SocialFactKind
  * @typedef {{ id: string, kind: SocialFactKind, text: string }} SocialFact
- * @typedef {{ clinicName: string, facts: SocialFact[], allowedAmounts: number[], allowedPercents: number[], voiceBrief: string }} SocialCatalog
+ * @typedef {{ clinicName: string, facts: SocialFact[], allowedAmounts: number[], allowedPercents: number[], knownNumbers: number[],
+ *   knowledgeText: string, voiceBrief: string }} SocialCatalog
  */
 
 export const CATALOG_LIMITS = Object.freeze({ services: 80, packages: 30, descriptionChars: 200 });
@@ -104,6 +105,10 @@ export function buildSocialCatalog(input) {
     allowedAmounts: [...amounts].sort((a, b) => a - b),
     // SkinAid-ийн каталогт хувийн хөнгөлөлт байхгүй — хариунд % дурдвал хүнд (invented_percent)
     allowedPercents: [],
+    // Мэдлэгийн текстэд байгаа тоо (үйлчилгээний нэр «Glutathione 1200», «REJURAN 2ml» г.м.) — policy-ийн валютгүй дүнгийн
+    // шалгалтад зөвшөөрөгдөнө; бүх текст — хөнгөлөлт/бэлэг гэх үг мэдлэгт байгаа эсэх
+    knownNumbers: [...new Set(facts.flatMap((f) => numberMentions(f.text)))].sort((a, b) => a - b),
+    knowledgeText: facts.map((f) => f.text).join('\n'),
     voiceBrief: clean(input.voiceBrief, 4000),
   };
   // Давхар хамгаалалт: LLM рүү явах бүх зүйл PII-гүй, хориотой эх сурвалжийн нэргүй

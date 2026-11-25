@@ -30,14 +30,14 @@ export const ROLE_TEXT = { user: 'Үйлчлүүлэгч', staff: 'Ажилта�
 
 /** Серверийн тохиргооны төлөв (api/_lib/config.js configStatus — boolean л, утга хэзээ ч биш) */
 export const CONFIG_ITEMS = [
-  ['serverAuth', 'Firebase серверийн эрх (WIF)'],
-  ['anthropicKey', 'Anthropic API түлхүүр'],
-  ['psidSalt', 'PSID_SALT'],
-  ['cronSecret', 'CRON_SECRET'],
-  ['metaAppSecret', 'META_APP_SECRET'],
-  ['metaVerifyToken', 'META_VERIFY_TOKEN'],
-  ['metaAppId', 'META_APP_ID'],
-  ['metaPageId', 'META_PAGE_ID'],
+  ['serverAuth', 'Firebase-д хандах серверийн эрх (Google Cloud)'],
+  ['anthropicKey', 'Claude AI-ийн түлхүүр (ANTHROPIC_API_KEY)'],
+  ['psidSalt', 'Үйлчлүүлэгчийн id-г нууцлах түлхүүр (PSID_SALT)'],
+  ['cronSecret', 'Өдрийн автомат ажлын түлхүүр (CRON_SECRET)'],
+  ['metaAppSecret', 'Meta аппын нууц (META_APP_SECRET)'],
+  ['metaVerifyToken', 'Webhook баталгаажуулах үг (META_VERIFY_TOKEN)'],
+  ['metaAppId', 'Meta аппын id (META_APP_ID)'],
+  ['metaPageId', 'SkinAid пэйжийн id (META_PAGE_ID)'],
 ];
 
 /** Firestore-ийн баримт → маягтын утга (буруу/байхгүй = анхдагч; сервер ч ижил — settings-logic.js normalizeSettings) */
@@ -52,10 +52,12 @@ export function normalizeSettings(d) {
   };
 }
 
-/** Маягтын таг → тоо (хоосон = анхдагч); буруу бол { error } */
+/** Маягтын хязгаар → тоо (хоосон = анхдагч); буруу бол { error }. Доллар: «12,5» / «12,50» = 12.5 (таслалтай гар),
+ *  «1,000» = 1000 (мянгатын таслал) — серверийн settings-logic.js parseSocialCaps-тай ИЖИЛ. */
 export function parseCaps(runsRaw, usdRaw) {
   const r = String(runsRaw ?? '').replace(/[\s,]/g, '');
-  const u = String(usdRaw ?? '').replace(/[\s,$]/g, '');
+  const u0 = String(usdRaw ?? '').replace(/[\s$]/g, '');
+  const u = /^\d+,\d{1,2}$/.test(u0) ? u0.replace(',', '.') : u0.replace(/,/g, '');
   const runs = r === '' ? DEFAULTS.monthlyRunCap : /^\d{1,6}$/.test(r) ? Number(r) : NaN;
   const usd = u === '' ? DEFAULTS.monthlyCostCapUsd : /^\d{1,4}(\.\d{1,2})?$/.test(u) ? Number(u) : NaN;
   if (!Number.isFinite(runs) || runs < 0 || runs > CAP_LIMITS.runsMax) return { error: 'runs' };
@@ -78,7 +80,7 @@ export const FILTERS = [
   { key: 'all', label: 'Бүгд' },
   { key: 'unrated', label: 'Үнэлээгүй' },
   { key: 'auto', label: 'Автомат боломжтой' },
-  { key: 'handoff', label: 'Хүнд шилжүүлэх' },
+  { key: 'handoff', label: 'Ажилтанд шилжүүлэх' },
 ];
 export function draftMatches(d, filter) {
   if (filter === 'unrated') return !d.rating;

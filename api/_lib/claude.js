@@ -22,13 +22,21 @@ export const PRICES = Object.freeze({
 });
 const MAX_PRICE = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 };
 
-/** usage → зардал (микро-доллар, бүхэл) */
-export function costMicroUsd(model, usage) {
+const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const priced = (model, u) => {
   const p = PRICES[model] ?? MAX_PRICE;
+  return (n(u.input_tokens) * p.input + n(u.output_tokens) * p.output + n(u.cache_read_input_tokens) * p.cacheRead
+    + n(u.cache_creation_input_tokens) * p.cacheWrite) / 1e6;
+};
+
+/**
+ * usage → зардал (микро-доллар, бүхэл). Server-side fallback-тай үед `usage.iterations` нь оролдлого бүрийг (татгалзсан
+ * оролдлогыг ч) өөрийн моделиор агуулна — тэгвэл тус бүрийг үнэлж нэмнэ; эс бөгөөс дээд түвшний usage.
+ */
+export function costMicroUsd(model, usage) {
   const u = usage || {};
-  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-  const usd = (n(u.input_tokens) * p.input + n(u.output_tokens) * p.output
-    + n(u.cache_read_input_tokens) * p.cacheRead + n(u.cache_creation_input_tokens) * p.cacheWrite) / 1e6;
+  const its = Array.isArray(u.iterations) ? u.iterations.filter((i) => i && (i.type === 'message' || i.type === 'fallback_message')) : [];
+  const usd = its.length ? its.reduce((sum, i) => sum + priced(i.model || model, i), 0) : priced(model, u);
   return Math.round(usd * 1e6);
 }
 
@@ -65,8 +73,9 @@ export function createClaudeCaller(opts = {}) {
     try {
       if (!client) {
         SDK = (await importer('@anthropic-ai/sdk')).default;
-        // Webhook-ийн waitUntil maxDuration (60 с) дотор багтаана: 1 дахин оролдлого, 25 с timeout
-        client = new SDK({ maxRetries: 1, timeout: 25_000 });
+        // Webhook-ийн waitUntil maxDuration (60 с) дотор багтаана: SDK дахин оролдохгүй (timeout × retry 60 с-ээс хэтэрнэ),
+        // 25 с timeout. Түр зуурын алдааг pipeline event-ийн түвшинд дахин оролдоно (agent.js isRetryable).
+        client = new SDK({ maxRetries: 0, timeout: 25_000 });
       }
       const res = await client.beta.messages.create(buildParams(req, model));
       const usage = res.usage ?? null;

@@ -103,7 +103,8 @@ const PATTERNS = [
   ],
   [
     'injection',
-    /(?:өмнөх\s+заавр|зааврыг\s+март|заавраа\s+март|system\s*prompt|ignore\s+(?:all|previous|the)|you\s+are\s+now|developer\s+mode|jailbreak|prompt\s+injection)/iu,
+    // SkinAid (аудит 2026-11-25): монгол хэллэгүүд — «дүрмээ орхи», «зааврыг үл тоо», «... гэж ангил», «чи одоо ... болно»
+    /(?:өмнөх\s+заавр|зааврыг\s+март|заавраа\s+март|заавр\p{L}*\s+(?:орхи|үл\s+тоо|бүү\s+дага)|дүрм\p{L}*\s+(?:орхи|март|зөрч|үл\s+тоо)|гэж\s+ангил|ангилал\p{L}*\s+\p{L}+\s+болго|чи\s+одоо\s+(?:\p{L}+\s+){0,3}(?:болно|юм|байна)|систем\p{L}*\s+(?:заавар|промпт)|промпт|system\s*prompt|ignore\s+(?:all|previous|the)|you\s+are\s+now|developer\s+mode|jailbreak|prompt\s+injection)/iu,
   ],
 ];
 

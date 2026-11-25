@@ -93,7 +93,20 @@ export function createFakeFirestore({ projectId = 'skinaid-mn' } = {}) {
     throw new Error(`fake: op ${ff.op}`);
   }
 
+  /** Бодит Firestore шиг: composite index шаардах query-г татгалзана (бид index үүсгэдэггүй — README «Messenger AI») */
+  function needsComposite(sq) {
+    const flat = (f) => (!f ? [] : f.compositeFilter ? f.compositeFilter.filters.flatMap(flat) : [f.fieldFilter]);
+    const filters = flat(sq.where);
+    const eq = new Set(filters.filter((f) => f.op === 'EQUAL' || f.op === 'IN').map((f) => unquote(f.field.fieldPath)));
+    const range = new Set(filters.filter((f) => RANGE[f.op]).map((f) => unquote(f.field.fieldPath)));
+    const order = (sq.orderBy ?? []).map((o) => unquote(o.field.fieldPath));
+    if (range.size > 1 || order.length > 1) return true;
+    if (range.size && (eq.size || order.some((f) => !range.has(f)))) return true;
+    return eq.size > 0 && order.length > 0;
+  }
+
   function runQuery(parent, sq) {
+    if (needsComposite(sq)) return err(400, 'FAILED_PRECONDITION', 'The query requires an index.');
     const col = sq.from[0].collectionId;
     const prefix = `${parent}/${col}/`;
     let rows = [...docs.entries()].filter(([n]) => n.startsWith(prefix) && !n.slice(prefix.length).includes('/')).map(([n, d]) => ({ n, d }));

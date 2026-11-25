@@ -93,7 +93,8 @@ export function createStore(fs, opt = {}) {
         ]);
         return 'created';
       } catch (e) {
-        if (e instanceof FirestoreError && e.isPrecondition) return 'duplicate';
+        // exists=false-ийн зөрчил = ALREADY_EXISTS л (бусад FAILED_PRECONDITION-ийг давхардал гэж нуухгүй)
+        if (e instanceof FirestoreError && e.status === 'ALREADY_EXISTS') return 'duplicate';
         throw e;
       }
     },
@@ -127,7 +128,7 @@ export function createStore(fs, opt = {}) {
       const cur = await fs.get(threadPath(psidHash));
       try {
         if (!cur) {
-          const data = { state: 'bot', humanSince: null, lastStaffAt: null, lastUserAt: null, lastShadowBotAt: null, referral: null, oldestExpireAt: null, lockUntil: until, createdAt: t, updatedAt: t, messageCount: 0 };
+          const data = { state: 'bot', humanSince: null, lastStaffAt: null, lastUserAt: null, lastShadowBotAt: null, referral: null, oldestExpireAt: null, lockUntil: until, createdAt: t, updatedAt: t };
           await fs.commit([setWrite(threadPath(psidHash), data, { exists: false })]);
           return { ok: true, thread: data };
         }
@@ -159,11 +160,15 @@ export function createStore(fs, opt = {}) {
         const threads = Array.isArray(docs.get(`${COL.echo}/${fp}`)?.data?.threads) ? docs.get(`${COL.echo}/${fp}`).data.threads : [];
         const all = new Set([...threads, psidHash]);
         if (all.size >= min) out.add(fp);
-        // Массивыг min-ээр хязгаарлана (Meta-ийн загвар бүх ярианд гарч болно — баримт томрохгүй)
-        if (!threads.includes(psidHash) && threads.length < min) {
+        // Массивыг min-ээр хязгаарлана (Meta-ийн загвар бүх ярианд гарч болно — баримт томрохгүй). Ашиглагдсаар байгаа
+        // загварын хугацааг өдөрт нэг удаа сунгана — эс бөгөөс 90 хоногийн дараа устаж Meta-ийн хариу «ажилтан» болно.
+        const doc = docs.get(`${COL.echo}/${fp}`);
+        const seen = asDate(doc?.data?.lastSeenAt);
+        const append = !threads.includes(psidHash) && threads.length < min;
+        if (append || !seen || t.getTime() - seen.getTime() > DAY) {
           writes.push(setWrite(`${COL.echo}/${fp}`, { lastSeenAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.echo * DAY) }, {
             mask: ['lastSeenAt', 'expireAt'],
-            transforms: [transforms.appendMissing('threads', [psidHash])],
+            transforms: append ? [transforms.appendMissing('threads', [psidHash])] : [],
           }));
         }
       }
@@ -172,9 +177,11 @@ export function createStore(fs, opt = {}) {
     },
 
     /**
-     * planBatch-ийн үр дүнг атомоор бичнэ: мессежүүд (нууцалсан), thread-ийн төлөв, event-ийн төлөв.
+     * planBatch-ийн мессеж (нууцалсан) ба thread-ийн төлвийг бичнэ. Event-ийн төлвийг ЭНД БИЧИХГҮЙ — ноорог (эсвэл
+     * «хийх зүйлгүй») бичигдсэний дараа л `finishEvents` / `saveDraft({ eventStatus })` дуусгана: функц агентын явцад
+     * тасарвал event pending үлдэж дараа нь дахин боловсрогдоно (мессеж нь ижил id-тай тул давхардахгүй).
      * @param {string} psidHash
-     * @param {{ messages: any[], conversation: any, eventStatus: Record<string, string> }} plan
+     * @param {{ messages: any[], conversation: any }} plan
      * @param {Record<string, any>} thread  lockThread-ийн уншсан утга
      */
     async saveBatch(psidHash, plan, thread) {
@@ -197,13 +204,19 @@ export function createStore(fs, opt = {}) {
       };
       if (c.referral) th.referral = { source: c.referral.source ?? null, ref: c.referral.ref ?? null, ad_id: c.referral.ad_id ?? null, at: c.referral.at };
       if (plan.messages.length && !asDate(thread?.oldestExpireAt)) th.oldestExpireAt = exp;
-      writes.push(setWrite(threadPath(psidHash), th, {
-        mask: Object.keys(th),
-        transforms: plan.messages.length ? [transforms.increment('messageCount', plan.messages.length)] : [],
-      }));
-      for (const [id, status] of Object.entries(plan.eventStatus)) {
-        writes.push(setWrite(`${COL.events}/${id}`, { status, retryAt: null, processedAt: t }, { mask: ['status', 'retryAt', 'processedAt'] }));
-      }
+      writes.push(setWrite(threadPath(psidHash), th, { mask: Object.keys(th) }));
+      for (let i = 0; i < writes.length; i += 400) await fs.commit(writes.slice(i, i + 400));
+    },
+
+    /** Event-ийн эцсийн төлөв (done/skipped) — commit-ийн бичилтүүд */
+    eventStatusWrites(eventStatus) {
+      const t = now();
+      return Object.entries(eventStatus || {}).map(([id, status]) =>
+        setWrite(`${COL.events}/${id}`, { status, retryAt: null, processedAt: t }, { mask: ['status', 'retryAt', 'processedAt'] }));
+    },
+
+    async finishEvents(eventStatus) {
+      const writes = this.eventStatusWrites(eventStatus);
       for (let i = 0; i < writes.length; i += 400) await fs.commit(writes.slice(i, i + 400));
     },
 
@@ -239,10 +252,14 @@ export function createStore(fs, opt = {}) {
       return { runs: Number(d?.data?.runs) || 0, costMicroUsd: Number(d?.data?.costMicroUsd) || 0 };
     },
 
-    /** Ноорог + ажиллагааны бүртгэл + сарын тоологч — нэг commit */
-    async saveDraft({ draft, run, month }) {
+    /**
+     * Ноорог + ажиллагааны бүртгэл + сарын тоологч + event-ийн эцсийн төлөв — НЭГ commit (функц тасарвал бүгд эсвэл юу ч үгүй).
+     * Ноорогийн id = хариулах event-ээс тогтмол (`d_<event>`): дахин боловсруулахад давхар ноорог үүсэхгүй.
+     * @param {{ draft?: object|null, run?: object|null, month?: string, replyToEventId?: string, eventStatus?: Record<string, string> }} p
+     */
+    async saveDraft({ draft, run, month, replyToEventId, eventStatus }) {
       const t = now();
-      const draftId = newId('d');
+      const draftId = draft ? `d_${String(replyToEventId || draft.replyToEventId || '').replace(/^e_/, '') || randomUUID().replace(/-/g, '')}` : null;
       const writes = [];
       if (draft) {
         writes.push(setWrite(`${COL.drafts}/${draftId}`, {
@@ -252,7 +269,7 @@ export function createStore(fs, opt = {}) {
       }
       if (run) {
         writes.push(setWrite(`${COL.runs}/${newId('r')}`, {
-          ...run, draftId: draft ? draftId : null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY),
+          ...run, draftId, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY),
         }, { exists: false }));
         if (run.billable) {
           writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
@@ -261,8 +278,19 @@ export function createStore(fs, opt = {}) {
           }));
         }
       }
-      if (writes.length) await fs.commit(writes);
-      return draft ? draftId : null;
+      writes.push(...this.eventStatusWrites(eventStatus));
+      if (!writes.length) return draftId;
+      try {
+        await fs.commit(writes);
+      } catch (e) {
+        // Энэ event-д ноорог аль хэдийн бичигдсэн (өмнөх оролдлого) — event-ийг л дуусгана
+        if (draft && e instanceof FirestoreError && e.status === 'ALREADY_EXISTS') {
+          await this.finishEvents(eventStatus);
+          return draftId;
+        }
+        throw e;
+      }
+      return draftId;
     },
 
     /** Хадгалах хугацаа дууссан баримтуудыг устгана (нэг collection, ≤ limit) */
@@ -272,7 +300,8 @@ export function createStore(fs, opt = {}) {
       return docs.length;
     },
 
-    /** Хуучирсан мессежтэй яриануудыг цэвэрлэнэ (collection group query-гүй) */
+    /** Хуучирсан мессежтэй яриануудыг цэвэрлэнэ (collection group query-гүй). oldestExpireAt-ийг thread-ийн updateTime
+     *  precondition-оор бичнэ — зэрэг saveBatch шинэ мессеж нэмсэн бол алгасаад маргааш дахин. */
     async purgeThreadMessages(threadLimit = 20) {
       const t = now();
       const threads = await fs.query({ collection: COL.threads, where: [['oldestExpireAt', '<=', t]], orderBy: [['oldestExpireAt', 'asc']], limit: threadLimit });
@@ -282,9 +311,13 @@ export function createStore(fs, opt = {}) {
         if (old.length) await fs.commit(old.map((d) => deleteWrite(d.path)));
         deleted += old.length;
         const next = await fs.query({ parent: th.path, collection: COL.messages, orderBy: [['expireAt', 'asc']], limit: 1 });
-        await fs.commit([setWrite(th.path, { oldestExpireAt: next[0]?.data?.expireAt ?? null }, { mask: ['oldestExpireAt'], transforms: old.length ? [transforms.increment('messageCount', -old.length)] : [] })]);
+        try {
+          await fs.commit([setWrite(th.path, { oldestExpireAt: next[0]?.data?.expireAt ?? null }, { mask: ['oldestExpireAt'], updateTime: th.updateTime })]);
+        } catch (e) {
+          if (!(e instanceof FirestoreError && e.isPrecondition)) throw e;
+        }
       }
-      return deleted;
+      return { deleted, threads: threads.length };
     },
   };
 }

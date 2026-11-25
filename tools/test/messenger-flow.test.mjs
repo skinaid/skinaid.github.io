@@ -67,7 +67,8 @@ function setup({ settings = { mode: 'shadow', killSwitch: false, monthlyRunCap: 
   const log = (m) => logs.push(m);
   const knowledge = createKnowledge(store, { now: () => now });
   const agent = createAgent({ store, knowledge, callClaude, env, now: clock, log });
-  const pipeline = createPipeline({ store, agent, ownAppId: APP, now: clock, log });
+  const sleeps = [];
+  const pipeline = createPipeline({ store, agent, ownAppId: APP, now: clock, log, sleep: async (ms) => { sleeps.push(ms); } });
   const rt = { store, pipeline };
   const pending = [];
   const webhook = createWebhookHandlers({ env, getRuntime: () => rt, now: clock, log });
@@ -78,7 +79,7 @@ function setup({ settings = { mode: 'shadow', killSwitch: false, monthlyRunCap: 
     await Promise.all(pending.splice(0));
     return res;
   };
-  return { fake, store, pipeline, webhook, post, claudeCalls, logs, advance: (ms) => { now += ms; }, clock, rt };
+  return { fake, store, pipeline, webhook, post, claudeCalls, logs, sleeps, agent, advance: (ms) => { now += ms; }, clock, rt };
 }
 
 const msg = (mid, text, ts = T0 - 5000, psid = PSID) => ({ sender: { id: psid }, recipient: { id: PAGE }, timestamp: ts, message: { mid, text } });
@@ -352,7 +353,7 @@ test('cron: ярианы 180 хоногоос хуучин мессеж устг
   assert.equal(s.fake.list(`${thPath}/messages/`).length, 1);
   s.advance(181 * 86_400_000);
   const n = await s.store.purgeThreadMessages(10);
-  assert.equal(n, 1);
+  assert.deepEqual(n, { deleted: 1, threads: 1 });
   assert.equal(s.fake.list(`${thPath}/messages/`).length, 0);
   assert.equal(s.fake.read(thPath).oldestExpireAt, null);
 });
@@ -404,4 +405,130 @@ test('GCP эрх: тохируулаагүй = mode null; WIF/key сонголт
   assert.equal(subj, 1);
   assert.equal(createGcpAuth({ env: { FIREBASE_SERVICE_ACCOUNT: '{"client_email":"a"}' } }).mode, 'key');
   await assert.rejects(createGcpAuth({ env: { FIREBASE_SERVICE_ACCOUNT: '{буруу' } }).getAccessToken(), /KEY_JSON_INVALID/);
+});
+
+// ── Аудит 2026-11-25: найдвартай байдал ───────────────────────────────────
+
+const fsErr = (status, st) => ({ status, body: { error: { code: status, status: st } } });
+const isCommitOf = (col) => (u, init) => u.endsWith(':commit') && JSON.parse(init.body).writes.some((w) => w.update?.name?.includes(`/${col}/`));
+
+test('webhook: удаан үргэлжлэх алдаа (Spark квот, IAM) → 200 + статус; түр зуурын (503) → 503 (Meta дахин илгээнэ)', async () => {
+  const q = setup();
+  q.fake.failNext.push({ match: isCommitOf('messenger_events'), ...fsErr(429, 'RESOURCE_EXHAUSTED') });
+  assert.equal((await q.post(body([msg('m_quota', 'Сайн уу')]))).status, 200);
+  assert.equal(q.fake.read('messenger_status/main').lastError.code, 'firestore_RESOURCE_EXHAUSTED');
+  const p = setup();
+  p.fake.failNext.push({ match: isCommitOf('messenger_events'), ...fsErr(403, 'PERMISSION_DENIED') });
+  assert.equal((await p.post(body([msg('m_perm', 'Сайн уу')]))).status, 200);
+  const t = setup();
+  t.fake.failNext.push({ match: isCommitOf('messenger_events'), ...fsErr(503, 'UNAVAILABLE') });
+  assert.equal((await t.post(body([msg('m_unav', 'Сайн уу')]))).status, 503);
+  // Token авах алдаа (WIF буруу) → AUTH, түр зуурын биш
+  const fs = createFirestore({ projectId: 'skinaid-mn', getAccessToken: async () => { throw new Error('secret-ish detail'); }, fetchImpl: t.fake.fetchImpl });
+  await assert.rejects(fs.get('a/b'), (e) => e instanceof FirestoreError && e.status === 'AUTH' && !e.isTransient && !e.message.includes('secret'));
+});
+
+test('webhook: хэсэгчилсэн 503-ийн дараах давтан илгээлт — өмнө үүссэн (давхардсан) event-тэй яриа ч боловсрогдоно', async () => {
+  const s = setup();
+  // A үүснэ, B-г бичихэд 503 → Meta бүгдийг дахин илгээнэ
+  let n = 0;
+  s.fake.failNext.push({ match: (u, init) => isCommitOf('messenger_events')(u, init) && ++n === 2, ...fsErr(503, 'UNAVAILABLE') });
+  assert.equal((await s.post(body([msg('m_A', 'Сайн уу', T0 - 9000), msg('m_B', 'Үзлэг хэд вэ', T0 - 8000)]))).status, 503);
+  assert.equal(s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_A')}`).status, 'pending');
+  assert.equal((await s.post(body([msg('m_A', 'Сайн уу', T0 - 9000), msg('m_B', 'Үзлэг хэд вэ', T0 - 8000)]))).status, 200);
+  assert.equal(s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_A')}`).status, 'done', 'давхардсан A ч дуусна');
+  assert.equal(s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_B')}`).status, 'done');
+  assert.equal(s.fake.list('messenger_drafts/').length, 1, 'хоёр мессежид нэг ноорог');
+});
+
+test('pipeline: түр зуурын Claude алдаа (529) → event pending (attempts), ноорог үгүй; дараа нь амжилттай → нэг ноорог', async () => {
+  let fail = true;
+  const s = setup({ claude: () => (fail ? { status: 'error', code: 'api_529', model: MESSENGER_MODEL, usage: null } : { status: 'ok', text: proposal(), model: MESSENGER_MODEL, usage: { input_tokens: 1, output_tokens: 1 } }) });
+  await s.post(body([msg('m_529', 'Сайн уу')]));
+  const ev = `messenger_events/${eventDocId(PAGE, 'm_529')}`;
+  assert.equal(s.fake.read(ev).status, 'pending');
+  assert.equal(s.fake.read(ev).attempts, 1);
+  assert.equal(s.fake.list('messenger_drafts/').length, 0);
+  fail = false;
+  s.advance(RETRY_AFTER_MS + 1000);
+  await s.pipeline.sweepStale({ maxThreads: 5 });
+  assert.equal(s.fake.read(ev).status, 'done');
+  assert.equal(s.fake.list('messenger_drafts/').length, 1);
+  // Түр зуурын биш (400) → event дуусна, ноорог үгүй (дахин оролдохгүй)
+  const b = setup({ claude: () => ({ status: 'error', code: 'api_400', model: MESSENGER_MODEL, usage: null }) });
+  await b.post(body([msg('m_400', 'Сайн уу')]));
+  assert.equal(b.fake.read(`messenger_events/${eventDocId(PAGE, 'm_400')}`).status, 'done');
+});
+
+test('pipeline: хугацаа хүрэлцэхгүй бол Claude дуудахгүй, event pending (мессеж бичигдсэн); дахин боловсруулахад давхардахгүй', async () => {
+  const s = setup();
+  const h = (await import('../../api/_lib/social/meta-events.js')).psidHash(PAGE, PSID, ENV.PSID_SALT);
+  await s.store.createEvent((await import('../../api/_lib/social/meta-events.js')).parseWebhook(body([msg('m_dl', 'Сайн уу')])).events[0], h);
+  const r = await s.pipeline.processThread(h, { deadline: Date.now() + 10_000 });   // < 30 с үлдсэн
+  assert.ok(r.actions.includes('deadline'));
+  assert.equal(s.claudeCalls.length, 0);
+  assert.equal(s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_dl')}`).status, 'pending');
+  const thPath = `messenger_threads/${h}`;
+  assert.equal(s.fake.read(thPath).lockUntil, null);
+  await s.pipeline.processThread(h, { deadline: Date.now() + 50_000 });
+  assert.equal(s.fake.list('messenger_drafts/').length, 1);
+  assert.equal(s.fake.list(`${thPath}/messages/`).length, 1, 'мессеж давхардаагүй');
+  // Ноорогийн id тогтмол: event-ийг дахин pending болгож боловсруулахад шинэ ноорог үүсэхгүй
+  s.fake.seed(`messenger_events/${eventDocId(PAGE, 'm_dl')}`, { ...s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_dl')}`), status: 'pending' }, encodeFields);
+  await s.pipeline.processThread(h, { deadline: Date.now() + 50_000 });
+  assert.equal(s.fake.list('messenger_drafts/').length, 1);
+  assert.equal(s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_dl')}`).status, 'done');
+});
+
+test('pipeline: нэг ярианд өдөрт ≤ 40 Claude дуудлага; түгжээтэй бол хүлээж (sleep) дахин оролдоно', async () => {
+  const s = setup();
+  const { psidHash: ph, parseWebhook: pw } = await import('../../api/_lib/social/meta-events.js');
+  const h = ph(PAGE, PSID, ENV.PSID_SALT);
+  s.fake.seed(`messenger_threads/${h}`, { state: 'bot', lockUntil: null, agentDay: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar' }).format(s.clock()), agentDayCount: 40 }, encodeFields);
+  await s.store.createEvent(pw(body([msg('m_cap40', 'Сайн уу')])).events[0], h);
+  const r = await s.pipeline.processThread(h, { deadline: Date.now() + 50_000 });
+  assert.ok(r.actions.includes('thread_cap'));
+  assert.equal(s.claudeCalls.length, 0);
+  assert.equal(s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_cap40')}`).status, 'done');
+  // Түгжээ: өөр инстанс барьж байвал 2 с тутам ≤ 3 удаа хүлээнэ
+  await s.store.lockThread(h);
+  const locked = await s.pipeline.processThread(h, { deadline: Date.now() + 50_000 });
+  assert.equal(locked.locked, true);
+  assert.deepEqual(s.sleeps, [2000, 2000, 2000]);
+});
+
+test('webhook: Content-Length-гүй (chunked) 1 MB-аас том body → 413, бүхэлд нь уншихгүй', async () => {
+  const { readBody, MAX_BODY_BYTES } = await import('../../api/_lib/webhook.js');
+  let pulled = 0;
+  const big = new ReadableStream({ pull(c) { pulled++; c.enqueue(new Uint8Array(256 * 1024)); } });
+  assert.equal(await readBody(new Request('https://x', { method: 'POST', body: big, duplex: 'half' })), null);
+  assert.ok(pulled <= Math.ceil(MAX_BODY_BYTES / (256 * 1024)) + 2, 'хязгаараас хойш уншихгүй');
+  const ok = await readBody(new Request('https://x', { method: 'POST', body: 'abc' }));
+  assert.equal(new TextDecoder().decode(ok), 'abc');
+});
+
+test('Claude зардал: fallback-ийн iterations (татгалзсан оролдлого ч) моделиор тус бүр үнэлэгдэнэ', () => {
+  const usage = { input_tokens: 100, output_tokens: 10, iterations: [
+    { type: 'message', model: 'claude-opus-5-5', input_tokens: 1_000_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    { type: 'fallback_message', model: 'claude-opus-5', input_tokens: 1_000_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+  ] };
+  assert.equal(costMicroUsd('claude-opus-5', usage), 4_000_000 + 5_000_000);
+});
+
+test('echo загвар: ашиглагдсаар байвал хугацаа нь өдөр бүр сунгагдана (90 хоногийн дараа устахгүй)', async () => {
+  const s = setup();
+  const fp = 'a'.repeat(32);
+  s.fake.seed(`messenger_echo_templates/${fp}`, { threads: ['x', 'y', 'z'], lastSeenAt: new Date(T0 - 2 * 86_400_000), expireAt: new Date(T0 + 10 * 86_400_000) }, encodeFields);
+  const set = await s.store.automationHashes('q'.repeat(64), [fp], 3);
+  assert.ok(set.has(fp));
+  const d = s.fake.read(`messenger_echo_templates/${fp}`);
+  assert.equal(d.threads.length, 3, 'массив томрохгүй');
+  assert.ok(d.expireAt.getTime() > T0 + 80 * 86_400_000);
+});
+
+test('хуурамч Firestore: composite index шаардах query-г бодит шиг татгалзана (бидний query бүгд index-гүй)', async () => {
+  const s = setup();
+  await assert.rejects(s.store.fs.query({ collection: 'messenger_events', where: [['psidHash', '==', 'x'], ['retryAt', '<=', new Date()]] }), (e) => e.status === 'FAILED_PRECONDITION');
+  await assert.rejects(s.store.fs.query({ collection: 'messenger_events', where: [['status', '==', 'pending']], orderBy: [['receivedAt', 'asc']] }), (e) => e.status === 'FAILED_PRECONDITION');
+  assert.deepEqual(await s.store.fs.query({ collection: 'messenger_events', where: [['psidHash', '==', 'x'], ['status', '==', 'pending']] }), []);
 });

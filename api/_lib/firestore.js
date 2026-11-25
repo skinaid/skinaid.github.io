@@ -26,6 +26,12 @@ export class FirestoreError extends Error {
   get isNotFound() {
     return this.status === 'NOT_FOUND';
   }
+  /** Түр зуурын (дахин оролдвол болж магадгүй) алдаа — webhook зөвхөн үүнд 503 буцаана (Meta дахин илгээнэ).
+   *  Квот (RESOURCE_EXHAUSTED), эрх (PERMISSION_DENIED, AUTH) зэрэг удаан үргэлжлэх алдаанд 503 буцаавал Meta
+   *  webhook-ийг унтрааж болзошгүй. */
+  get isTransient() {
+    return ['UNAVAILABLE', 'DEADLINE_EXCEEDED', 'NETWORK', 'INTERNAL', 'ABORTED'].includes(this.status) || this.httpStatus >= 500;
+  }
 }
 
 // ---------- Утгын хөрвүүлэлт ----------
@@ -138,7 +144,13 @@ export function createFirestore(opts) {
   const rel = (name) => String(name).slice(root.length + 1);
 
   async function call(method, url, body) {
-    const token = await opts.getAccessToken();
+    let token;
+    try {
+      token = await opts.getAccessToken();
+    } catch (e) {
+      // WIF/IAM-ийн тохиргоо буруу, OIDC token алга г.м. — нууцыг агуулж болзошгүй мессежийг хадгалахгүй
+      throw new FirestoreError(0, 'AUTH', e && e.name === 'AuthNotConfiguredError' ? 'not configured' : 'token failed');
+    }
     let res;
     try {
       res = await fetchImpl(url, {

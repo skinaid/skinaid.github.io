@@ -8,8 +8,8 @@
    ========================================================================== */
 import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
-import { snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=70a601a4';
-import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd } from './messenger-lib.js?v=83f823ad';
+import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=70a601a4';
+import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd } from './messenger-lib.js?v=99c0ae43';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };
@@ -27,6 +27,7 @@ let loadingDrafts = false;
 const noteDraft = new Map(); // id → хадгалаагүй тэмдэглэл
 const ratingPick = new Map();// id → сонгосон (хадгалаагүй) үнэлгээ
 const busy = new Set();
+const cardErr = new Map();  // id → картын алдаа (дахин зурахад алга болохгүй)
 
 let saved = null;            // тохиргооны сүүлд уншсан/хадгалсан утга
 let lastState = null;        // messenger_status/main, messenger_usage — таг хадгалахад дахин зурна
@@ -63,6 +64,7 @@ chips.addEventListener('click', (e) => {
   renderDrafts();
 });
 
+const noteLabel = (required) => (required ? 'Зөв хариу <span class="req">*</span> <small>(AI-ийн оронд юу гэж хариулах байсан)</small>' : 'Тэмдэглэл <small>(заавал биш)</small>');
 const turnHtml = (t) => `<li><span class="ms-who">${esc(ROLE_TEXT[t.role] || t.role)}</span> ${t.text ? esc(t.text) : `<em class="muted">(${esc((t.attachments || []).join(', ') || 'хоосон')})</em>`}</li>`;
 
 function cardHtml(d) {
@@ -74,9 +76,11 @@ function cardHtml(d) {
   const ctx = Array.isArray(d.context) ? d.context : [];
   const earlier = ctx.slice(0, -1);
   const reasons = (l.reasons || []).filter(Boolean);
+  const err = cardErr.get(d.id) || '';
+  const req = pick === 'edited';
   return `<article class="ms-card${d.rating ? ' is-rated' : ''}" data-id="${id}" aria-labelledby="msh-${id}">
     <header class="ms-card__head">
-      <h3 id="msh-${id}" class="ms-card__title"><span class="ms-tone ms-tone--${tone}">${esc(l.route || d.route)}</span> ${esc(l.intent || d.intent || '')}</h3>
+      <h2 id="msh-${id}" class="ms-card__title" tabindex="-1"><span class="ms-tone ms-tone--${tone}">${esc(l.route || d.route)}</span> ${esc(l.intent || d.intent || '')}</h2>
       <span class="muted">${esc(fmtDate(d.createdAt))}${d.rating ? ` · <strong class="ms-rated">Үнэлсэн: ${esc(ratingLabel(d.rating))}</strong>` : ''}</span>
     </header>
     <div class="ms-block"><span class="ms-label">Үйлчлүүлэгч</span><p class="ms-text">${d.userText ? esc(d.userText) : '<em class="muted">(текстгүй — зураг/файл)</em>'}</p></div>
@@ -88,10 +92,10 @@ function cardHtml(d) {
       <legend>Энэ ноорог зөв үү?</legend>
       <div class="ms-rate__opts">${RATINGS.map((r) => `<label class="ms-opt"><input type="radio" name="msr-${id}" value="${r.key}"${pick === r.key ? ' checked' : ''}> ${esc(r.label)}</label>`).join('')}</div>
       <div class="field">
-        <label for="msn-${id}">${pick === 'edited' ? 'Зөв хариу <span class="req">*</span> <small>(AI-ийн оронд юу гэж хариулах байсан)</small>' : 'Тэмдэглэл <small>(заавал биш)</small>'}</label>
-        <textarea id="msn-${id}" data-note="${id}" maxlength="2000" rows="2">${esc(note)}</textarea>
+        <label for="msn-${id}">${noteLabel(req)}</label>
+        <textarea id="msn-${id}" data-note="${id}" maxlength="2000" rows="2" aria-describedby="mss-${id}"${req ? ' aria-required="true"' : ''}${err && req ? ' aria-invalid="true"' : ''}>${esc(note)}</textarea>
       </div>
-      <div class="actions"><button class="btn btn--primary btn--sm" type="button" data-save="${id}"${busy.has(d.id) ? ' disabled' : ''}>Үнэлгээ хадгалах</button><span class="status" data-st="${id}" role="status"></span></div>
+      <div class="actions"><button class="btn btn--primary btn--sm" type="button" data-save="${id}"${busy.has(d.id) ? ' disabled' : ''}>Үнэлгээ хадгалах</button><span class="status${err ? ' is-err' : ''}" id="mss-${id}" data-st="${id}" role="status">${esc(err)}</span></div>
     </fieldset>
   </article>`;
 }
@@ -123,10 +127,20 @@ async function loadDrafts(append = false) {
     drafts = append ? [...drafts, ...rows] : rows;
     cursor = snap.docs.length === PAGE ? snap.docs[snap.docs.length - 1] : null;
     renderDrafts();
+    // «Цааш ачаалах» дарсан бол (товч нуугдаж болно) шинээр нэмэгдсэн эхний карт руу фокус
+    if (append && rows.length) {
+      const h = $(`#msh-${CSS.escape(rows[0].id)}`, list);
+      if (h) h.focus(); else meta.focus();
+    }
   } catch (e) {
     list.setAttribute('aria-busy', 'false');
-    meta.textContent = '';
-    list.innerHTML = `<div class="hm-load" role="alert">${esc(errText(e))} <button class="btn btn--outline btn--sm" type="button" data-retry>Дахин оролдох</button></div>`;
+    if (append) {
+      // Ачаалсан жагсаалтыг арилгахгүй — алдааг товчны дэргэд
+      meta.textContent = `${errText(e)} «Цааш ачаалах»-ыг дахин дарна уу.`;
+    } else {
+      meta.textContent = '';
+      list.innerHTML = `<div class="hm-load" role="alert">${esc(errText(e))} <button class="btn btn--outline btn--sm" type="button" data-retry>Дахин оролдох</button></div>`;
+    }
   } finally {
     loadingDrafts = false;
     more.hidden = !cursor;
@@ -134,7 +148,11 @@ async function loadDrafts(append = false) {
   }
 }
 more.addEventListener('click', () => loadDrafts(true));
-$('#btnMsReload').addEventListener('click', () => { loadDrafts(false); loadSettings(); });
+$('#btnMsReload').addEventListener('click', async () => {
+  if ((settingsDirty() || notesDirty()) && !(await dialog({ title: 'Хадгалаагүй өөрчлөлт байна', body: 'Дахин ачаалбал хадгалаагүй тохиргоо болон үнэлгээний тэмдэглэл алга болно.', confirm: 'Хадгалалгүй ачаалах', cancel: 'Болих', danger: true }))) return;
+  ratingPick.clear(); noteDraft.clear(); cardErr.clear();
+  loadDrafts(false); loadSettings();
+});
 
 list.addEventListener('click', (e) => {
   if (e.target.closest('[data-retry]')) { loadDrafts(false); return; }
@@ -148,7 +166,12 @@ list.addEventListener('change', (e) => {
   ratingPick.set(id, r.value);
   // «Засвартай» → тэмдэглэлийн шошгыг «Зөв хариу (заавал)» болгоно (мөрийг дахин зурахгүй — фокус алдахгүй)
   const lbl = $(`label[for="msn-${CSS.escape(id)}"]`, list);
-  if (lbl) lbl.innerHTML = r.value === 'edited' ? 'Зөв хариу <span class="req">*</span> <small>(AI-ийн оронд юу гэж хариулах байсан)</small>' : 'Тэмдэглэл <small>(заавал биш)</small>';
+  if (lbl) lbl.innerHTML = noteLabel(r.value === 'edited');
+  const ta = $(`#msn-${CSS.escape(id)}`, list);
+  if (ta) {
+    if (r.value === 'edited') ta.setAttribute('aria-required', 'true');
+    else { ta.removeAttribute('aria-required'); ta.removeAttribute('aria-invalid'); }
+  }
   refreshDirty();
 });
 list.addEventListener('input', (e) => {
@@ -156,22 +179,41 @@ list.addEventListener('input', (e) => {
   if (t) { noteDraft.set(t.dataset.note, t.value); refreshDirty(); }
 });
 
+// Await-ийн дараа жагсаалт дахин зурагдсан байж болно — элементийг үргэлж шинээр хайна
+const elOf = (id, sel) => $(sel.split('ID').join(CSS.escape(id)), list);
+const showCardErr = (id, msg) => {
+  if (msg) cardErr.set(id, msg);
+  else cardErr.delete(id);
+  const st = elOf(id, '[data-st="ID"]');
+  if (st) setStatus(st, msg, msg ? 'err' : '');
+  const ta = elOf(id, '#msn-ID');
+  if (ta && ta.getAttribute('aria-required') === 'true') {
+    if (msg) ta.setAttribute('aria-invalid', 'true');
+    else ta.removeAttribute('aria-invalid');
+  }
+};
+
 async function saveRating(id) {
   const d = drafts.find((x) => x.id === id);
   if (!d || busy.has(id) || !session.user) return;
-  const st = $(`[data-st="${CSS.escape(id)}"]`, list);
   const rating = ratingPick.has(id) ? ratingPick.get(id) : d.rating;
   const note = String(noteDraft.has(id) ? noteDraft.get(id) : d.note || '').trim().slice(0, 2000);
-  if (!RATINGS.some((r) => r.key === rating)) { setStatus(st, '«Зөв», «Засвартай», «Буруу»-гийн нэгийг сонгоно уу.', 'err'); return; }
+  if (!RATINGS.some((r) => r.key === rating)) {
+    showCardErr(id, '«Зөв», «Засвартай», «Буруу»-гийн нэгийг сонгоно уу.');
+    elOf(id, '.ms-card[data-id="ID"] .ms-rate input[type="radio"]')?.focus();
+    return;
+  }
   if (rating === 'edited' && note.length < 2) {
-    setStatus(st, '«Засвартай» гэж үнэлэхэд зөв хариуг бичнэ үү.', 'err');
-    $(`#msn-${CSS.escape(id)}`, list)?.focus();
+    showCardErr(id, '«Засвартай» гэж үнэлэхэд зөв хариуг бичнэ үү.');
+    elOf(id, '#msn-ID')?.focus();
     return;
   }
   busy.add(id);
-  const btn = $(`[data-save="${CSS.escape(id)}"]`, list);
-  if (btn) btn.disabled = true;
-  setStatus(st, 'Хадгалж байна…', '');
+  showCardErr(id, '');
+  const btn0 = elOf(id, '[data-save="ID"]');
+  if (btn0) btn0.disabled = true;
+  const st0 = elOf(id, '[data-st="ID"]');
+  if (st0) setStatus(st0, 'Хадгалж байна…', '');
   try {
     await updateDoc(doc(db, 'messenger_drafts', id), { rating, note, ratedAt: serverTimestamp(), ratedBy: session.user.email });
     Object.assign(d, { rating, note, ratedAt: new Date(), ratedBy: session.user.email });
@@ -180,13 +222,18 @@ async function saveRating(id) {
     busy.delete(id);
     renderDrafts();
     snack(`Үнэлгээ хадгалагдлаа: ${ratingLabel(rating)}`);
-    // Дараагийн үнэлээгүй ноорог руу фокус (дараалан үнэлэхэд)
-    const next = $('.ms-card:not(.is-rated) .ms-rate input[type="radio"]', list);
-    if (next) next.focus();
+    // Энэ картын ДАРААХ үнэлээгүй ноорог руу фокус; байхгүй бол энэ картын гарчиг (фокус body руу унахгүй)
+    const cards = $$('.ms-card', list);
+    const at = cards.findIndex((c) => c.dataset.id === id);
+    const next = cards.slice(at + 1).find((c) => !c.classList.contains('is-rated'));
+    const target = next ? $('.ms-rate input[type="radio"]', next) : elOf(id, '#msh-ID');
+    if (target) target.focus();
+    else meta.focus();
   } catch (e) {
     busy.delete(id);
+    const btn = elOf(id, '[data-save="ID"]');
     if (btn) btn.disabled = false;
-    setStatus(st, errText(e), 'err');
+    showCardErr(id, errText(e));
   } finally {
     refreshDirty();
   }
@@ -211,11 +258,19 @@ const asSettings = (v) => {
   const caps = parseCaps(v.runs, v.usd);
   return caps.error ? null : { mode: v.mode, killSwitch: v.killSwitch, monthlyRunCap: caps.runs, monthlyCostCapUsd: caps.usd };
 };
-const isDirty = () => {
+const settingsDirty = () => {
   if (!ready || !saved) return false;
   const now = asSettings(readForm());
   return !now || JSON.stringify(now) !== JSON.stringify(saved);
 };
+/** Хадгалаагүй үнэлгээ/тэмдэглэл (сонгосон ч хадгалаагүй) — гарах, хаах үед анхааруулна */
+const notesDirty = () => {
+  const byId = new Map(drafts.map((d) => [d.id, d]));
+  for (const [id, r] of ratingPick) if (r !== ((byId.get(id) || {}).rating || '')) return true;
+  for (const [id, n] of noteDraft) if (n.trim() !== ((byId.get(id) || {}).note || '').trim()) return true;
+  return false;
+};
+const isDirty = () => settingsDirty() || notesDirty();
 const lockForm = (on) => { $$('.panel', form).forEach((p) => { p.inert = on; }); btnSave.disabled = on; btnStop.disabled = on; };
 lockForm(true);
 
@@ -229,15 +284,15 @@ function renderState(st, usage, settings) {
   const s = settings || saved || normalizeSettings(null);
   const err = st && st.lastError && st.lastError.code ? `<p class="ms-err">Сүүлийн алдаа: <code>${esc(st.lastError.code)}</code> · ${esc(fmtDate(st.lastError.at))}</p>` : '';
   stateBox.innerHTML = `
-    ${!st ? '<p class="ms-banner">Сервер хараахан холбогдоогүй байна (Vercel-ийн тохиргоо, Firebase серверийн эрх эзэмшигчийн алхам — README «Messenger AI»). Тохиргоог одоо хадгалж болно; сервер холбогдмогц мөрдөнө.</p>' : ''}
+    ${!st ? '<p class="ms-banner">Сервер хараахан холбогдоогүй байна. Vercel болон Google Cloud-ийн тохиргоог (нууц түлхүүр, Firebase-ийн эрх) хийсний дараа энд төлөв гарна. Тохиргоог одоо хадгалж болно — сервер холбогдмогц мөрдөнө.</p>' : ''}
     <dl class="ms-kv">
       <div><dt>Webhook сүүлд</dt><dd>${st && st.lastWebhookAt ? esc(fmtDate(st.lastWebhookAt)) : '—'}</dd></div>
       <div><dt>Өдрийн cron сүүлд</dt><dd>${st && st.lastCronAt ? esc(fmtDate(st.lastCronAt)) : '—'}</dd></div>
-      <div><dt>Энэ сарын AI ажиллагаа</dt><dd>${usage.runs} / ${s.monthlyRunCap}</dd></div>
+      <div><dt>Энэ сард AI хариу бичсэн</dt><dd>${usage.runs} / ${s.monthlyRunCap}</dd></div>
       <div><dt>Энэ сарын зардал</dt><dd>${esc(usd(usage.costMicroUsd))} / $${esc(String(s.monthlyCostCapUsd))}</dd></div>
     </dl>
     ${err}
-    <details class="ms-cfg-wrap"><summary>Серверийн тохиргоо (Vercel env — утга биш, зөвхөн байгаа эсэх)</summary><ul class="ms-cfg">${cfg ? rows : '<li>Мэдээлэл алга</li>'}</ul></details>`;
+    <details class="ms-cfg-wrap"><summary>Серверийн тохиргоо (нууц түлхүүрүүд — утга биш, зөвхөн тавьсан эсэх)</summary><ul class="ms-cfg">${cfg ? rows : '<li>Мэдээлэл алга</li>'}</ul></details>`;
 }
 
 async function loadSettings() {
@@ -304,9 +359,11 @@ async function save() {
   const v = readForm();
   const caps = parseCaps(v.runs, v.usd);
   if (caps.error) {
+    // Хадгалах мөр / Ctrl+S «Ноорог» таб дээрээс дарагдсан байж болно — алдааг харагдах табд гаргана
+    selectTab('settings');
     showErrors(errBox, [caps.error === 'runs'
-      ? { msg: `Сарын ажиллагааны таг 0–${CAP_TEXT.runs} бүхэл тоо байна.`, el: $('#ms-runs') }
-      : { msg: `Сарын зардлын таг $0–${CAP_TEXT.usd} (2 оронтой бутархай) байна.`, el: $('#ms-usd') }], form);
+      ? { msg: `Сард AI хариу бичих хязгаар 0–${CAP_TEXT.runs} бүхэл тоо байна.`, el: $('#ms-runs') }
+      : { msg: `Сарын зардлын хязгаар $0–${CAP_TEXT.usd} байна (жишээ: 49.99).`, el: $('#ms-usd') }], form);
     return;
   }
   clearErrors(form);
@@ -342,18 +399,39 @@ async function stopNow() {
     setStatus(status, 'AI зогслоо. Дахин асаахдаа «Яаралтай зогсоолт»-ыг унтрааж хадгална.', 'ok');
     announce('AI зогслоо');
   } catch (e) { setStatus(status, errText(e), 'err'); snack(errText(e), { error: true }); }
-  finally { saving = false; lockForm(false); refreshDirty(); }
+  finally {
+    saving = false;
+    lockForm(false);
+    refreshDirty();
+    // Товч нуугдсан (inert → hidden) — фокус body руу унахгүй: зогсоолтын switch руу
+    $('#ms-kill').focus();
+  }
 }
 btnStop.addEventListener('click', stopNow);
 
 form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
 form.addEventListener('input', (e) => { clearFieldError(e.target); refreshDirty(); });
 form.addEventListener('change', refreshDirty);
-// Хадгалах мөр = зөвхөн тохиргоо (ноорогийн үнэлгээ карт бүр дээрээ хадгалагдана; хадгалаагүй тэмдэглэл санах ойд үлдэнэ)
+// Хадгалах мөр: тохиргоог хадгална; хадгалаагүй үнэлгээ байвал тэр карт руу аваачна (үнэлгээ карт бүр дээрээ хадгалагдана).
+// isDirty нь үнэлгээг ч тооцно — гарах/хаахад анхааруулга гарна.
 registerForm('messenger', {
   isDirty,
-  save,
-  discard: () => { if (saving || !saved) return; fill(saved); clearErrors(form); refreshDirty(); },
+  save: async () => {
+    if (settingsDirty()) await save();
+    else if (notesDirty()) {
+      selectTab('drafts');
+      const id = [...ratingPick.keys(), ...noteDraft.keys()].find((k) => $(`[data-save="${CSS.escape(k)}"]`, list));
+      const b = id && $(`[data-save="${CSS.escape(id)}"]`, list);
+      if (b) { b.scrollIntoView({ block: 'center' }); b.focus(); }
+      snack('Үнэлгээг картын «Үнэлгээ хадгалах» товчоор хадгална.');
+    }
+  },
+  discard: () => {
+    if (saving) return;
+    if (saved) fill(saved);
+    ratingPick.clear(); noteDraft.clear(); cardErr.clear();
+    clearErrors(form); renderDrafts(); refreshDirty();
+  },
   reset: () => { teardown(); },
   anchor: $('#msActions'),
 });
@@ -372,7 +450,7 @@ export function load() {
 window.addEventListener('hashchange', () => { if (/^#\/messenger/.test(location.hash)) open(); });
 export function teardown() {
   opened = false; ready = false; saved = null; drafts = []; cursor = null; lastState = null; lastUsage = { runs: 0, costMicroUsd: 0 };
-  ratingPick.clear(); noteDraft.clear(); busy.clear();
+  ratingPick.clear(); noteDraft.clear(); busy.clear(); cardErr.clear();
   lockForm(true);
   list.innerHTML = ''; meta.textContent = ''; more.hidden = true; stateBox.innerHTML = '';
   $('#msModeBanner').hidden = true;

@@ -27,7 +27,7 @@ test('admin: normalizeSettings, parseCaps = серверийнх (ижил ор�
     const s = serverNormalize(d);
     assert.deepEqual(A.normalizeSettings(d), { mode: s.mode, killSwitch: s.killSwitch, monthlyRunCap: s.monthlyRunCap, monthlyCostCapUsd: s.monthlyCostCapUsd }, JSON.stringify(d));
   }
-  for (const [r, u] of [['', ''], ['1,000', '$12.5'], ['100001', '1'], ['1', '1000.5'], ['-1', '1'], ['abc', '1'], ['0', '0']]) {
+  for (const [r, u] of [['3000', '12,5'], ['3000', '1,000'], ['', ''], ['1,000', '$12.5'], ['100001', '1'], ['1', '1000.5'], ['-1', '1'], ['abc', '1'], ['0', '0']]) {
     const srv = parseSocialCaps(r, u);
     const adm = A.parseCaps(r, u);
     assert.deepEqual(adm.error ? null : adm, srv, `${r} ${u}`);

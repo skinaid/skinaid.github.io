@@ -22,6 +22,9 @@ const LINK_INTENTS = new Set(['booking', 'price', 'service_info', 'promotion']);
 /** Ноорогт харуулах контекстын мөр */
 const CONTEXT_TURNS = 6;
 
+/** Түр зуурын Claude алдаа — дахин оролдож болно */
+export const isRetryable = (code) => /^(?:timeout|network|api_(?:408|409|429|5\d\d))$/.test(String(code));
+
 const roundConf = (n) => Math.round(Math.min(1, Math.max(0, Number(n) || 0)) * 100) / 100;
 
 /** Admin-д харагдах шошго (хөтөч api/_lib-ийг импортолж чадахгүй тул серверт тооцож хадгална) */
@@ -61,9 +64,11 @@ export function createAgent(deps) {
     /**
      * Зураг/видео/дуу л ирсэн — LLM-гүй загвар ноорог.
      */
-    async mediaDraft({ psidHash, replyToEventId }) {
+    async mediaDraft({ psidHash, replyToEventId, eventStatus }) {
       const turns = await store.recentTurns(psidHash, CONTEXT_TURNS);
       await store.saveDraft({
+        replyToEventId,
+        eventStatus,
         draft: withLabels({
           ...baseDraft(psidHash, replyToEventId, turns),
           route: 'handoff', intent: 'media', signals: [], reasons: ['media'], lint: [], sourceIds: [],
@@ -72,23 +77,24 @@ export function createAgent(deps) {
         }),
         run: null,
       });
-      return { route: 'handoff' };
+      return { route: 'handoff', finalized: true };
     },
 
     /**
-     * Хэрэглэгчийн текстэд ноорог бичнэ.
-     * @param {{ psidHash: string, replyToEventId: string, thread: Record<string, any> }} input
+     * Хэрэглэгчийн текстэд ноорог бичнэ. eventStatus-ийг ноорогтой НЭГ commit-д дуусгана (finalized: true).
+     * Түр зуурын Claude алдаа (timeout, 429, 5xx) → { retry: true } — pipeline event-ийг дахин оролдоно.
+     * @param {{ psidHash: string, replyToEventId: string, thread: Record<string, any>, eventStatus?: Record<string, string> }} input
      */
-    async replyDraft({ psidHash, replyToEventId, thread }) {
+    async replyDraft({ psidHash, replyToEventId, thread, eventStatus }) {
       const settings = await store.readSettings();
-      if (!settings.active) return { skipped: 'inactive' };
+      if (!settings.active) return { skipped: 'inactive', finalized: false };
       const t0 = Date.now();
       const month = ubMonth(now());
       const runBase = { kind: 'messenger_reply', model: MESSENGER_MODEL, promptVersion: SOCIAL_PROMPT_VERSION, threadId: psidHash };
 
       if (!anthropicConfigured(env)) {
-        await store.saveDraft({ draft: null, run: { ...runBase, status: 'not_configured', billable: false, durationMs: 0 }, month });
-        return { skipped: 'not_configured' };
+        await store.saveDraft({ draft: null, run: { ...runBase, status: 'not_configured', billable: false, durationMs: 0 }, month, eventStatus });
+        return { skipped: 'not_configured', finalized: true };
       }
 
       const [turns, { catalog, phone }, usage] = await Promise.all([
@@ -99,15 +105,17 @@ export function createAgent(deps) {
       const base = baseDraft(psidHash, replyToEventId, turns);
       const signals = detectRiskSignals(base.userText);
 
-      // Сарын таг: LLM-гүй, хүнд
+      // Сарын хязгаар: LLM-гүй, ажилтанд
       if (usage.runs >= settings.monthlyRunCap || usage.costMicroUsd >= settings.monthlyCostCapUsd * 1e6) {
         const tpl = templateFor('other', signals, phone);
         await store.saveDraft({
           draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: ['cap_reached'], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION }),
           run: { ...runBase, status: 'cap', billable: false, durationMs: 0 },
           month,
+          replyToEventId,
+          eventStatus,
         });
-        return { route: 'handoff', reason: 'cap_reached' };
+        return { route: 'handoff', reason: 'cap_reached', finalized: true };
       }
 
       const req = buildSocialRequest({ catalog, turns });
@@ -131,11 +139,12 @@ export function createAgent(deps) {
       };
 
       if (result.status === 'error') {
-        // Ноорог бичихгүй (ажилтан Meta Inbox-оос хариулна) — зөвхөн бүртгэл + статус
-        await store.saveDraft({ draft: null, run, month });
+        // Ноорог бичихгүй — бүртгэл + статус. Түр зуурын алдаа бол event pending үлдэж дахин оролдоно (MAX_ATTEMPTS).
+        const retry = isRetryable(result.code);
+        await store.saveDraft({ draft: null, run, month, eventStatus: retry ? null : eventStatus });
         await store.patchStatus({ lastError: { code: String(result.code).slice(0, 40), at: now() } }).catch(() => {});
         log(`[messenger] Claude алдаа: ${result.code}`);
-        return { error: result.code };
+        return { error: result.code, retry, finalized: !retry };
       }
 
       const proposal = result.status === 'ok' ? parseProposal(result.text) : null;
@@ -146,8 +155,10 @@ export function createAgent(deps) {
           draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: result.model, promptVersion: SOCIAL_PROMPT_VERSION }),
           run,
           month,
+          replyToEventId,
+          eventStatus,
         });
-        return { route: 'handoff', reason };
+        return { route: 'handoff', reason, finalized: true };
       }
 
       const decision = decideReply({
@@ -158,6 +169,8 @@ export function createAgent(deps) {
         knownSourceIds: catalog.facts.map((f) => f.id),
         allowedAmounts: catalog.allowedAmounts,
         allowedPercents: catalog.allowedPercents,
+        knownNumbers: catalog.knownNumbers,
+        knowledgeText: catalog.knowledgeText,
       });
       const sendable = decision.route === 'auto_candidate' || decision.route === 'draft';
       const link = sendable && LINK_INTENTS.has(decision.intent) ? bookingUrl() : null;
@@ -192,8 +205,10 @@ export function createAgent(deps) {
         }),
         run,
         month,
+        replyToEventId,
+        eventStatus,
       });
-      return { route: decision.route, simulatedBot: decision.route === 'auto_candidate' };
+      return { route: decision.route, simulatedBot: decision.route === 'auto_candidate', finalized: true };
     },
   };
 }

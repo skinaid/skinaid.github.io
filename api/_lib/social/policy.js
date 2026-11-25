@@ -7,14 +7,16 @@
  * LLM-ийн гаралт = САНАЛ. Илгээх, ноорог үлдээх, хүнд шилжүүлэх эсэхийг ЭНД код шийднэ:
  *   1. Ажилтан ярианд хариулж байвал (state human/paused) бот чимээгүй.
  *   2. Сэдэв (LLM эсвэл кодын дохио) эрсдэлтэй → хүнд. Кодын дохио LLM-ийн ангиллыг ДАРНА.
- *   3. AI итгэл бага, хариу хоосон, мэдлэгт байхгүй ₮/% дүн → хүнд (үнэ ЗӨВХӨН мэдлэгээс).
+ *   3. AI итгэл бага, хариу хоосон, мэдлэгт байхгүй ₮/% дүн, валютгүй дүн («25,000-аар», «50 мянгаар»), мэдлэгт
+ *      байхгүй хөнгөлөлт/үнэгүй/бэлэг/хувь → хүнд (үнэ, санал ЗӨВХӨН мэдлэгээс; SkinAid аудит 2026-11-25).
  *   4. Блоклох lint (баталгаа, эмчилгээний амлалт, PII, хувьсагч, 2000 тэмдэгт) → ноорог.
- *   5. Мэдээллийн сэдэвт мэдлэгийн иш байхгүй / мэдэгдэхгүй иш → ноорог.
+ *   5. Мэдээллийн сэдэвт мэдлэгийн иш байхгүй / мэдэгдэхгүй иш; иш шаардахгүй сэдэвт (мэнд, цаг захиалах) хэт урт
+ *      хариу → ноорог.
  *   6. Prompt injection-ий оролдлого → ноорог (автомат хэзээ ч үгүй).
  *   7. Бусад → auto_candidate («автомат горимд явах байсан»).
  * Хүргэлт: 1-р үе шатанд ҮРГЭЛЖ "none" — юу ч илгээхгүй.
  */
-import { hasBlocking, lintDraft, moneyMentions, percentMentions } from '../guardrails.js';
+import { hasBlocking, lintDraft, moneyMentions, numberMentions, offerMentions, percentMentions } from '../guardrails.js';
 import { detectRiskSignals, intentDef, isIntent, SIGNAL_INTENT } from './intents.js';
 
 /** Үүнээс доош итгэлтэй саналыг хүнд шилжүүлнэ */
@@ -22,13 +24,18 @@ export const CONFIDENCE_MIN = 0.7;
 
 /** Хариунд зөвшөөрөгдсөн холбоосын host (захиалгын холбоосыг КОД нэмнэ — booking-link.js) */
 export const DEFAULT_ALLOWED_HOSTS = Object.freeze(['www.skinaid.mn', 'skinaid.mn']);
+/** Иш шаардахгүй сэдэвт (мэнд, талархал, холбоо барих, цаг захиалах) хариуны дээд урт — урт бол хүн хянана */
+export const NO_SOURCE_REPLY_MAX = 400;
 
 /**
  * @typedef {{ intent: string, confidence: number, needs_human: boolean, reply: string, source_ids: string[],
  *   quick_replies: string[], reason: string }} AgentProposal
  * @typedef {{ mode: 'off'|'shadow', conversationState: 'bot'|'human'|'paused', userText: string, proposal: AgentProposal,
  *   knownSourceIds: readonly string[], allowedAmounts: readonly number[], allowedPercents: readonly number[],
+ *   knownNumbers?: readonly number[], knowledgeText?: string,
  *   bannedPhrases?: readonly string[], allowedHosts?: readonly string[] }} PolicyInput
+ *   knownNumbers — мэдлэгийн текстэд байгаа тоо (үйлчилгээний нэр «Glutathione 1200» г.м.); knowledgeText — мэдлэгийн
+ *   бүх текст (хөнгөлөлт/бэлэг гэх үг мэдлэгт байгаа эсэхийг шалгахад)
  * @typedef {{ route: import('./labels.js').SocialRoute, delivery: 'none', intent: import('./intents.js').SocialIntent,
  *   signals: import('./intents.js').RiskSignal[], reasons: string[], lint: import('../guardrails.js').LintIssue[],
  *   sourceIds: string[] }} PolicyDecision
@@ -81,6 +88,10 @@ export function decideReply(input) {
   if (moneyMentions(reply).some((n) => !amounts.has(n))) human.push('invented_price');
   const percents = new Set(input.allowedPercents.map((n) => Math.round(n)));
   if (percentMentions(reply).some((n) => !percents.has(Math.round(n)))) human.push('invented_percent');
+  const numbers = new Set([...amounts, ...(input.knownNumbers ?? []).map((n) => Math.round(n))]);
+  if (!human.includes('invented_price') && numberMentions(reply).some((n) => !numbers.has(Math.round(n)))) human.push('invented_price');
+  const knowledge = String(input.knowledgeText ?? '').toLowerCase();
+  if (offerMentions(reply).some((w) => !knowledge.includes(w))) human.push('invented_offer');
   if (human.length) return { ...base, route: 'handoff', reasons: [...new Set(human)] };
 
   // 4–6: ноорог
@@ -89,6 +100,7 @@ export function decideReply(input) {
   if (PLACEHOLDER_RE.test(reply)) draft.push('placeholder');
   if ((p.source_ids ?? []).some((id) => !known.has(id))) draft.push('unknown_source');
   if (intentDef(intent).needsSource && sourceIds.length === 0) draft.push('no_source');
+  if (!intentDef(intent).needsSource && reply.length > NO_SOURCE_REPLY_MAX) draft.push('long_reply');
   if (signals.includes('injection')) draft.push('injection');
   if (draft.length) return { ...base, route: 'draft', reasons: draft };
 

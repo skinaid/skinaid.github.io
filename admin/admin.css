@@ -481,7 +481,7 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: clamp(14px, 2.2vw, 22px); box-shadow: var(--shadow-sm); display: grid; gap: 10px; }
 .ms-card.is-rated { border-color: var(--purple-100); background: #fcfbfd; }
 .ms-card__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 14px; flex-wrap: wrap; font-size: 13px; }
-.ms-card__title { font-size: 15px; font-weight: 700; color: var(--purple-900); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+.ms-card__title { font-family: inherit; font-size: 15px; font-weight: 700; color: var(--purple-900); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
 .ms-tone { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; }
 .ms-tone--ok { background: var(--ok-bg); color: var(--ok); }
 .ms-tone--info { background: var(--purple-100); color: var(--purple-900); }
@@ -493,7 +493,7 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-block--send { border-left-color: var(--ok); }
 .ms-label { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
 .ms-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.5; margin: 0; }
-.ms-ctx summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--purple-900); min-height: 32px; }
+.ms-ctx summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--purple-900); min-height: 44px; display: flex; align-items: center; }
 .ms-turns { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; overflow-wrap: anywhere; }
 .ms-who { font-weight: 800; color: var(--ink-2); }
 .ms-why { font-size: 12.5px; color: var(--muted); margin: 0; overflow-wrap: anywhere; }
@@ -516,7 +516,9 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-kv dd { margin: 2px 0 0; font-weight: 800; color: var(--purple-900); font-variant-numeric: tabular-nums; }
 .ms-banner { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
 .ms-err { color: var(--err); font-size: 13.5px; }
-.ms-cfg-wrap summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--purple-900); min-height: 32px; }
+.ms-cfg-wrap summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--purple-900); min-height: 44px; display: flex; align-items: center; }
 .ms-cfg { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 4px 16px; font-size: 13.5px; }
 .ms-cfg .is-ok span { color: var(--ok); font-weight: 800; }
 .ms-cfg .is-miss { color: var(--muted); }
+/* 6 цэс 360px-ийн утсанд багтах (Messenger AI нэмэгдсэн) */
+@media (max-width: 380px) { .menu a { font-size: 10px; padding-inline: 1px; } }
