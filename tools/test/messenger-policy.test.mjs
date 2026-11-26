@@ -180,7 +180,7 @@ test("parseProposal: буруу JSON = null, хязгаар (итгэл 0–1, q
 test('moneyMentions: «50,000₮», «₮50,000», «₮300,000-с», «60 мянган төгрөг», хоёр чиглэл зэрэгцсэн ч алдахгүй', () => {
   assert.deepEqual(moneyMentions('Үнэ 50,000₮ байна'), [50000]);
   assert.deepEqual(moneyMentions('Үнэ ₮50,000 байна'), [50000]);
-  assert.deepEqual(moneyMentions('HIFU ₮300,000-с эхэлнэ'), [300000]);
+  assert.deepEqual(moneyMentions('Лазер ₮300,000-с эхэлнэ'), [300000]);
   assert.deepEqual(moneyMentions('60 мянган төгрөг'), [60000]);
   assert.deepEqual(moneyMentions('1.5 сая төгрөг'), [1500000]);
   assert.deepEqual(moneyMentions('₮50,000 ба ₮300,000').sort((a, b) => a - b), [50000, 300000]);
@@ -203,7 +203,9 @@ const catalogInput = {
   contactChannels: ['утас', 'имэйл'],
   services: [
     { id: 'exam-1', name: 'Арьсны үзлэг, оношлогоо', category: 'Үзлэг', duration: '1 цаг', price: '₮50,000', description: 'Цогц оношлогоо. Утас 99112233' },
-    { id: 'lift-1', name: 'Ультраформер III (HIFU)', category: 'Чангалах', duration: '1ц 30м', price: '₮300,000-с' },
+    // Үнэгүй (сайтад «үнийг ажилтан хэлнэ») бодит үйлчилгээ — eval-ийн кейсүүд үүн дээр тулгуурлана. (2026-11-26: эмнэлэгт
+    // Ультраформер/HIFU төхөөрөмж байхгүй тул eval, тестээс хассан)
+    { id: 'lift-2', name: 'Моно Thread утсан эмчилгээ', category: 'Чангалах', description: 'Мэс заслын бус аргаар арьсыг өргөж, чангалж, залуужуулна.' },
     { id: 'anti-1', name: 'Ботокс (1 тун)', category: 'Хөгшрөлтийн эсрэг', price: '' },
     { id: 'hide-1', name: 'Нуусан үйлчилгээ', price: '₮999,000', hidden: true },
     { id: 'exam-1', name: 'Давхардсан id', price: '₮1,000' },
@@ -217,11 +219,12 @@ const catalogInput = {
 
 test('каталог: нуусан үйлчилгээ/багц LLM-д ОРОХГҮЙ; үнэгүй = «ажилтан хэлнэ»; зөвшөөрөгдөх дүн = сайтын үнэ', () => {
   const c = buildSocialCatalog(catalogInput);
-  assert.deepEqual(c.facts.map((f) => f.id), ['clinic', 'address', 'hours', 'contact', 'service:exam-1', 'service:lift-1', 'service:anti-1', 'package:p1']);
+  assert.deepEqual(c.facts.map((f) => f.id), ['clinic', 'address', 'hours', 'contact', 'service:exam-1', 'service:lift-2', 'service:anti-1', 'package:p1']);
   assert.ok(!JSON.stringify(c).includes('999') && !JSON.stringify(c).includes('777'), 'нуусан үнэ хаана ч үгүй');
   assert.match(c.facts.find((f) => f.id === 'service:anti-1').text, /үнийг ажилтан хэлнэ/);
-  assert.match(c.facts.find((f) => f.id === 'service:lift-1').text, /үнэ ₮300,000-с/);
-  assert.deepEqual(c.allowedAmounts, [50000, 300000, 462000]);
+  assert.match(c.facts.find((f) => f.id === 'service:lift-2').text, /үнийг ажилтан хэлнэ/);
+  assert.match(c.facts.find((f) => f.id === 'service:exam-1').text, /үнэ ₮50,000/);
+  assert.deepEqual(c.allowedAmounts, [50000, 462000]);
   assert.deepEqual(c.allowedPercents, []);
   assert.deepEqual(priceAmounts('₮300,000-с'), [300000]);
 });
