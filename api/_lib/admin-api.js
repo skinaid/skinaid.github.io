@@ -13,12 +13,18 @@
  *                 өдөрт ≤ ADMIN_TESTS_PER_DAY, сард ≤ сарын AI хязгаарын 20% (үйлдвэрлэлийн ноорогт үлдээнэ); Claude-ийг
  *                 дуудахаас ӨМНӨ тоолно; инстанст нэг удаад нэг; яаралтай зогсоолт асаалттай бол татгалзана. Горим
  *                 «Унтраалттай» үед ч ажиллана (асаахаас өмнө шалгах).
+ *   · eval_start / eval_chunk / eval_finish — бодит Claude-тэй eval (≥ 100 зохиомол кейс, generated/eval-cases.js) ҮЙЛДВЭРЛЭЛИЙН
+ *                 мэдлэгтэй; хэсэг тус бүр ≤ 6 кейс (зэрэг, функцийн 60 с-т багтана). Өдөрт ≤ 3 ажиллагаа, нэг ажиллагаа ≤ $5
+ *                 (хэтэрвэл зогсоно), сарын хязгаарт тоологдоно; үр дүн messenger_status/eval_<id>, түүх messenger_status/evals.
  */
 import { anthropicConfigured } from './config.js';
 import { AuthError, createTokenVerifier } from './admin-auth.js';
 import { readBody } from './webhook.js';
 import { redactForLlm } from './guardrails.js';
-import { ADMIN_TESTS_PER_DAY, adminTestCostPerMonth, adminTestsPerMonth, ubDay, ubMonth } from './store.js';
+import { ADMIN_TESTS_PER_DAY, adminTestCostPerMonth, adminTestsPerMonth, EVAL_LIMITS, ubDay, ubMonth } from './store.js';
+import { EVAL_CASES } from './generated/eval-cases.js';
+import { compareRuns, gradeCase, summarize } from './eval.js';
+import { randomBytes } from 'node:crypto';
 import { capReached } from './agent.js';
 import { buildSocialRequest, SOCIAL_PROMPT_VERSION } from './social/prompt.js';
 import { describeError } from './errors.js';
@@ -29,6 +35,9 @@ export const ADMIN_MAX_BODY = 16_384;
 export const TEST_TEXT_MAX = 1000;
 /** Хүсэлт ирснээс хойш ийм хугацаа өнгөрсөн бол Claude-ийг дуудахгүй (maxDuration 60 с: Claude 25 с + бүртгэл) */
 export const TEST_START_BUDGET_MS = 25_000;
+/** Нэг кейсийн ойролцоо зардал (кэштэй 6–9K оролт + 300–800 гаралт/бодол) — тооцоонд */
+export const EVAL_EST_MICRO_USD = 20_000;
+const RUN_ID_RE = /^ev[a-z0-9]{8,30}$/;
 /** Эрхийн алдаа (401 биш 403): нэвтэрсэн ч admin биш */
 const FORBIDDEN = new Set(['not_admin', 'email_not_verified', 'bad_provider']);
 
@@ -55,7 +64,7 @@ export function createAdminHandler(deps) {
   /** Инстанст нэг удаад нэг туршилт (олон таб, давхар дарах) */
   let testInFlight = false;
 
-  /** @type {Record<string, (rt: any, body: Record<string, any>, started: number) => Promise<Response>>} */
+  /** @type {Record<string, (rt: any, body: Record<string, any>, started: number, who: { email: string }) => Promise<Response>>} */
   const actions = {
     async knowledge(rt, body) {
       let k;
@@ -90,6 +99,83 @@ export function createAdminHandler(deps) {
           blocks: req.system.slice(1).map((b) => b.text),
         },
       });
+    },
+
+    async eval_start(rt, body, started, who) {
+      const settings = await rt.store.readSettings();
+      if (settings.killSwitch) return fail(409, 'kill_switch');
+      if (!anthropicConfigured(env)) return fail(503, 'no_ai_key');
+      const t = now();
+      const month = ubMonth(t);
+      if (capReached(await rt.store.readUsage(month), settings)) return fail(429, 'month_cap');
+      const r0 = await rt.store.reserveDayCount({ day: ubDay(t), field: 'evals', max: EVAL_LIMITS.runsPerDay, month });
+      if (!r0.ok) return fail(429, r0.reason === 'busy' ? 'busy' : 'eval_day_cap', { limit: EVAL_LIMITS.runsPerDay });
+      const runId = `ev${t.getTime().toString(36)}${randomBytes(4).toString('hex')}`;
+      const k = await rt.knowledge.load({});
+      const total = EVAL_CASES.length;
+      await rt.store.createEvalRun({
+        runId, by: who.email, total, chunk: EVAL_LIMITS.chunk, maxMicroUsd: EVAL_LIMITS.maxMicroUsd,
+        promptVersion: SOCIAL_PROMPT_VERSION, knowledgeRev: buildSocialRequest({ catalog: k.catalog, examples: k.examples, turns: [] }).context.knowledgeRev,
+      });
+      return json({ ok: true, runId, total, chunk: EVAL_LIMITS.chunk, estimateMicroUsd: total * EVAL_EST_MICRO_USD, maxMicroUsd: EVAL_LIMITS.maxMicroUsd, evalsToday: r0.count });
+    },
+
+    async eval_chunk(rt, body, started) {
+      const runId = typeof body.runId === 'string' && RUN_ID_RE.test(body.runId) ? body.runId : '';
+      const from = Number(body.from);
+      if (!runId || !Number.isInteger(from) || from < 0 || from >= EVAL_CASES.length || from % EVAL_LIMITS.chunk) return fail(400, 'bad_request');
+      const run = await rt.store.readEvalRun(runId);
+      if (!run || run.status !== 'running') return fail(409, 'eval_closed');
+      // Давтан илгээсэн хэсэг — дахин төлөхгүй, хадгалсныг буцаана
+      const prev = await rt.store.readEvalChunk(runId, from);
+      if (prev) return json({ ok: true, results: prev.results, costMicroUsd: Number(run.costMicroUsd) || 0, repeated: true });
+      if ((Number(run.costMicroUsd) || 0) >= (Number(run.maxMicroUsd) || EVAL_LIMITS.maxMicroUsd)) return fail(409, 'eval_budget');
+      const settings = await rt.store.readSettings();
+      if (settings.killSwitch) return fail(409, 'kill_switch');
+      const month = ubMonth(now());
+      if (capReached(await rt.store.readUsage(month), settings)) return fail(429, 'month_cap');
+      const k = await rt.knowledge.load({});
+      if (clock() - started > TEST_START_BUDGET_MS) return fail(503, 'timeout');
+      const cases = EVAL_CASES.slice(from, from + EVAL_LIMITS.chunk);
+      const out = await Promise.all(cases.map(async (c) => {
+        const turns = c.turns.map((x) => ({ role: x.role, text: redactForLlm(x.text) }));
+        const r = await rt.agent.testDraft({ k, turns, kind: 'eval' });
+        const base = { id: c.id, tags: c.tags, costMicroUsd: Number(r.run.costMicroUsd) || 0, ms: Number(r.run.durationMs) || 0 };
+        if (r.status === 'error') return { run: r.run, result: { ...base, pass: false, why: 'error', error: String(r.code).slice(0, 40) } };
+        const d = r.draft;
+        const g = gradeCase(c, { route: d.route, intent: d.intent, reasons: d.reasons, lint: d.lint }, d.reply);
+        return { run: r.run, result: { ...base, ...g, route: d.route, intent: d.intent, reasons: d.reasons, reply: String(d.reply || '').slice(0, 300) } };
+      }));
+      const results = out.map((x) => x.result);
+      await rt.store.saveEvalChunk({ runId, from, results, runs: out.map((x) => x.run), month });
+      return json({ ok: true, results, costMicroUsd: (Number(run.costMicroUsd) || 0) + results.reduce((n, r) => n + r.costMicroUsd, 0) });
+    },
+
+    async eval_finish(rt, body) {
+      const runId = typeof body.runId === 'string' && RUN_ID_RE.test(body.runId) ? body.runId : '';
+      if (!runId) return fail(400, 'bad_request');
+      const run = await rt.store.readEvalRun(runId);
+      if (!run || run.status !== 'running') return fail(409, 'eval_closed');
+      const total = Number(run.total) || 0;
+      const chunk = Number(run.chunk) || EVAL_LIMITS.chunk;
+      const results = await rt.store.readEvalResults(runId, total, chunk);
+      const summary = summarize(results);
+      const cases = Object.fromEntries(results.filter((r) => !r.error).map((r) => [r.id, r.pass ? 1 : 0]));
+      // Өмнөх ДУУССАН ажиллагаатай харьцуулна (кейс бүрийн тэнцсэн эсэх)
+      const idx = await rt.store.readEvalIndex();
+      const prevEntry = (Array.isArray(idx.runs) ? idx.runs : []).find((r) => r && r.runId !== runId);
+      const prevRun = prevEntry ? await rt.store.readEvalRun(prevEntry.runId) : null;
+      const compare = prevRun && prevRun.cases
+        ? { runId: prevEntry.runId, ...compareRuns(Object.fromEntries(Object.entries(prevRun.cases).map(([id, v]) => [id, v === 1])), Object.fromEntries(Object.entries(cases).map(([id, v]) => [id, v === 1]))) }
+        : null;
+      const failures = results.filter((r) => !r.pass).map((r) => ({ id: r.id, why: r.why, route: r.route ?? null, intent: r.intent ?? null, error: r.error ?? null, reply: String(r.reply || '').slice(0, 200) }));
+      const partial = results.length < total;
+      await rt.store.finishEval({
+        runId, total, chunk,
+        report: { summary, cases, failures, compare, partial },
+        entry: { runId, by: run.by, promptVersion: run.promptVersion, knowledgeRev: run.knowledgeRev, partial, pass: summary.pass, done: summary.done, passRate: summary.passRate, risky: summary.risky, invented: summary.invented, errors: summary.errors, costMicroUsd: summary.costMicroUsd },
+      });
+      return json({ ok: true, summary, failures, compare, partial });
     },
 
     async test(rt, body, started) {
@@ -155,8 +241,9 @@ export function createAdminHandler(deps) {
     if ((request.headers.get('origin') ?? '') !== origin) return fail(403, 'origin');
     if (!/^application\/json\b/i.test(request.headers.get('content-type') ?? '')) return fail(415, 'content_type');
     const m = /^Bearer ([A-Za-z0-9._-]+)$/.exec(request.headers.get('authorization') ?? '');
+    let who;
     try {
-      await verify(m ? m[1] : '');
+      who = await verify(m ? m[1] : '');
     } catch (e) {
       const code = e instanceof AuthError ? e.code : 'auth_error';
       if (code === 'certs_unavailable') return fail(503, 'auth_unavailable');
@@ -178,7 +265,7 @@ export function createAdminHandler(deps) {
     const rt = deps.getRuntime();
     if (!rt) return fail(503, 'not_configured');
     try {
-      return await actions[name](rt, body, started);
+      return await actions[name](rt, body, started, who);
     } catch (e) {
       log(`[messenger] admin ${name} алдаа: ${describeError(e)}`);
       return fail(500, 'server_error');

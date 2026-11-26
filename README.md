@@ -31,7 +31,7 @@ admin/claims.js               — tools/lib/claims.mjs-ийн хуулбар: ad
 firestore.rules               — Firestore аюулгүй байдлын дүрэм (console-д нийтэлсэнтэй ижил байлгана)
 api/                          — Vercel Functions: messenger.js (Meta webhook), cron/daily.js, _lib/ (туслах код) — «Messenger AI»
 package.json, package-lock.json — ЗӨВХӨН api/-ийн хамаарал (сайтын build хамааралгүй; build script БҮҮ нэм — статик output өөрчлөгдөнө)
-tools/evals/messenger.jsonl   — Messenger AI-ийн eval кейс (offline: tools/test/messenger-policy.test.mjs)
+tools/evals/messenger.jsonl   — Messenger AI-ийн eval кейс (124 зохиомол; offline: tools/test/messenger-policy.test.mjs; бодит Claude: admin «Eval», tools/evals/messenger-live.mjs)
 firebase.json, .firebaserc    — Firebase CLI хэрэглэх үед (заавал биш)
 assets/img/                   — Лого (logo.png, logo-white.png), favicon, og-image; өөрийн зургуудаа энд хийнэ
 tools/build.mjs (+ tools/lib) — Build: header/footer, JSON-LD, статик жагсаалт, эмчилгээний хуудсууд, asset хувилбар,
@@ -378,6 +378,25 @@ AI-д орохгүй). Сервер ≥ 1 минут тутам зөвхөн «�
 «Сургалт» таб анх нээхэд ≤ 200 read (жишээг ноорогийн цэс уншсан бол дахин уншихгүй). Prompt-ийн кэш 1 цаг (`ttl: 1h` — мессеж
 сийрэг ирдэг тул 5 минутын кэш бараг бүр удаа дахин бичигддэг).
 
+### Eval (2-р үе шат)
+
+`tools/evals/messenger.jsonl` — **124 зохиомол кейс** (бодит мессеж биш): мэнд, цаг, хаяг, үйлчилгээ, нийтийн/нуусан үнэ, багц,
+захиалга, латин үсгээр бичсэн монгол, олон мөрт яриа + **60 эрсдэлтэй** (эмнэлгийн, гаж нөлөө, гомдол, буцаалт, хөнгөлөлт гуйх,
+хууль, жирэмсэн/хүүхэд, хүн хүсэх, prompt injection, үнэ зохиолгох уруу таталт). Кейс бүр `expect.handoff` (true | false | 'any' —
+мэдлэгээс хамаарна), `intents`, `must_not`; offline-д `gold` (тэнцэх ёстой), `bad` (унах ёстой), `trap` (LLM буруу ангилсан ч КОД
+хүнд шилжүүлэх ёстой — кодын хамгаалалтын тест). Дүгнэлт = `api/_lib/eval.js` (offline ба бодит eval хоёулаа).
+
+- **Offline** (`node --test`) — gold/bad/trap саналаар бодлогыг шалгана, төлбөргүй.
+- **Бодит Claude** — admin → Messenger AI → Сургалт → **Eval**: үйлдвэрлэлийн мэдлэгтэй, 6 кейс тутам (`/api/admin` eval_start →
+  eval_chunk → eval_finish), ≈ $2–3 нэг удаа (нэг ажиллагаа $5-д хүрвэл зогсоно — хэтрэлт ≤ нэг хэсэг), өдөрт ≤ 3, сарын хязгаарт
+  тоологдоно. Тайлан + өмнөхтэй харьцуулалт `messenger_status/eval_<id>`, түүх `messenger_status/evals` (сүүлийн 10); орхисон
+  ажиллагаа 7 хоногт устна. Кейсүүд функцэд `node tools/build.mjs` → `api/_lib/generated/eval-cases.js`.
+- **Локал CLI** (хөгжүүлэгч, өөрийн түлхүүр shell-д): `node tools/evals/messenger-live.mjs --dry-run` (тооцоо), `--limit`, `--only`,
+  `--max-usd`, `--compare` — сайтын анхдагч каталогтой; тайлан `.preview/evals/` (git-д орохгүй).
+
+2026-11-27: eval кодын эрсдэлийн дохионы 5 цоорхойг илрүүлж зассан («буцааж авмаар», «үнээ буулгаач», «хүнтэй ярих», «идээ гарсан»,
+«хөх ягаан болсон» — өмнө нь LLM буруу ангилбал хүнд шилждэггүй байв).
+
 ### Эзэмшигчийн алхам (нэг удаа)
 
 1. **Google Cloud (төсөл skinaid-mn) — Workload Identity Federation** (урт хугацааны түлхүүргүй; https://vercel.com/docs/oidc/gcp):
@@ -405,7 +424,7 @@ AI-д орохгүй). Сервер ≥ 1 минут тутам зөвхөн «�
 (App Check-тэй хөтөч) зөвшөөрөгдсөн: тохиргоо+audit batch, ноорогийн үнэлгээ; хориотой: audit-гүй тохиргоо, audit засах/устгах, ноорогийн
 `reply` засах, ноорог үүсгэх, `messenger_events`/`ai_runs`/`messenger_status` бичих, нэвтрээгүй унших. Туршилтын мөрийг устгана.
 
-**Тест:** `node --test 'tools/test/*.test.mjs'` — `messenger-*.test.mjs` (webhook задлалт, echo, бодлого, eval 14 кейс, санах ойн
+**Тест:** `node --test 'tools/test/*.test.mjs'` — `messenger-*.test.mjs` (webhook задлалт, echo, бодлого, eval 124 кейс, санах ойн
 хуурамч Firestore REST-тэй бүтэн урсгал, архитектур, rules, мэдлэг, admin, сургалт, admin API/token). Сүлжээ, `npm install` шаардахгүй. Бодит Meta-тай E2E нь
 Meta апп (0-р үе шат) үүссэний дараа.
 

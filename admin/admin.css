@@ -552,3 +552,11 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-notes { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; overflow-wrap: anywhere; }
 .ms-small { font-size: 12.5px; overflow-wrap: anywhere; }
 .ms-pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; font-size: 12.5px; line-height: 1.5; background: var(--purple-50); border-radius: 12px; padding: 10px 12px; margin: 8px 0 0; }
+/* Messenger AI → Eval */
+.ms-prog { width: 100%; height: 10px; margin: 10px 0 4px; accent-color: var(--purple); }
+.ms-tbl-wrap { overflow-x: auto; }
+.ms-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ms-tbl th, .ms-tbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.ms-tbl th { font-weight: 800; color: var(--ink-2); }
+.ms-good { color: var(--ok); font-weight: 800; }
+.ms-bad { color: var(--err); font-weight: 800; }

@@ -36,6 +36,11 @@ export const adminTestsPerMonth = (settings) => Math.max(100, Math.floor((Number
 export const adminTestCostPerMonth = (settings) => Math.round((Number(settings?.monthlyCostCapUsd) || 0) * 1e6 * 0.2);
 /** Өдрийн тоологчийн хадгалах хугацаа (хоног) — cron устгана */
 const DAY_DOC_DAYS = 90;
+/** Бодит Claude-тэй eval (admin «Eval»): өдөрт ≤ 3 ажиллагаа, нэг хэсэгт 6 кейс (зэрэг, ≤ 25 с), нэг ажиллагаа ≤ $5, түүх 10 */
+export const EVAL_LIMITS = Object.freeze({ runsPerDay: 3, chunk: 6, maxMicroUsd: 5_000_000, history: 10 });
+const evalRunPath = (id) => `${COL.status}/eval_${id}`;
+const evalChunkPath = (id, from) => `${COL.status}/evalc_${id}_${String(from).padStart(4, '0')}`;
+const EVAL_INDEX = `${COL.status}/evals`;
 
 /** Хадгалах хугацаа (хоног) — README «Messenger AI»-тай ижил */
 export const RETENTION_DAYS = Object.freeze({ events: 30, messages: 180, drafts: 180, runs: 400, echo: 90 });
@@ -338,31 +343,103 @@ export function createStore(fs, opt = {}) {
      * @returns {Promise<{ ok: true, dayTests: number } | { ok: false, reason: 'day_cap'|'month_tests'|'busy' }>}
      */
     async reserveAdminTest({ month, day, dayMax, monthMax, monthCostMax = Infinity }) {
+      const r = await this.reserveDayCount({ day, field: 'tests', max: dayMax, month, monthMax, monthCostField: 'testCostMicroUsd', monthCostMax });
+      return r.ok ? { ok: true, dayTests: r.count } : r;
+    },
+
+    /**
+     * Өдрийн тоологчийг (`field`) updateTime precondition-оор атомаар нэмнэ (≤ 4 оролдлого); сарын тоо, зардал (зөөлөн хязгаар).
+     * @returns {Promise<{ ok: true, count: number } | { ok: false, reason: 'day_cap'|'month_tests'|'busy' }>}
+     */
+    async reserveDayCount({ day, field, max, month, monthMax = Infinity, monthCostField = '', monthCostMax = Infinity }) {
       const dayPath = `${COL.usage}/${day}`;
       const monthPath = `${COL.usage}/${month}`;
       for (let i = 0; i < 4; i++) {
         const m = await fs.batchGet([dayPath, monthPath]);
         const d = m.get(dayPath);
-        const dayTests = Number(d?.data?.tests) || 0;
-        if (dayTests >= dayMax) return { ok: false, reason: 'day_cap' };
+        const count = Number(d?.data?.[field]) || 0;
+        if (count >= max) return { ok: false, reason: 'day_cap' };
         const mo = m.get(monthPath)?.data;
-        if ((Number(mo?.tests) || 0) >= monthMax || (Number(mo?.testCostMicroUsd) || 0) >= monthCostMax) return { ok: false, reason: 'month_tests' };
+        if ((Number(mo?.[field]) || 0) >= monthMax || (monthCostField && (Number(mo?.[monthCostField]) || 0) >= monthCostMax)) return { ok: false, reason: 'month_tests' };
         const t = now();
         try {
           await fs.commit([
             setWrite(dayPath, { day, updatedAt: t, expireAt: new Date(t.getTime() + DAY_DOC_DAYS * DAY) }, {
               mask: ['day', 'updatedAt', 'expireAt'],
-              transforms: [transforms.increment('tests', 1)],
+              transforms: [transforms.increment(field, 1)],
               ...(d ? { updateTime: d.updateTime } : { exists: false }),
             }),
-            setWrite(monthPath, { month, updatedAt: t }, { mask: ['month', 'updatedAt'], transforms: [transforms.increment('tests', 1)] }),
+            setWrite(monthPath, { month, updatedAt: t }, { mask: ['month', 'updatedAt'], transforms: [transforms.increment(field, 1)] }),
           ]);
-          return { ok: true, dayTests: dayTests + 1 };
+          return { ok: true, count: count + 1 };
         } catch (e) {
           if (!(e instanceof FirestoreError && e.isPrecondition)) throw e;
         }
       }
       return { ok: false, reason: 'busy' };
+    },
+
+    /* ---------- Бодит Claude-тэй eval (messenger_status — admin уншина, сервер бичнэ; rules өөрчлөхгүй) ---------- */
+
+    async createEvalRun(run) {
+      // Дуусаагүй (орхисон) ажиллагаа 7 хоногийн дараа cron-оор устна; дууссаныг түүхэд хадгална (expireAt = null)
+      const t = now();
+      await fs.commit([setWrite(evalRunPath(run.runId), { ...run, status: 'running', done: 0, costMicroUsd: 0, startedAt: t, expireAt: new Date(t.getTime() + 7 * DAY) }, { exists: false })]);
+    },
+    async readEvalRun(runId) {
+      return (await fs.get(evalRunPath(runId)))?.data ?? null;
+    },
+    async readEvalChunk(runId, from) {
+      return (await fs.get(evalChunkPath(runId, from)))?.data ?? null;
+    },
+    async readEvalIndex() {
+      return (await fs.get(EVAL_INDEX))?.data ?? { runs: [] };
+    },
+    /**
+     * Нэг хэсгийн үр дүн + ai_runs (текстгүй) + сарын тоологч + ажиллагааны зардал — НЭГ commit. Хэсэг давхар бичигдэхгүй
+     * (exists=false — дахин илгээсэн хүсэлт).
+     */
+    async saveEvalChunk({ runId, from, results, runs, month }) {
+      const t = now();
+      const billable = runs.filter((r) => r.billable);
+      const cost = runs.reduce((n, r) => n + Math.max(0, Math.round(r.costMicroUsd || 0)), 0);
+      const writes = [
+        setWrite(evalChunkPath(runId, from), { runId, from, results, at: t, expireAt: new Date(t.getTime() + 7 * DAY) }, { exists: false }),
+        setWrite(evalRunPath(runId), { updatedAt: t }, { mask: ['updatedAt'], transforms: [transforms.increment('done', results.length), transforms.increment('costMicroUsd', cost)] }),
+        ...runs.map((r) => setWrite(`${COL.runs}/${newId('r')}`, { ...r, draftId: null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY) }, { exists: false })),
+      ];
+      if (billable.length) {
+        writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
+          mask: ['month', 'updatedAt'],
+          transforms: [transforms.increment('runs', billable.length), transforms.increment('costMicroUsd', cost)],
+        }));
+      }
+      await fs.commit(writes);
+    },
+    /** Бүх хэсгийн үр дүн (дарааллаар) */
+    async readEvalResults(runId, total, chunk) {
+      const paths = [];
+      for (let f = 0; f < total; f += chunk) paths.push(evalChunkPath(runId, f));
+      const m = await fs.batchGet(paths);
+      return paths.flatMap((p) => m.get(p)?.data?.results ?? []);
+    },
+    /**
+     * Ажиллагааг дуусгана: run баримтад тайлан + кейс бүрийн тэнцсэн эсэх + унасан кейсүүд, түүх (≤ history), энэ ажиллагааны
+     * хэсгүүд ба түүхээс гарсан хуучин ажиллагааг устгана — НЭГ commit.
+     */
+    async finishEval({ runId, total, chunk, report, entry }) {
+      const t = now();
+      const idx = await this.readEvalIndex();
+      const prior = (Array.isArray(idx.runs) ? idx.runs : []).filter((r) => r && r.runId !== runId);
+      const runs = [{ ...entry, at: t }, ...prior];
+      const keep = runs.slice(0, EVAL_LIMITS.history);
+      const writes = [
+        setWrite(evalRunPath(runId), { ...report, status: 'done', finishedAt: t, expireAt: null }, { mask: [...Object.keys(report), 'status', 'finishedAt', 'expireAt'] }),
+        setWrite(EVAL_INDEX, { runs: keep, updatedAt: t }),
+      ];
+      for (let f = 0; f < total; f += chunk) writes.push(deleteWrite(evalChunkPath(runId, f)));
+      for (const old of runs.slice(EVAL_LIMITS.history)) if (/^ev[a-z0-9]+$/.test(String(old.runId))) writes.push(deleteWrite(evalRunPath(old.runId)));
+      await fs.commit(writes);
     },
 
     /**

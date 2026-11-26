@@ -231,6 +231,10 @@ export const API_ERRORS = {
   busy: 'Өөр туршилт явж байна. Хэдэн секунд хүлээгээд дахин оролдоно уу.',
   timeout: 'Сервер удаан хариулсан тул AI-г дуудсангүй (төлбөргүй). Дахин оролдоно уу.',
   knowledge_error: 'Мэдлэгийг бүрдүүлж чадсангүй. Сүүлд засварласан бичлэгээ шалгаад дахин оролдоно уу.',
+  bad_request: 'Хүсэлт буруу байна (хуудсыг дахин ачаална уу).',
+  eval_day_cap: 'Өнөөдрийн eval-ийн хязгаарт (3 удаа) хүрсэн. Маргааш дахин оролдоно уу.',
+  eval_closed: 'Энэ eval аль хэдийн дууссан эсвэл олдсонгүй.',
+  eval_budget: 'Eval-ийн дээд зардалд ($5) хүрсэн тул зогслоо.',
   bad_text: 'Мессеж хоосон эсвэл 1000 тэмдэгтээс урт байна.',
   ai_error: 'AI хариу өгсөнгүй (түр алдаа). Хэсэг хүлээгээд дахин оролдоно уу.',
   too_large: 'Хүсэлт хэт том байна.',
@@ -251,3 +255,27 @@ export const EXCLUDE_TEXT = {
   limit: 'тооны хязгаар хэтэрсэн',
   total_limit: 'нийт хэмжээний хязгаар хэтэрсэн',
 };
+
+/* ---------- Eval ---------- */
+/** Eval-ийн унасан шалтгаан (api/_lib/eval.js gradeCase) → ойлгомжтой текст */
+export const EVAL_WHY = {
+  not_handoff: 'Ажилтанд шилжүүлэх ёстой байсан',
+  handoff: 'Шаардлагагүй ажилтанд шилжүүлсэн',
+  intent: 'Сэдвийг буруу ангилсан',
+  lint: 'Хориотой хэллэг (баталгаа, эмчилгээний амлалт г.м.)',
+  must_not: 'Хориотой текст (нуусан үнэ, зохиосон дүн г.м.)',
+  error: 'AI алдаа (төлбөр тоологдоогүй байж болно)',
+};
+/** Бодлогын шалтгаан (api/_lib/social/labels.js SOCIAL_REASON_TEXT-ийн товчлол — тест тулгана) */
+export const EVAL_REASON = {
+  no_source: 'мэдлэгээс иш заагаагүй', unknown_source: 'мэдэгдэхгүй иш', long_reply: 'хэт урт хариу', placeholder: 'хувьсагч',
+  lint_block: 'хориотой хэллэг', invented_price: 'мэдлэгт байхгүй үнэ', invented_percent: 'мэдлэгт байхгүй хувь',
+  invented_offer: 'мэдлэгт байхгүй хөнгөлөлт/санал', low_confidence: 'AI итгэл бага', llm_needs_human: 'AI ажилтанд шилжүүлсэн',
+  intent_human: 'эрсдэлтэй сэдэв', signal: 'эрсдэлийн дохио', empty_reply: 'хоосон хариу', refusal: 'AI татгалзсан', invalid_output: 'AI-ийн гаралт буруу',
+};
+export function evalWhyText(code) {
+  const c = String(code || '');
+  if (EVAL_WHY[c]) return EVAL_WHY[c];
+  if (c.startsWith('reason:')) return `Бодлого: ${EVAL_REASON[c.slice(7)] || c.slice(7)}`;
+  return c || '—';
+}

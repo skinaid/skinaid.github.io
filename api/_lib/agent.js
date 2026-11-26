@@ -227,16 +227,18 @@ export function createAgent(deps) {
     /**
      * Admin-ийн «Туршилтын асуулт» (api/_lib/admin-api.js): үйлдвэрлэлийн ИЖИЛ мэдлэг, prompt, Claude, бодлого — ноорог
      * бичихгүй, хэнд ч илгээхгүй. Хязгаар, тоологчийг дуудагч шалгаж бичнэ (store.saveAdminRun).
-     * @param {{ k: Awaited<ReturnType<ReturnType<typeof import('./knowledge.js').createKnowledge>['load']>>, text: string,
-     *   mode?: string, kind?: string }} input  text — НУУЦАЛСАН (redactForLlm)
+     * @param {{ k: Awaited<ReturnType<ReturnType<typeof import('./knowledge.js').createKnowledge>['load']>>, text?: string,
+     *   turns?: { role: string, text: string }[], mode?: string, kind?: string }} input
+     *   text — нэг мессеж; turns — олон мөрт яриа (eval). Аль аль нь НУУЦАЛСАН (redactForLlm) байна.
      */
-    async testDraft({ k, text, mode = 'shadow', kind = 'admin_test' }) {
-      const turns = [{ role: 'user', text, attachments: [] }];
+    async testDraft({ k, text, turns: given, mode = 'shadow', kind = 'admin_test' }) {
+      const turns = given ? given.map((t) => ({ role: t.role, text: t.text, attachments: [] })) : [{ role: 'user', text, attachments: [] }];
+      const userText = unansweredUserText(turns);
       const runBase = { kind, model: MESSENGER_MODEL, promptVersion: SOCIAL_PROMPT_VERSION, threadId: null };
-      const g = await generate({ k, turns, userText: text, thread: null, mode, runBase });
+      const g = await generate({ k, turns, userText, thread: null, mode, runBase });
       return g.status === 'error'
         ? { status: 'error', code: g.code, run: g.run }
-        : { status: g.status, draft: withLabels({ userText: text, ...g.fields }), run: g.run };
+        : { status: g.status, draft: withLabels({ userText, ...g.fields }), run: g.run };
     },
   };
 }

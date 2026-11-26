@@ -318,7 +318,7 @@ test('cron: ноорогоос үүссэн жишээ (x_) 180 хоногийн
   const rev = s.fake.read('messenger_kb/_rev');
   assert.equal(rev.status, 'draft', 'тэмдэг нь нийтлэгдээгүй бичлэг — AI-д орохгүй');
   const src = readFileSync(new URL('../../api/_lib/cron.js', import.meta.url), 'utf8');
-  assert.match(src, /COL\.usage\]/);
+  assert.match(src, /COL\.usage, COL\.status\]/);
   assert.match(src, /purgeDraftExamples/);
 });
 
@@ -336,4 +336,79 @@ test('баталгаажуулалт: туршилтын сарын ЗАРДЛЫ
   const ok = setup();
   await ok.call({ action: 'test', text: 'Сайн уу' });
   assert.ok(ok.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).testCostMicroUsd > 0);
+});
+
+// ── Бодит Claude-тэй eval (admin «Eval») ───────────────────────────────────
+
+test('admin API eval: эхлүүлэх → хэсгүүд → дуусгах; үр дүн, түүх, харьцуулалт, хэсэг давхар төлөгдөхгүй, хэсгийн баримт устна', async () => {
+  const { EVAL_CASES } = await import('../../api/_lib/generated/eval-cases.js');
+  const { EVAL_LIMITS } = await import('../../api/_lib/store.js');
+  // Хуурамч Claude: эрсдэлтэй (risky) кейст ажилтанд шилжүүлнэ, бусдад мэнд — зарим нь унах ёстой
+  const claude = (req) => {
+    const risky = /хавд|гомдол|жирэмсэн|буцаа|эмчтэй|ажилтан/i.test(req.user);
+    return { status: 'ok', text: reply(risky ? { intent: 'side_effect', needs_human: true, reply: 'Ажилтан холбогдоно.', source_ids: [] } : { intent: 'greeting', reply: 'Сайн байна уу!', source_ids: [] }), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } };
+  };
+  const s = setup({ claude });
+  const code = async (res) => [res.status, (await res.json()).error];
+  const st = await (await s.call({ action: 'eval_start' })).json();
+  assert.equal(st.ok, true);
+  assert.equal(st.total, EVAL_CASES.length);
+  assert.ok(st.estimateMicroUsd > 0 && st.maxMicroUsd === EVAL_LIMITS.maxMicroUsd);
+  assert.match(st.runId, /^ev[a-z0-9]+$/);
+  assert.deepEqual(await code(await s.call({ action: 'eval_chunk', runId: st.runId, from: 1 })), [400, 'bad_request'], 'хэсгийн эхлэл chunk-ийн үржвэр');
+  assert.deepEqual(await code(await s.call({ action: 'eval_chunk', runId: '../x', from: 0 })), [400, 'bad_request']);
+  let calls = 0;
+  for (let from = 0; from < st.total; from += st.chunk) {
+    const r = await (await s.call({ action: 'eval_chunk', runId: st.runId, from })).json();
+    assert.equal(r.ok, true);
+    calls += r.results.length;
+  }
+  assert.equal(calls, EVAL_CASES.length);
+  const before = s.claudeCalls.length;
+  const again = await (await s.call({ action: 'eval_chunk', runId: st.runId, from: 0 })).json();
+  assert.equal(again.repeated, true);
+  assert.equal(s.claudeCalls.length, before, 'давтан хэсэг дахин Claude дуудахгүй');
+  const fin = await (await s.call({ action: 'eval_finish', runId: st.runId })).json();
+  assert.equal(fin.ok, true);
+  assert.equal(fin.summary.done, EVAL_CASES.length);
+  assert.ok(fin.summary.pass > 0 && fin.summary.pass < EVAL_CASES.length);
+  assert.ok(fin.failures.length > 0 && fin.failures.every((f) => f.id && f.why));
+  assert.equal(fin.compare, null, 'анхны ажиллагаа');
+  assert.equal(s.fake.list('messenger_status/evalc_').length, 0, 'хэсгийн баримт устсан');
+  const idx = s.fake.read('messenger_status/evals');
+  assert.equal(idx.runs[0].runId, st.runId);
+  assert.equal(s.fake.read(`messenger_status/eval_${st.runId}`).status, 'done');
+  assert.equal(s.fake.read(`messenger_status/eval_${st.runId}`).expireAt, null, 'дууссан ажиллагаа түүхэд үлдэнэ');
+  assert.deepEqual(await code(await s.call({ action: 'eval_finish', runId: st.runId })), [409, 'eval_closed']);
+  // ai_runs (kind eval, текстгүй), сарын тоологч
+  const runs = s.fake.list('ai_runs').map((p) => s.fake.read(p));
+  assert.equal(runs.filter((r) => r.kind === 'eval').length, EVAL_CASES.length);
+  assert.ok(!JSON.stringify(runs).includes('Сайн байна уу!'));
+  assert.equal(s.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).runs, EVAL_CASES.length);
+  // Хоёр дахь ажиллагаа → харьцуулалт
+  const st2 = await (await s.call({ action: 'eval_start' })).json();
+  for (let from = 0; from < st2.total; from += st2.chunk) await s.call({ action: 'eval_chunk', runId: st2.runId, from });
+  const fin2 = await (await s.call({ action: 'eval_finish', runId: st2.runId })).json();
+  assert.deepEqual(fin2.compare, { runId: st.runId, newlyFailing: [], newlyPassing: [] });
+  assert.equal(s.fake.read('messenger_status/evals').runs.length, 2);
+});
+
+test('admin API eval: өдөрт ≤ 3, ажиллагааны $5 хязгаар, яаралтай зогсоолт, сарын хязгаар; хагас дууссан ажиллагааг дуусгаж болно', async () => {
+  const code = async (res) => [res.status, (await res.json()).error];
+  const s = setup();
+  for (let i = 0; i < 3; i++) assert.equal((await s.call({ action: 'eval_start' })).status, 200);
+  assert.deepEqual(await code(await s.call({ action: 'eval_start' })), [429, 'eval_day_cap']);
+  // Зардал: нэг дуудлага $1 (6 кейс = $6) → хоёр дахь хэсэг $5-аас хэтэрсэн тул зогсоно (хэтрэлт ≤ нэг хэсэг)
+  const pricey = setup({ claude: () => ({ status: 'ok', text: reply(), model: MESSENGER_MODEL, usage: { output_tokens: 50_000 } }) });
+  const st = await (await pricey.call({ action: 'eval_start' })).json();
+  assert.equal((await pricey.call({ action: 'eval_chunk', runId: st.runId, from: 0 })).status, 200);
+  assert.deepEqual(await code(await pricey.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk })), [409, 'eval_budget']);
+  const part = await (await pricey.call({ action: 'eval_finish', runId: st.runId })).json();
+  assert.equal(part.partial, true);
+  assert.equal(part.summary.done, st.chunk);
+  const killed = setup({ settings: { mode: 'shadow', killSwitch: true, monthlyRunCap: 3000, monthlyCostCapUsd: 50 } });
+  assert.deepEqual(await code(await killed.call({ action: 'eval_start' })), [409, 'kill_switch']);
+  const capped = setup({ settings: { mode: 'shadow', killSwitch: false, monthlyRunCap: 1, monthlyCostCapUsd: 50 } });
+  capped.fake.seed(`messenger_usage/${ubMonth(new Date(NOW))}`, { runs: 1 }, encodeFields);
+  assert.deepEqual(await code(await capped.call({ action: 'eval_start' })), [429, 'month_cap']);
 });

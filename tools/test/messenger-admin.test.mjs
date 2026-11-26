@@ -191,3 +191,18 @@ test('сургалт (аудит 2026-11-27): ноорогийн жишээни�
   assert.equal(A.usd3(14_200), '$0.014');
   assert.equal(A.sortKb([{ id: '_rev', title: 'z', status: 'draft' }, { id: 'k_1', title: 'a', status: 'draft' }]).length, 1, 'тэмдэг жагсаалтад харагдахгүй');
 });
+
+test('eval (admin): унасан шалтгааны текст — серверийн бодлогын шалтгаан бүрт; gradeCase-ийн код бүрт', async () => {
+  const { SOCIAL_REASON_TEXT } = await import('../../api/_lib/social/labels.js');
+  for (const k of Object.keys(A.EVAL_REASON)) assert.ok(SOCIAL_REASON_TEXT[k], k);
+  for (const k of ['no_source', 'invented_price', 'invented_offer', 'low_confidence', 'long_reply', 'llm_needs_human']) assert.ok(A.EVAL_REASON[k], k);
+  const evalSrc = readFileSync(new URL('../../api/_lib/eval.js', import.meta.url), 'utf8');
+  for (const code of ['not_handoff', 'handoff', 'intent', 'lint', 'must_not']) {
+    assert.ok(evalSrc.includes(`'${code}'`), code);
+    assert.ok(A.EVAL_WHY[code], code);
+  }
+  assert.equal(A.evalWhyText('reason:no_source'), 'Бодлого: мэдлэгээс иш заагаагүй');
+  assert.equal(A.evalWhyText('reason:xyz'), 'Бодлого: xyz');
+  const train = readFileSync(new URL('../../admin/m-messenger-train.js', import.meta.url), 'utf8');
+  assert.ok(!/\$\{f\.(id|reply|why|error)\}/.test(train) && !/\$\{r\.(by|promptVersion|runId)\}/.test(train), 'eval-ийн текст esc()-тэй');
+});

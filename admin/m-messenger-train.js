@@ -5,6 +5,8 @@
    · Жишээ (messenger_examples: сайн/муу) — ноорогоос (exampleFromDraftAction: урьдчилан бөглөсөн засварлагч — хувийн
      мэдээллийг арилгаад хадгална) эсвэл гараар.
    · AI-д юу орж байна — POST /api/admin {action:'knowledge'} (LLM-гүй).
+   · Eval — POST /api/admin eval_start → eval_chunk (6 кейс тутам) → eval_finish (бодит Claude; ≈ $2–3, өдөрт ≤ 3);
+     түүх = messenger_status/evals (1 read), дэлгэрэнгүй = messenger_status/eval_<id> (1 read).
    Бичилт бүр `messenger_kb/_rev` тэмдгийг НЭГ batch-д шинэчилнэ — сервер мэдлэгийг ≤ 1 минутад дахин ачаална.
    Firestore-д ЗӨВХӨН rules-ийн зөвшөөрсөн талбар (title/body/status, userText/reply/kind/note + updatedAt/updatedBy).
    Квот: таб анх нээхэд ≤ 100 + 100 read (жишээг ноорогийн цэс аль хэдийн уншсан бол дахин уншихгүй). Бүх текстийг esc()-ээр.
@@ -15,8 +17,8 @@ import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters
 import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
   exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, apiErrorText, EXCLUDE_TEXT, usd3,
-  kbBudget, exampleBudget, KB_BUDGET,
-} from './messenger-lib.js?v=b1c66c99';
+  kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText,
+} from './messenger-lib.js?v=d731df29';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');
@@ -38,6 +40,7 @@ let kbEdit = null;             // { id, isNew, snap, opener }
 let exEdit = null;             // { id, isNew, snap, opener, fromDraft }
 let busy = '';                 // '' | 'kb' | 'ex' | 'del' | 'draft' — нэг удаад нэг бичилт
 let trying = false, knowing = false;
+let evaling = false, evalStop = false, evalHistReady = false;
 let lastTry = null;            // { result, run }
 let gen = 0;                   // teardown бүрт нэмэгдэнэ — гарсны дараах async үр дүнг үл тооно
 const alive = (g) => g === gen && !!session.user;
@@ -142,6 +145,7 @@ export function openTraining() {
   if (opened || !session.user) return;
   opened = true;
   load();
+  if (!evalHistReady) loadEvalHistory();
 }
 /** Ноорогийн картын «Жишээ» мөр (m-messenger.js): 'none' | 'new' | 'same' | 'stale' | 'unknown' */
 export const draftExampleState = (d) => (exReady ? exampleState(d, ex.get(exampleIdForDraft(d.id))) : exampleFromDraft(d) ? 'unknown' : 'none');
@@ -647,6 +651,113 @@ knowBtn.addEventListener('click', async () => {
   }
 });
 
+/* ---------- Eval (бодит Claude-тэй) ---------- */
+const evalBtn = $('#btnMsEval'), evalStopBtn = $('#btnMsEvalStop'), evalStatus = $('#msEvalStatus'), evalProg = $('#msEvalProg'), evalOut = $('#msEvalOut'), evalHist = $('#msEvalHist');
+const pct = (a, b) => (b ? `${Math.round((1000 * a) / b) / 10}%` : '—');
+function evalReportHtml(r, heading) {
+  const s = r.summary || {};
+  const risky = s.risky || { total: 0, pass: 0 };
+  const cmp = r.compare;
+  const fails = Array.isArray(r.failures) ? r.failures : [];
+  return `<h3 class="ms-sub" tabindex="-1" id="msEvalRepH">${esc(heading)}</h3>
+    <dl class="ms-kv">
+      <div><dt>Тэнцсэн</dt><dd>${Number(s.pass) || 0} / ${Number(s.done) || 0} (${esc(String(s.passRate ?? 0))}%)</dd></div>
+      <div><dt>Эрсдэлтэй кейс зөв</dt><dd>${Number(risky.pass) || 0} / ${Number(risky.total) || 0}${risky.total && risky.pass < risky.total ? ' <span class="ms-bad">— шалгана уу</span>' : ''}</dd></div>
+      <div><dt>Зохиосон үнэ/санал (бодлого барьсан)</dt><dd>${Number(s.invented) || 0}</dd></div>
+      <div><dt>AI алдаа</dt><dd>${Number(s.errors) || 0}</dd></div>
+      <div><dt>Зардал</dt><dd>${esc(usd(s.costMicroUsd))}</dd></div>
+    </dl>
+    ${r.partial ? '<p class="ms-banner">Хагас дууссан ажиллагаа (зогсоосон эсвэл хязгаарт хүрсэн).</p>' : ''}
+    ${cmp ? `<p class="ms-small">Өмнөхөөс: шинээр унасан ${cmp.newlyFailing.length ? `<span class="ms-bad">${cmp.newlyFailing.map(esc).join(', ')}</span>` : '—'}; шинээр тэнцсэн ${cmp.newlyPassing.length ? `<span class="ms-good">${cmp.newlyPassing.map(esc).join(', ')}</span>` : '—'}.</p>` : ''}
+    ${fails.length ? `<details class="ms-ctx"><summary>Унасан кейсүүд (${fails.length})</summary><div class="ms-tbl-wrap" tabindex="0" role="region" aria-label="Унасан кейсүүд"><table class="ms-tbl"><thead><tr><th scope="col">Кейс</th><th scope="col">Шалтгаан</th><th scope="col">AI-ийн хариу</th></tr></thead><tbody>${fails.map((f) => `<tr><td>${esc(f.id)}</td><td>${esc(evalWhyText(f.why))}${f.error ? ` (${esc(f.error)})` : ''}</td><td>${esc(f.reply || '')}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
+}
+async function loadEvalHistory() {
+  const g = gen;
+  try {
+    const snap = await getDoc(doc(db, 'messenger_status', 'evals'));
+    if (!alive(g)) return;
+    evalHistReady = true;
+    const runs = snap.exists() && Array.isArray(snap.data().runs) ? snap.data().runs : [];
+    evalHist.innerHTML = runs.length ? runs.map((r) => `<li class="ms-item" data-id="${esc(r.runId)}">
+        <div class="ms-item__body">
+          <p class="ms-item__title"><strong>${esc(fmtDate(r.at))}</strong> · тэнцсэн ${Number(r.pass) || 0}/${Number(r.done) || 0} (${esc(String(r.passRate ?? 0))}%)${r.partial ? ' · хагас' : ''}</p>
+          <p class="ms-item__meta muted">Эрсдэлтэй ${Number(r.risky?.pass) || 0}/${Number(r.risky?.total) || 0} · ${esc(usd(r.costMicroUsd))} · ${esc(r.by || '')} · ${esc(r.promptVersion || '')}</p>
+        </div>
+        <div class="ms-item__act"><button class="btn btn--outline btn--sm" type="button" data-eval="${esc(r.runId)}">Дэлгэрэнгүй</button></div>
+      </li>`).join('') : '<li class="muted">Одоогоор ажиллуулаагүй.</li>';
+  } catch (e) {
+    if (alive(g)) evalHist.innerHTML = `<li class="muted">${esc(errText(e))}</li>`;
+  }
+}
+evalHist.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-eval]');
+  if (!b) return;
+  const g = gen;
+  try {
+    const snap = await getDoc(doc(db, 'messenger_status', `eval_${b.dataset.eval}`));
+    if (!alive(g)) return;
+    if (!snap.exists()) { evalOut.innerHTML = '<p class="muted">Энэ ажиллагааны дэлгэрэнгүй устсан байна.</p>'; return; }
+    const r = snap.data();
+    evalOut.innerHTML = evalReportHtml(r, `Ажиллагаа ${fmtDate(r.finishedAt || r.startedAt)}`);
+    $('#msEvalRepH', evalOut)?.focus();
+  } catch (err) { if (alive(g)) snack(errText(err), { error: true }); }
+});
+async function runEval() {
+  if (evaling || !session.user) return;
+  const g = gen;
+  if (!(await dialog({ title: 'Бодит AI-тай eval ажиллуулах уу?', body: ['Зохиомол 120+ асуултыг AI-д илгээж дүгнэнэ — хэнд ч юу ч илгээхгүй.', 'Ойролцоогоор $2–3 (дээд тал нь ~$5–6), 3–6 минут, сарын хязгаарт тоологдоно. Өдөрт 3 хүртэл.'], confirm: 'Ажиллуулах', cancel: 'Болих' }))) return;
+  if (!alive(g)) return;
+  evaling = true; evalStop = false;
+  evalBtn.setAttribute('aria-disabled', 'true');
+  evalStopBtn.hidden = false;
+  evalOut.innerHTML = '';
+  setStatus(evalStatus, 'Эхлүүлж байна…', '');
+  let st = null;
+  try {
+    st = await api('eval_start');
+    if (!alive(g)) return;
+    evalProg.hidden = false; evalProg.max = st.total; evalProg.value = 0;
+    let done = 0;
+    for (let from = 0; from < st.total && !evalStop; from += st.chunk) {
+      const r = await api('eval_chunk', { runId: st.runId, from });
+      if (!alive(g)) return;
+      done += r.results.length;
+      evalProg.value = done;
+      setStatus(evalStatus, `${done} / ${st.total} кейс · ${usd(r.costMicroUsd)}`, '');
+    }
+  } catch (e) {
+    if (!alive(g)) return;
+    setStatus(evalStatus, apiMsg(e), 'err');
+  }
+  try {
+    if (st && alive(g)) {
+      const fin = await api('eval_finish', { runId: st.runId });
+      if (!alive(g)) return;
+      evalOut.innerHTML = evalReportHtml(fin, evalStop ? 'Зогсоосон ажиллагааны тайлан' : 'Тайлан');
+      setStatus(evalStatus, `Дууслаа: тэнцсэн ${fin.summary.pass}/${fin.summary.done}.`, 'ok');
+      $('#msEvalRepH', evalOut)?.focus();
+      loadEvalHistory();
+    }
+  } catch (e) {
+    if (alive(g)) setStatus(evalStatus, apiMsg(e), 'err');
+  } finally {
+    if (alive(g)) {
+      evaling = false;
+      evalBtn.removeAttribute('aria-disabled');
+      evalStopBtn.hidden = true;
+      evalProg.hidden = true;
+      if (document.activeElement === document.body) evalBtn.focus();
+    }
+  }
+}
+evalBtn.addEventListener('click', runEval);
+evalStopBtn.addEventListener('click', () => {
+  evalStop = true;
+  setStatus(evalStatus, 'Одоогийн хэсгийг дуусгаад зогсооно…', '');
+  evalBtn.focus();
+  evalStopBtn.hidden = true;
+});
+
 /* ---------- Хадгалаагүй өөрчлөлт, гарах ---------- */
 export const isDirty = () => kbDirty() || exDirty();
 /** Ctrl+S / хадгалах мөр */
@@ -666,7 +777,9 @@ export function discard() {
 export function teardown() {
   gen++;
   opened = false; kbReady = false; exReady = false; loadingKb = null; loadingEx = null; lastTry = null;
-  busy = ''; trying = false; knowing = false;
+  busy = ''; trying = false; knowing = false; evaling = false; evalStop = true; evalHistReady = false;
+  evalBtn.removeAttribute('aria-disabled'); evalStopBtn.hidden = true; evalProg.hidden = true;
+  evalOut.innerHTML = ''; evalHist.innerHTML = ''; setStatus(evalStatus, '', '');
   kbForm.inert = false; exForm.inert = false;
   tryBtn.removeAttribute('aria-disabled'); knowBtn.removeAttribute('aria-disabled');
   kb.clear(); ex.clear();
