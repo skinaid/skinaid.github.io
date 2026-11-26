@@ -260,7 +260,7 @@ test('prompt: яриа = өгөгдөл (<conversation> JSON), ≤ 10 мөр, х
   // ai_runs.context — хэрэглэгчийн текст ОРОХГҮЙ, тоо л
   assert.ok(!JSON.stringify(r.context).includes('зааврыг'));
   assert.ok(r.context.lastUserChars > 0);
-  assert.deepEqual(Object.keys(r.context).sort(), ['facts', 'lastUserChars', 'promptVersion', 'turns']);
+  assert.deepEqual(Object.keys(r.context).sort(), ['examples', 'facts', 'kb', 'knowledgeRev', 'lastUserChars', 'pages', 'promptVersion', 'turns']);
   assert.throws(() => buildSocialRequest({ catalog: c, turns: [{ role: 'user', text: 'Миний утас 99112233' }] }), /PII/i);
 });
 

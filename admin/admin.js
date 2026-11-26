@@ -14,7 +14,7 @@ import * as settings from './m-settings.js?v=f1fb88b4';
 import * as home from './m-home.js?v=ccfdded6';
 import * as catalog from './m-catalog.js?v=8e3d7ba0';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import * as messenger from './m-messenger.js?v=23c73c81';
+import * as messenger from './m-messenger.js?v=824f92ee';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';

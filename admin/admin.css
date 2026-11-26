@@ -522,3 +522,28 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-cfg .is-miss { color: var(--muted); }
 /* 6 цэс 360px-ийн утсанд багтах (Messenger AI нэмэгдсэн) */
 @media (max-width: 380px) { .menu a { font-size: 10px; padding-inline: 1px; } }
+/* Messenger AI → «Сургалт» (2-р үе шат) */
+.ms-tabs { overflow-x: auto; scrollbar-width: none; }
+.ms-tabs [role="tab"] { flex: none; }
+.ms-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.ms-check input { width: 18px; height: 18px; accent-color: var(--purple); }
+.ms-editor { display: grid; gap: 12px; margin: 4px 0 16px; padding: 14px; border: 1.5px solid var(--purple-200); border-radius: 16px; background: var(--cream-50); }
+.ms-editor__title { font-size: 15px; font-weight: 800; color: var(--purple-900); margin: 0; }
+.ms-editor .ms-modes legend { font-size: 13px; font-weight: 800; color: var(--ink-2); margin-bottom: 6px; }
+.ms-radios { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; }
+.ms-items { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ms-item { display: flex; gap: 10px 14px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.ms-item.is-editing { border-color: var(--purple); box-shadow: 0 0 0 2px var(--purple-100); }
+.ms-item__body { flex: 1 1 280px; min-width: 0; display: grid; gap: 4px; }
+.ms-item__title { margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; overflow-wrap: anywhere; color: var(--purple-900); }
+.ms-item__text { margin: 0; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.ms-item__meta { margin: 0; font-size: 12px; }
+.ms-item__act { display: flex; gap: 6px; flex-wrap: wrap; }
+.ms-exrow { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.ms-ex-done { font-weight: 800; color: var(--ok); }
+.ms-try-out { margin-top: 14px; }
+.ms-try-out:empty { display: none; }
+.ms-sub { font-size: 14px; font-weight: 800; color: var(--purple-900); margin: 4px 0 6px; }
+.ms-notes { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; overflow-wrap: anywhere; }
+.ms-small { font-size: 12.5px; overflow-wrap: anywhere; }
+.ms-pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; font-size: 12.5px; line-height: 1.5; background: var(--purple-50); border-radius: 12px; padding: 10px 12px; margin: 8px 0 0; }

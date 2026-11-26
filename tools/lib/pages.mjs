@@ -19,7 +19,7 @@ const SECTION_META = [
   ['price', 'une', (p) => (p.headings && p.headings.price) || 'Үнэ'],
 ];
 
-const FACT_ROWS = [['duration', 'Үргэлжлэх хугацаа'], ['anesthesia', 'Мэдээ алдуулалт'], ['sessions', 'Давтамж, тоо'], ['downtime', 'Эдгэрэлт']];
+export const FACT_ROWS = [['duration', 'Үргэлжлэх хугацаа'], ['anesthesia', 'Мэдээ алдуулалт'], ['sessions', 'Давтамж, тоо'], ['downtime', 'Эдгэрэлт']];
 
 const ind = (s, n) => s.split('\n').map((l) => (l ? ' '.repeat(n) + l : l)).join('\n');
 

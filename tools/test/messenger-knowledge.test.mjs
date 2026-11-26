@@ -47,7 +47,7 @@ test('мэдлэг: сайтын бодит каталог (catalog-defaults) �
 test('мэдлэг: 5 минутын кэш (Spark-ийн унших квот); яаралтай утас = сайтын admin-ийн утас эсвэл тогтмол', async () => {
   let reads = 0;
   let t = 0;
-  const k = createKnowledge({ readSiteDocs: async () => { reads++; return { site: {}, catalog: { services: [], packages: [] } }; } }, { now: () => t });
+  const k = createKnowledge({ readKnowledgeDocs: async () => { reads++; return { site: {}, catalog: { services: [], packages: [] }, kb: [], examples: [] }; } }, { now: () => t });
   await k.load();
   t += 60_000;
   await k.load();

@@ -1,18 +1,24 @@
 /**
- * Messenger AI-ийн мэдлэг = сайтад одоо харагдаж буй нийтийн мэдээлэл:
+ * Messenger AI-ийн мэдлэг:
  *   · Firestore `settings/site` — ажлын цаг (`hours`), багц харагдах эсэх (`promoEnabled`)
  *   · Firestore `settings/catalog` — үйлчилгээ (hidden биш), үнэ, багц (admin «Үйлчилгээ / Багц»)
  *   · clinic-facts.js — нэр, хаяг, ангиллын нэр
- * Утас, имэйл LLM руу ЯВАХГҮЙ (catalog-safe.js assertNoPii). Эмчийн хянасан эмчилгээний хуудас (content/pages)
- * нь 2-р үе шатанд нэмэгдэнэ.
+ *   · generated/pages-knowledge.js — эмчийн хянасан, нийтлэгдсэн эмчилгээний хуудас (tools/build.mjs; одоогоор хоосон)
+ *   · Firestore `messenger_kb` — admin «Сургалт»-д НИЙТЭЛСЭН мэдлэг (FAQ, бодлого); тусгай id `voice` = брэнд дуу хоолой
+ *   · Firestore `messenger_examples` — ажилтны баталсан сайн/муу жишээ (prompt-ийн 3-р блок)
+ * Утас, имэйл LLM руу ЯВАХГҮЙ (catalog-safe.js хасна, assertNoPii).
  *
  * Инстанс бүр 5 минут санах ойд хадгална (Spark-ийн өдрийн унших квот) — admin-д засвар хийснээс хойш ≤ 5 минутад
- * ноорогт тусна.
+ * ноорогт тусна. Admin-ийн туршилт (`includeDrafts`) кэшгүй, ноорог төлөвтэй мэдлэгийг хамт оруулж болно.
  */
 import { CATS, CLINIC } from './clinic-facts.js';
+import { PAGES } from './generated/pages-knowledge.js';
 import { buildSocialCatalog } from './social/catalog-safe.js';
+import { buildExamples } from './social/examples.js';
 
 export const KNOWLEDGE_TTL_MS = 5 * 60_000;
+/** admin «Сургалт»-ийн тусгай бичлэг — брэнд дуу хоолой, нэмэлт заавар (admin/messenger-lib.js KB_VOICE_ID) */
+export const KB_VOICE_ID = 'voice';
 
 const str = (v) => (typeof v === 'string' ? v : '');
 
@@ -52,16 +58,48 @@ export function clinicPhone(site) {
   return /^[+0-9 -]{7,20}$/.test(p) ? p : CLINIC.phoneDisplay;
 }
 
-/** @param {{ readSiteDocs(): Promise<{site: any, catalog: any}> }} store */
+/**
+ * Firestore-ийн баримтууд → агентын мэдлэг (цэвэр функц — тест, admin «Prompt-д юу орж байна»).
+ * @param {{ site: any, catalog: any, kb?: { id: string, data: any }[], examples?: { id: string, data: any }[] }} docs
+ * @param {{ includeDrafts?: boolean, pages?: readonly import('./social/catalog-safe.js').PageEntry[] }} [opt]
+ */
+export function buildKnowledge(docs, opt = {}) {
+  const usable = (d) => d && (d.status === 'published' || (opt.includeDrafts === true && d.status === 'draft'));
+  const kbRows = (docs.kb ?? []).filter((r) => r && typeof r.id === 'string');
+  const kb = [];
+  const skipped = [];
+  let voice = '';
+  for (const r of kbRows) {
+    if (!usable(r.data)) { skipped.push({ id: `kb:${r.id}`, kind: r.id === KB_VOICE_ID ? 'voice' : 'kb', reason: 'draft' }); continue; }
+    if (r.id === KB_VOICE_ID) voice = str(r.data.body);
+    else kb.push({ id: r.id, title: str(r.data.title), body: str(r.data.body) });
+  }
+  const input = { ...knowledgeInput(docs.site, docs.catalog), voiceBrief: voice, kb, pages: opt.pages ?? PAGES };
+  const catalog = buildSocialCatalog(input);
+  const ex = buildExamples((docs.examples ?? []).map((r) => ({ id: r.id, ...(r.data && typeof r.data === 'object' ? r.data : {}) })));
+  return {
+    catalog,
+    phone: clinicPhone(docs.site),
+    examples: ex.items,
+    /** admin-д: prompt-д ороогүй бичлэг, шалтгаантай (текстгүй) */
+    excluded: [...skipped, ...catalog.excluded, ...ex.excluded.map((e) => ({ id: `example:${e.id}`, kind: 'example', reason: e.reason }))],
+  };
+}
+
+/** @param {{ readKnowledgeDocs(opt?: { includeDrafts?: boolean }): Promise<{ site: any, catalog: any, kb: any[], examples: any[] }> }} store */
 export function createKnowledge(store, { now = Date.now } = {}) {
   let cache = null;
   return {
-    /** @returns {Promise<{ catalog: import('./social/catalog-safe.js').SocialCatalog, phone: string }>} */
-    async load() {
-      if (cache && cache.at + KNOWLEDGE_TTL_MS > now()) return cache.value;
-      const { site, catalog } = await store.readSiteDocs();
-      const value = { catalog: buildSocialCatalog(knowledgeInput(site, catalog)), phone: clinicPhone(site) };
-      cache = { at: now(), value };
+    /**
+     * @param {{ includeDrafts?: boolean, fresh?: boolean }} [opt]  includeDrafts/fresh — admin (кэшгүй)
+     * @returns {Promise<ReturnType<typeof buildKnowledge>>}
+     */
+    async load(opt = {}) {
+      const bypass = opt.includeDrafts === true || opt.fresh === true;
+      if (!bypass && cache && cache.at + KNOWLEDGE_TTL_MS > now()) return cache.value;
+      const docs = await store.readKnowledgeDocs({ includeDrafts: opt.includeDrafts === true });
+      const value = buildKnowledge(docs, { includeDrafts: opt.includeDrafts === true });
+      if (!opt.includeDrafts) cache = { at: now(), value };
       return value;
     },
   };

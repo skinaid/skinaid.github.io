@@ -22,7 +22,13 @@ export const COL = Object.freeze({
   status: 'messenger_status',
   echo: 'messenger_echo_templates',
   audit: 'messenger_audit',
+  kb: 'messenger_kb',
+  examples: 'messenger_examples',
 });
+/** Мэдлэг, жишээг нэг ачаалалтад уншиx дээд тоо (Spark квот; prompt-д орох хязгаар нь catalog-safe/examples.js-д) */
+export const KNOWLEDGE_READ_LIMIT = 100;
+/** Admin-ийн «Туршилтын асуулт»-ын өдрийн дээд тоо (messenger_usage/<УБ өдөр>.tests) */
+export const ADMIN_TESTS_PER_DAY = 100;
 
 /** Хадгалах хугацаа (хоног) — README «Messenger AI»-тай ижил */
 export const RETENTION_DAYS = Object.freeze({ events: 30, messages: 180, drafts: 180, runs: 400, echo: 90 });
@@ -41,6 +47,11 @@ const asDate = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : nul
 /** Улаанбаатарын цагаар сар («2026-11») — сарын тагийн түлхүүр */
 export function ubMonth(date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit' }).format(date).slice(0, 7);
+}
+
+/** Улаанбаатарын цагаар өдөр («2026-11-25») — өдрийн тоологчийн түлхүүр (messenger_usage/<өдөр>) */
+export function ubDay(date) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
 /**
@@ -63,6 +74,24 @@ export function createStore(fs, opt = {}) {
     async readSiteDocs() {
       const m = await fs.batchGet(['settings/site', 'settings/catalog']);
       return { site: m.get('settings/site')?.data ?? null, catalog: m.get('settings/catalog')?.data ?? null };
+    },
+
+    /**
+     * Мэдлэгийн бүх эх (knowledge.js): сайт + admin «Сургалт»-ийн мэдлэг, жишээ. Query = нэг талбарын equality эсвэл
+     * шүүлтгүй (composite index-гүй); эрэмбийг knowledge/catalog-safe id-аар хийнэ (кэш тогтвортой).
+     * @param {{ includeDrafts?: boolean }} [opt]  true — ноорог мэдлэгийг ч уншина (admin-ийн туршилт)
+     */
+    async readKnowledgeDocs(opt = {}) {
+      const kbQuery = opt.includeDrafts
+        ? { collection: COL.kb, limit: KNOWLEDGE_READ_LIMIT }
+        : { collection: COL.kb, where: [['status', '==', 'published']], limit: KNOWLEDGE_READ_LIMIT };
+      const [site, kb, examples] = await Promise.all([
+        this.readSiteDocs(),
+        fs.query(kbQuery),
+        fs.query({ collection: COL.examples, limit: KNOWLEDGE_READ_LIMIT }),
+      ]);
+      const rows = (docs) => docs.map((d) => ({ id: d.id, data: d.data }));
+      return { ...site, kb: rows(kb), examples: rows(examples) };
     },
 
     /** messenger_status/main-ийн зарим талбарыг шинэчилнэ (merge) */
@@ -250,6 +279,34 @@ export function createStore(fs, opt = {}) {
     async readUsage(month) {
       const d = await fs.get(`${COL.usage}/${month}`);
       return { runs: Number(d?.data?.runs) || 0, costMicroUsd: Number(d?.data?.costMicroUsd) || 0 };
+    },
+
+    /** Өдрийн тоологч (messenger_usage/<УБ өдөр>) */
+    async readDayUsage(day) {
+      const d = await fs.get(`${COL.usage}/${day}`);
+      return { tests: Number(d?.data?.tests) || 0 };
+    },
+
+    /**
+     * Admin-ийн туршилт / eval-ийн Claude дуудлага: ai_runs (текстгүй) + сарын тоологч (хязгаарт тоологдоно) + өдрийн
+     * туршилтын тоо — НЭГ commit. messenger_drafts-д бичихгүй (үнэлгээний статистикийг бохирдуулахгүй).
+     * @param {{ run: object, month: string, day: string, countTest?: boolean }} p
+     */
+    async saveAdminRun({ run, month, day, countTest = true }) {
+      const t = now();
+      const writes = [setWrite(`${COL.runs}/${newId('r')}`, {
+        ...run, draftId: null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY),
+      }, { exists: false })];
+      if (run.billable) {
+        writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
+          mask: ['month', 'updatedAt'],
+          transforms: [transforms.increment('runs', 1), transforms.increment('costMicroUsd', Math.max(0, Math.round(run.costMicroUsd || 0)))],
+        }));
+      }
+      if (countTest) {
+        writes.push(setWrite(`${COL.usage}/${day}`, { day, updatedAt: t }, { mask: ['day', 'updatedAt'], transforms: [transforms.increment('tests', 1)] }));
+      }
+      await fs.commit(writes);
     },
 
     /**

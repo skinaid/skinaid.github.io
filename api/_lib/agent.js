@@ -1,12 +1,12 @@
 /**
- * Messenger AI — сүүдрийн агент: мэдлэг → prompt → Claude → бодлого → `messenger_drafts`.
+ * Messenger AI — сүүдрийн агент: мэдлэг → prompt → Claude → бодлого → `messenger_drafts` (эсвэл admin-ийн туршилтын хариу).
  * ҮЙЛЧЛҮҮЛЭГЧ РҮҮ ЮУ Ч ИЛГЭЭХГҮЙ — энд Meta-ийн Send API, илгээх функц огт байхгүй (1-р үе шат).
  * «wouldSend» = автомат горимд (3-р үе шат) явах байсан текст — зөвхөн ажилтан үнэлэхэд харуулна.
  *
  * Fail-safe: тохиргоо/таг/түлхүүр/алдаа гарвал LLM-гүй, хүнд шилжүүлэх ноорог (эсвэл зөвхөн ai_runs-ийн бүртгэл).
  */
 import { anthropicConfigured } from './config.js';
-import { bookingUrl } from './booking-link.js';
+import { bookingUrl, slugForSources } from './booking-link.js';
 import { costMicroUsd, MESSENGER_MODEL } from './claude.js';
 import { CLINIC } from './clinic-facts.js';
 import { ubMonth } from './store.js';
@@ -36,6 +36,9 @@ const labelsFor = (route, intent, reasons) => ({
 /** saveDraft-ийн өмнө: шошго нэмнэ */
 const withLabels = (d) => ({ ...d, labels: labelsFor(d.route, d.intent, d.reasons) });
 
+/** Сарын хязгаарт хүрсэн эсэх (ноорог ба admin-ийн туршилт хуваалцана) */
+export const capReached = (usage, settings) => usage.runs >= settings.monthlyRunCap || usage.costMicroUsd >= settings.monthlyCostCapUsd * 1e6;
+
 /** Хүнд шилжих үед бот юу хэлэх байсан (код бичнэ) */
 function templateFor(intent, signals, phone) {
   if (intent === 'media') return MEDIA_REPLY;
@@ -58,6 +61,91 @@ export function createAgent(deps) {
   function baseDraft(psidHash, replyToEventId, turns) {
     const ctx = turns.slice(-CONTEXT_TURNS).map((t) => ({ role: t.role, text: String(t.text || '').slice(0, 1000), attachments: t.attachments || [] }));
     return { threadId: psidHash, replyToEventId, userText: unansweredUserText(turns), context: ctx, mode: 'shadow' };
+  }
+
+  /**
+   * Мэдлэг + яриа → Claude → бодлого → ноорогийн талбарууд (replyDraft ба testDraft хуваалцана).
+   * @returns {Promise<{ status: 'error', code: string, retry: boolean, run: object }
+   *   | { status: 'ok'|'fallback', fields: Record<string, any>, run: object }>}
+   */
+  async function generate({ k, turns, userText, thread, mode, runBase }) {
+    const t0 = Date.now();
+    const signals = detectRiskSignals(userText);
+    const req = buildSocialRequest({ catalog: k.catalog, examples: k.examples, turns });
+    const result = await callClaude(req);
+    const u = result.usage || {};
+    const run = {
+      ...runBase,
+      model: result.model,
+      status: result.status === 'ok' ? 'ok' : result.status,
+      errorCode: result.status === 'error' ? result.code : null,
+      refusalCategory: result.status === 'refusal' ? result.category ?? null : null,
+      inputTokens: Number(u.input_tokens) || 0,
+      outputTokens: Number(u.output_tokens) || 0,
+      cacheReadTokens: Number(u.cache_read_input_tokens) || 0,
+      cacheWriteTokens: Number(u.cache_creation_input_tokens) || 0,
+      costMicroUsd: costMicroUsd(result.model, result.usage),
+      billable: Boolean(result.usage),
+      durationMs: Date.now() - t0,
+      context: req.context,
+    };
+    if (result.status === 'error') return { status: 'error', code: result.code, retry: isRetryable(result.code), run };
+
+    const proposal = result.status === 'ok' ? parseProposal(result.text) : null;
+    if (!proposal) {
+      const reason = result.status === 'refusal' ? 'refusal' : 'invalid_output';
+      const tpl = templateFor('other', signals, k.phone);
+      return {
+        status: 'fallback',
+        run,
+        fields: { route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: result.model, promptVersion: SOCIAL_PROMPT_VERSION },
+      };
+    }
+
+    const { catalog } = k;
+    const decision = decideReply({
+      mode,
+      conversationState: thread?.state === 'human' || thread?.state === 'paused' ? thread.state : 'bot',
+      userText,
+      proposal,
+      knownSourceIds: catalog.facts.map((f) => f.id),
+      allowedAmounts: catalog.allowedAmounts,
+      allowedPercents: catalog.allowedPercents,
+      knownNumbers: catalog.knownNumbers,
+      knowledgeText: catalog.knowledgeText,
+    });
+    const sendable = decision.route === 'auto_candidate' || decision.route === 'draft';
+    const link = sendable && LINK_INTENTS.has(decision.intent) ? bookingUrl(slugForSources(decision.sourceIds) ?? undefined) : null;
+    const templateReply = decision.route === 'handoff' ? templateFor(decision.intent, decision.signals, k.phone) : null;
+    let wouldSend = null;
+    if (decision.route === 'auto_candidate') {
+      const lastBotAt = thread?.lastShadowBotAt instanceof Date ? thread.lastShadowBotAt : null;
+      const body = link ? `${proposal.reply}\n\nЦаг захиалах: ${link}` : proposal.reply;
+      wouldSend = composeBotReply(body, { clinicName: CLINIC.name, withDisclosure: needsDisclosure({ lastBotAt, now: now(), returnedFromHuman: false }) });
+    } else if (decision.route === 'handoff') {
+      wouldSend = templateReply;
+    }
+    return {
+      status: 'ok',
+      run,
+      fields: {
+        route: decision.route,
+        intent: decision.intent,
+        signals: decision.signals,
+        reasons: decision.reasons,
+        lint: decision.lint.map((l) => ({ code: l.code, severity: l.severity, match: String(l.match ?? '').slice(0, 80) })),
+        sourceIds: decision.sourceIds,
+        reply: proposal.reply,
+        templateReply,
+        wouldSend,
+        link,
+        quickReplies: proposal.quick_replies,
+        confidence: roundConf(proposal.confidence),
+        aiReason: proposal.reason,
+        model: result.model,
+        promptVersion: SOCIAL_PROMPT_VERSION,
+      },
+    };
   }
 
   return {
@@ -88,7 +176,6 @@ export function createAgent(deps) {
     async replyDraft({ psidHash, replyToEventId, thread, eventStatus }) {
       const settings = await store.readSettings();
       if (!settings.active) return { skipped: 'inactive', finalized: false };
-      const t0 = Date.now();
       const month = ubMonth(now());
       const runBase = { kind: 'messenger_reply', model: MESSENGER_MODEL, promptVersion: SOCIAL_PROMPT_VERSION, threadId: psidHash };
 
@@ -97,7 +184,7 @@ export function createAgent(deps) {
         return { skipped: 'not_configured', finalized: true };
       }
 
-      const [turns, { catalog, phone }, usage] = await Promise.all([
+      const [turns, k, usage] = await Promise.all([
         store.recentTurns(psidHash, 10),
         knowledge.load(),
         store.readUsage(month),
@@ -106,8 +193,8 @@ export function createAgent(deps) {
       const signals = detectRiskSignals(base.userText);
 
       // Сарын хязгаар: LLM-гүй, ажилтанд
-      if (usage.runs >= settings.monthlyRunCap || usage.costMicroUsd >= settings.monthlyCostCapUsd * 1e6) {
-        const tpl = templateFor('other', signals, phone);
+      if (capReached(usage, settings)) {
+        const tpl = templateFor('other', signals, k.phone);
         await store.saveDraft({
           draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: ['cap_reached'], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION }),
           run: { ...runBase, status: 'cap', billable: false, durationMs: 0 },
@@ -118,97 +205,32 @@ export function createAgent(deps) {
         return { route: 'handoff', reason: 'cap_reached', finalized: true };
       }
 
-      const req = buildSocialRequest({ catalog, turns });
-      const result = await callClaude(req);
-      const cost = costMicroUsd(result.model, result.usage);
-      const u = result.usage || {};
-      const run = {
-        ...runBase,
-        model: result.model,
-        status: result.status === 'ok' ? 'ok' : result.status,
-        errorCode: result.status === 'error' ? result.code : null,
-        refusalCategory: result.status === 'refusal' ? result.category ?? null : null,
-        inputTokens: Number(u.input_tokens) || 0,
-        outputTokens: Number(u.output_tokens) || 0,
-        cacheReadTokens: Number(u.cache_read_input_tokens) || 0,
-        cacheWriteTokens: Number(u.cache_creation_input_tokens) || 0,
-        costMicroUsd: cost,
-        billable: Boolean(result.usage),
-        durationMs: Date.now() - t0,
-        context: req.context,
-      };
-
-      if (result.status === 'error') {
+      const g = await generate({ k, turns, userText: base.userText, thread, mode: settings.mode, runBase });
+      if (g.status === 'error') {
         // Ноорог бичихгүй — бүртгэл + статус. Түр зуурын алдаа бол event pending үлдэж дахин оролдоно (MAX_ATTEMPTS).
-        const retry = isRetryable(result.code);
-        await store.saveDraft({ draft: null, run, month, eventStatus: retry ? null : eventStatus });
-        await store.patchStatus({ lastError: { code: String(result.code).slice(0, 40), at: now() } }).catch(() => {});
-        log(`[messenger] Claude алдаа: ${result.code}`);
-        return { error: result.code, retry, finalized: !retry };
+        await store.saveDraft({ draft: null, run: g.run, month, eventStatus: g.retry ? null : eventStatus });
+        await store.patchStatus({ lastError: { code: String(g.code).slice(0, 40), at: now() } }).catch(() => {});
+        log(`[messenger] Claude алдаа: ${g.code}`);
+        return { error: g.code, retry: g.retry, finalized: !g.retry };
       }
+      await store.saveDraft({ draft: withLabels({ ...base, ...g.fields }), run: g.run, month, replyToEventId, eventStatus });
+      if (g.status === 'fallback') return { route: 'handoff', reason: g.fields.reasons[0], finalized: true };
+      return { route: g.fields.route, simulatedBot: g.fields.route === 'auto_candidate', finalized: true };
+    },
 
-      const proposal = result.status === 'ok' ? parseProposal(result.text) : null;
-      if (!proposal) {
-        const reason = result.status === 'refusal' ? 'refusal' : 'invalid_output';
-        const tpl = templateFor('other', signals, phone);
-        await store.saveDraft({
-          draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, quickReplies: [], confidence: null, aiReason: '', model: result.model, promptVersion: SOCIAL_PROMPT_VERSION }),
-          run,
-          month,
-          replyToEventId,
-          eventStatus,
-        });
-        return { route: 'handoff', reason, finalized: true };
-      }
-
-      const decision = decideReply({
-        mode: settings.mode,
-        conversationState: thread?.state === 'human' || thread?.state === 'paused' ? thread.state : 'bot',
-        userText: base.userText,
-        proposal,
-        knownSourceIds: catalog.facts.map((f) => f.id),
-        allowedAmounts: catalog.allowedAmounts,
-        allowedPercents: catalog.allowedPercents,
-        knownNumbers: catalog.knownNumbers,
-        knowledgeText: catalog.knowledgeText,
-      });
-      const sendable = decision.route === 'auto_candidate' || decision.route === 'draft';
-      const link = sendable && LINK_INTENTS.has(decision.intent) ? bookingUrl() : null;
-      const templateReply = decision.route === 'handoff' ? templateFor(decision.intent, decision.signals, phone) : null;
-      let wouldSend = null;
-      if (decision.route === 'auto_candidate') {
-        const lastBotAt = thread?.lastShadowBotAt instanceof Date ? thread.lastShadowBotAt : null;
-        const body = link ? `${proposal.reply}\n\nЦаг захиалах: ${link}` : proposal.reply;
-        wouldSend = composeBotReply(body, { clinicName: CLINIC.name, withDisclosure: needsDisclosure({ lastBotAt, now: now(), returnedFromHuman: false }) });
-      } else if (decision.route === 'handoff') {
-        wouldSend = templateReply;
-      }
-
-      await store.saveDraft({
-        draft: withLabels({
-          ...base,
-          route: decision.route,
-          intent: decision.intent,
-          signals: decision.signals,
-          reasons: decision.reasons,
-          lint: decision.lint.map((l) => ({ code: l.code, severity: l.severity, match: String(l.match ?? '').slice(0, 80) })),
-          sourceIds: decision.sourceIds,
-          reply: proposal.reply,
-          templateReply,
-          wouldSend,
-          link,
-          quickReplies: proposal.quick_replies,
-          confidence: roundConf(proposal.confidence),
-          aiReason: proposal.reason,
-          model: result.model,
-          promptVersion: SOCIAL_PROMPT_VERSION,
-        }),
-        run,
-        month,
-        replyToEventId,
-        eventStatus,
-      });
-      return { route: decision.route, simulatedBot: decision.route === 'auto_candidate', finalized: true };
+    /**
+     * Admin-ийн «Туршилтын асуулт» (api/_lib/admin-api.js): үйлдвэрлэлийн ИЖИЛ мэдлэг, prompt, Claude, бодлого — ноорог
+     * бичихгүй, хэнд ч илгээхгүй. Хязгаар, тоологчийг дуудагч шалгаж бичнэ (store.saveAdminRun).
+     * @param {{ k: Awaited<ReturnType<ReturnType<typeof import('./knowledge.js').createKnowledge>['load']>>, text: string,
+     *   mode?: string, kind?: string }} input  text — НУУЦАЛСАН (redactForLlm)
+     */
+    async testDraft({ k, text, mode = 'shadow', kind = 'admin_test' }) {
+      const turns = [{ role: 'user', text, attachments: [] }];
+      const runBase = { kind, model: MESSENGER_MODEL, promptVersion: SOCIAL_PROMPT_VERSION, threadId: null };
+      const g = await generate({ k, turns, userText: text, thread: null, mode, runBase });
+      return g.status === 'error'
+        ? { status: 'error', code: g.code, run: g.run }
+        : { status: g.status, draft: withLabels({ userText: text, ...g.fields }), run: g.run };
     },
   };
 }

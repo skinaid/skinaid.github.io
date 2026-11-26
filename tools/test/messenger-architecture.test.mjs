@@ -115,7 +115,8 @@ test('deploy: .vercelignore api/, package.json-ийг хаадаггүй; packag
   assert.deepEqual(v.crons, [{ path: '/api/cron/daily', schedule: '0 20 * * *' }]);
   assert.match(readFileSync(join(ROOT, '.gitignore'), 'utf8'), /^\/node_modules\/$/m);
   // api/-ийн доорх entry (Vercel функц) = зөвхөн эдгээр; туслах код «_»-тай хавтсанд
-  assert.deepEqual(API.filter((f) => !relative('api', f).split('/').some((p) => p.startsWith('_'))).sort(), ['api/cron/daily.js', 'api/messenger.js']);
+  assert.deepEqual(API.filter((f) => !relative('api', f).split('/').some((p) => p.startsWith('_'))).sort(), ['api/admin.js', 'api/cron/daily.js', 'api/messenger.js']);
+  assert.equal(v.functions['api/admin.js'].maxDuration, 60);
 });
 
 test('нууц: api/**-д нууцын утга, түлхүүрийн хэлбэр алга; env-ийн утгыг логлохгүй', () => {

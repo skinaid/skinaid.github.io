@@ -293,13 +293,14 @@ metrics дээр Verified 100% ойролцоо. Token-гүй хүсэлт та�
 илгээхгүй** — илгээх код (Send API) огт байхгүй (`tools/test/messenger-architecture.test.mjs` шалгана). Ажилтан Meta Inbox-оос
 өөрөө хариулж, admin → «Messenger AI» → «Ноорог»-д «Зөв / Засвартай / Буруу» гэж үнэлнэ. Эмнэлгийн асуулт, гаж нөлөө, зураг/видео/дуу,
 гомдол, мөнгө буцаалт, хөнгөлөлт, жирэмсэн/хүүхэд үргэлж «Ажилтанд шилжүүлнэ» (код шийднэ, AI биш — `api/_lib/social/policy.js`).
-Дараагийн үе шат: 2 = сургалт ба eval, 3 = туслах → зөвшөөрсөн сэдвээр автомат (эзэмшигчийн шийдвэрээр).
+Дараагийн үе шат: 2 = сургалт ба eval (доорх «Сургалт»), 3 = туслах → зөвшөөрсөн сэдвээр автомат (эзэмшигчийн шийдвэрээр).
 
 ```
 Messenger → Meta → POST https://www.skinaid.mn/api/messenger
   X-Hub-Signature-256 (түүхий body) → event (давхардалгүй) → 200 → waitUntil:
   echo ангилал (манай бот / Meta-ийн автомат хариу / ажилтан) → зураг = LLM-гүй → нууцлах (утас, имэйл, РД)
-  → мэдлэг (settings/site + settings/catalog) → Claude (claude-opus-5-5, effort low) → бодлого → messenger_drafts
+  → мэдлэг (settings/site + settings/catalog + эмчилгээний хуудас + нийтэлсэн FAQ + жишээ) → Claude (claude-opus-5-5,
+  effort low) → бодлого → messenger_drafts
 Өдөр бүр УБ 04:00: /api/cron/daily — гацсан event, хадгалах хугацаа, статус
 ```
 
@@ -310,7 +311,10 @@ Messenger → Meta → POST https://www.skinaid.mn/api/messenger
 | `api/_lib/agent.js`, `claude.js`, `knowledge.js` | Мэдлэг → prompt (кэштэй) → Claude (`fallbacks: "default"`) → бодлого → ноорог |
 | `api/_lib/social/` | UB Beauty-ээс (skinaid/ubbeauty@1a43c95c) шилжүүлсэн цэвэр модулиуд (файл бүрийн толгойд эх сурвалж) |
 | `api/_lib/firestore.js`, `gcp-auth.js` | Firestore REST (firebase-admin-гүй), Google-ийн серверийн эрх (WIF / SA key) |
-| `admin/m-messenger.js` | «Ноорог» (үнэлгээ), «Тохиргоо» (горим, яаралтай зогсоолт, сарын хязгаар, серверийн төлөв) |
+| `admin/m-messenger.js` | «Ноорог» (үнэлгээ, «Жишээ болгох»), «Тохиргоо» (горим, яаралтай зогсоолт, сарын хязгаар, серверийн төлөв) |
+| `admin/m-messenger-train.js` | «Сургалт»: туршилтын асуулт, мэдлэг (FAQ, брэнд дуу хоолой), жишээ, «AI-д юу орж байна» |
+| `api/admin.js`, `api/_lib/admin-api.js`, `admin-auth.js` | Admin-ийн серверийн үйлдэл (Firebase ID token шалгана) — `knowledge`, `test` |
+| `api/_lib/generated/pages-knowledge.js` | `node tools/build.mjs` үүсгэнэ: нийтлэгдсэн эмчилгээний хуудсын товч тайлбар, явц, хугацаа (гараар бүү засаарай) |
 
 **Хувийн мэдээлэл.** PSID хадгалахгүй (`PSID_SALT`-аар HMAC → `psidHash`). Текст ЗӨВХӨН нууцалсан. Зураг/видео/дууны зөвхөн төрөл
 (URL-гүй), LLM руу хэзээ ч явахгүй. Захиалгын (`bookings`) өгөгдөлд хүрэхгүй. `ai_runs`-д текст байхгүй (токен, зардал, хугацаа л).
@@ -320,8 +324,32 @@ Messenger → Meta → POST https://www.skinaid.mn/api/messenger
 `messenger_settings/main` (admin: горим off|shadow, killSwitch, сарын хязгаар — өөрчлөлт бүр `messenger_audit`-д нэг batch-д),
 `messenger_drafts` (сервер үүсгэнэ, admin зөвхөн `rating/note/ratedAt/ratedBy`), `messenger_threads/{psidHash}` + `messages`,
 `messenger_events`, `ai_runs`, `messenger_usage/{YYYY-MM}`, `messenger_status/main`, `messenger_echo_templates`,
-`messenger_kb`, `messenger_examples` (2-р үе шатны «Сургалт»). Query бүр composite index ШААРДАХГҮЙ.
+`messenger_kb` (admin «Сургалт» → мэдлэг: `title, body, status draft|published`; id `voice` = брэнд дуу хоолой),
+`messenger_examples` (`kind good|bad, userText, reply, note`; ноорогоос үүссэн жишээ = `x_<ноорогийн id>`).
+`messenger_usage/<YYYY-MM-DD>` = өдрийн тоологч (admin-ийн туршилт). Query бүр composite index ШААРДАХГҮЙ.
 Spark квот: нэг хэрэглэгчийн мессежид ойролцоогоор 11 write + 20 read (өдөрт ~1,500 мессеж хүртэл багтана); нэг ярианд өдөрт ≤ 40 удаа AI (нэг хэрэглэгч квот, сарын хязгаарыг дуусгахгүй); admin «Ноорог» нэг нээлтэд ≤ 30 + 3 read.
+
+### Сургалт (2-р үе шат, 2026-11-27)
+
+Admin → **Messenger AI → «Сургалт»**. Модель дахин сургадаггүй — AI-д өгөх мэдлэг, жишээг эзэмшигч өөрөө удирдана:
+
+- **Мэдлэг (FAQ, бодлого).** Зогсоол, төлбөрийн хэлбэр, цуцлах нөхцөл г.м. «Нийтэлсэн» бичлэг AI-ийн мэдлэгт `kb:<id>` баримт
+  болж орно (≤ 5 мин кэш). Эзэмшигчийн шийдвэр (2026-11-26): нийтэлсэн мэдлэгт бичсэн ₮ дүн, хувь, хөнгөлөлтийг AI хэлж болно
+  (бодлого тэдгээрийг «зохиосон» гэж тооцохгүй). Утас/имэйл/РД/урт дугаартай бичлэг AI-д ОРОХГҮЙ (нууцлахгүй, бүхэлд нь хасна).
+  «Брэнд дуу хоолой, заавар» (id `voice`) — өнгө аяс; хатуу дүрмийг (эмнэлгийн зөвлөгөө, үнэ зохиохгүй) өөрчилж чадахгүй.
+- **Жишээ.** «Ноорог» картад үнэлгээ хадгалсны дараа «Жишээ болгох»: Засвартай → сайн жишээ (ажилтны зөв хариу), Зөв → сайн
+  жишээ, Буруу → муу жишээ (тэмдэглэл = яагаад). Prompt-ийн 3-р кэштэй блок; жишээн дэх үнэ баримт болохгүй.
+- **Туршилтын асуулт.** Үйлдвэрлэлийн ижил мэдлэг/prompt/бодлогоор ноорог авна; хэнд ч илгээхгүй, ноорог хадгалахгүй
+  (`ai_runs.kind = admin_test`). Нэг удаа ≈ $0.01–0.02, сарын хязгаарт тоологдоно, өдөрт ≤ 100. Яаралтай зогсоолт асаалттай бол хаалттай.
+- **AI-д юу орж байна.** Серверээс (LLM-гүй) — аль бичлэг орсон, аль нь яагаад ороогүй, AI хэлж болох дүн, мэдлэгийн бүтэн текст.
+- **Эмчилгээний хуудас.** `content/pages`-д нийтлэгдсэн хуудсын товч тайлбар, хугацаа/давтамж/сэргэлт, «юу вэ», «явц» л
+  (эсрэг заалт, гаж нөлөө, арчилгаа ОРОХГҮЙ — тэр асуулт үргэлж эмч, ажилтанд). `node tools/build.mjs` → `api/_lib/generated/pages-knowledge.js`;
+  иш нь ганц хуудастай бол захиалгын холбоос `?svc=<slug>`.
+
+`POST /api/admin` (зөвхөн `https://www.skinaid.mn` Origin, `Authorization: Bearer <Firebase ID token>`): token-ийг firebase-admin-гүй
+шалгана (Google securetoken-ийн x509 түлхүүр, `aud/iss = skinaid-mn`, `email_verified`, и-мэйл = `firestore.rules isAdmin()`
+жагсаалт — тест тулгана). Шинэ env, rules өөрчлөлт ШААРДЛАГАГҮЙ. Квот: «Сургалт» таб анх нээхэд ≤ 200 read, ноорогийн цэс
+нээхэд жишээний ≤ 100 read нэмэгдэнэ; сервер мэдлэгийг 5 минут тутам ≤ 202 read-ээр шинэчилнэ.
 
 ### Эзэмшигчийн алхам (нэг удаа)
 
@@ -351,7 +379,7 @@ Spark квот: нэг хэрэглэгчийн мессежид ойролцо�
 `reply` засах, ноорог үүсгэх, `messenger_events`/`ai_runs`/`messenger_status` бичих, нэвтрээгүй унших. Туршилтын мөрийг устгана.
 
 **Тест:** `node --test 'tools/test/*.test.mjs'` — `messenger-*.test.mjs` (webhook задлалт, echo, бодлого, eval 14 кейс, санах ойн
-хуурамч Firestore REST-тэй бүтэн урсгал, архитектур, rules, мэдлэг, admin). Сүлжээ, `npm install` шаардахгүй. Бодит Meta-тай E2E нь
+хуурамч Firestore REST-тэй бүтэн урсгал, архитектур, rules, мэдлэг, admin, сургалт, admin API/token). Сүлжээ, `npm install` шаардахгүй. Бодит Meta-тай E2E нь
 Meta апп (0-р үе шат) үүссэний дараа.
 
 ## Байршуулалт
