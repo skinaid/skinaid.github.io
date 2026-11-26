@@ -311,14 +311,37 @@ metrics дээр Verified 100% ойролцоо. Token-гүй хүсэлт та�
 илгээхгүй** — илгээх код (Send API) огт байхгүй (`tools/test/messenger-architecture.test.mjs` шалгана). Ажилтан Meta Inbox-оос
 өөрөө хариулж, admin → «Messenger AI» → «Ноорог»-д «Зөв / Засвартай / Буруу» гэж үнэлнэ. Эмнэлгийн асуулт, гаж нөлөө, зураг/видео/дуу,
 гомдол, мөнгө буцаалт, хөнгөлөлт, жирэмсэн/хүүхэд үргэлж «Ажилтанд шилжүүлнэ» (код шийднэ, AI биш — `api/_lib/social/policy.js`).
-Дараагийн үе шат: 2 = сургалт ба eval (доорх «Сургалт»), 3 = туслах → зөвшөөрсөн сэдвээр автомат (эзэмшигчийн шийдвэрээр).
+Дараагийн үе шат: 2 = сургалт ба eval (доорх «Сургалт»), 3 = зөвшөөрсөн сэдвээр автомат (доорх ««Автомат» горим»).
+
+**3-р үе шат — «Автомат» горим (2026-11-26):** горимыг «Автомат» болгоход AI зөвшөөрсөн сэдэвт (чиглэл «Автомат боломжтой»)
+Messenger-т **шууд хариулна**; «Ажилтанд шилжүүлнэ» чиглэлд (эмнэлгийн асуулт, гаж нөлөө, гомдол, мөнгө, зураг/видео, AI-ийн
+алдаа, сарын хязгаар) тогтмол текстээр «ажилтанд дамжууллаа» гэж мэдэгдээд тэр ярианд **чимээгүй** болно (ажилтан хариулах хүртэл,
+эсвэл 12 цаг). «Хүн хянана» чиглэлд (хориотой хэллэг, эх сурвалжгүй) юу ч илгээхгүй — ноорог л.
+
+- **Илгээх цор ганц зам:** `api/_lib/outbound.js` → `sendGuarded()` → `api/_lib/social/meta-send.js` (`POST /me/messages`,
+  `messaging_type: RESPONSE`). Архитектурын тест: Send API-г зөвхөн `meta-send.js`, түүнийг зөвхөн `outbound.js` импортолно;
+  `outbound.js`-ийг `runtime.js` зөвхөн `pipeline.js`-д өгнө; агент, admin-ийн туршилт/eval, cron хэзээ ч илгээхгүй.
+- **Хамгаалалт (бүгд биелэх ёстой):** хүлээн авагч (PSID) зөвхөн webhook-ийн санах ойгоос — хаана ч хадгалагдахгүй тул cron /
+  гацсан event-ийн нөхөлт илгээхгүй; тохиргоог илгээхийн өмнө дахин уншина (горим «Автомат», яаралтай зогсоолтгүй, үзэгчид);
+  яриаг манай апп эзэмшсэн (standby биш), төлөв `bot`; сүүлийн мессежээс ≤ 23.5 цаг; ярианд өдөрт ≤ 20, нийт өдөрт ≤ 500;
+  `messenger_outbound/o_<event>`-ийг exists=false-оор эзэмшсэний дараа л илгээнэ (нэг мессежид хамгийн ихдээ НЭГ хариу; алдаа,
+  тасалдалд дахин илгээхгүй).
+- **Үзэгчид:** `autoAudience: test` (анхдагч) — зөвхөн `testThreads` (≤ 10 ярианы id; admin → «Ноорог» картын «Туршилтын акаунт
+  болгох»); `all` — бүх үйлчлүүлэгч. Туршилтын биш ярианд сүүдэр хэвээр.
+- **AI гэдгээ хэлнэ:** ботын эхний мессеж, 24 цагийн завсарлагын дараа, ажилтнаас буцахад «Би SkinAid-ийн AI туслах…»
+  (`disclosure.js`); хариу бүрийн доор «Ажилтантай ярих» quick reply.
+- **Ажилтныг таслахгүй:** амьд ярианд echo-г `strict` бодлогоор ангилна (тодорхойгүй echo = ажилтан → бот чимээгүй). Ботын
+  өөрийн илгээсэн мессежийг mid-ээр таньж, ярианд логик байрлалд нь тавина (`conversation-logic.js`).
+- **Бүгдэд нээхээс өмнө (эзэмшигч):** Meta Business Suite-ийн автомат хариуг (Instant reply, Away message, FAQ) унтраах;
+  ноорогт «Илгээгээгүй: яриаг өөр апп эзэмшиж байна» гарвал Business Suite → Тохиргоо → Conversation routing-д «SkinAid Messenger
+  AI»-г яриа удирдах апп болгох.
 
 ```
 Messenger → Meta → POST https://www.skinaid.mn/api/messenger
   X-Hub-Signature-256 (түүхий body) → event (давхардалгүй) → 200 → waitUntil:
   echo ангилал (манай бот / Meta-ийн автомат хариу / ажилтан) → зураг = LLM-гүй → нууцлах (утас, имэйл, РД)
   → мэдлэг (settings/site + settings/catalog + эмчилгээний хуудас + нийтэлсэн FAQ + жишээ) → Claude (claude-opus-5-5,
-  effort low) → бодлого → messenger_drafts
+  effort low) → бодлого → messenger_drafts → («Автомат», амьд яриа) outbound.sendGuarded → Meta Send API
 Өдөр бүр УБ 04:00: /api/cron/daily — гацсан event, хадгалах хугацаа, статус
 ```
 
@@ -326,7 +349,8 @@ Messenger → Meta → POST https://www.skinaid.mn/api/messenger
 |---|---|
 | `api/messenger.js`, `api/_lib/webhook.js` | GET verify (`META_VERIFY_TOKEN`), POST гарын үсэг (`META_APP_SECRET`), event хадгалах |
 | `api/_lib/pipeline.js`, `store.js` | Ярианы түгжээ, echo загвар, төлвийн машин, гацсан event нөхөх (2 мин), Firestore |
-| `api/_lib/agent.js`, `claude.js`, `knowledge.js` | Мэдлэг → prompt (кэштэй) → Claude (`fallbacks: "default"`) → бодлого → ноорог |
+| `api/_lib/agent.js`, `claude.js`, `knowledge.js` | Мэдлэг → prompt (кэштэй) → Claude (`fallbacks: "default"`) → бодлого → ноорог (+ илгээх санал) |
+| `api/_lib/outbound.js`, `social/meta-send.js` | «Автомат» горим: илгээх цор ганц зам (`sendGuarded`) ба Meta Send API |
 | `api/_lib/social/` | UB Beauty-ээс (skinaid/ubbeauty@1a43c95c) шилжүүлсэн цэвэр модулиуд (файл бүрийн толгойд эх сурвалж) |
 | `api/_lib/firestore.js`, `gcp-auth.js` | Firestore REST (firebase-admin-гүй), Google-ийн серверийн эрх (WIF / SA key) |
 | `admin/m-messenger.js` | «Ноорог» (үнэлгээ, «Жишээ болгох»), «Тохиргоо» (горим, яаралтай зогсоолт, сарын хязгаар, серверийн төлөв) |
@@ -346,7 +370,8 @@ Messenger → Meta → POST https://www.skinaid.mn/api/messenger
 
 **Хувийн мэдээлэл.** PSID хадгалахгүй (`PSID_SALT`-аар HMAC → `psidHash`). Текст ЗӨВХӨН нууцалсан. Зураг/видео/дууны зөвхөн төрөл
 (URL-гүй), LLM руу хэзээ ч явахгүй. Захиалгын (`bookings`) өгөгдөлд хүрэхгүй. `ai_runs`-д текст байхгүй (токен, зардал, хугацаа л).
-Хадгалах хугацаа (cron устгана): event 30, ярианы мессеж 180, ноорог 180, `ai_runs` 400, echo загвар 90 хоног; audit — хязгааргүй.
+Хадгалах хугацаа (cron устгана): event 30, ярианы мессеж 180, ноорог 180, илгээсэн мессежийн бүртгэл (`messenger_outbound`) 180,
+`ai_runs` 400, echo загвар 90 хоног; audit — хязгааргүй.
 
 **Firestore** (бүгдийг admin уншина; сервер IAM-аар бичнэ — rules серверт хамаарахгүй):
 `messenger_settings/main` (admin: горим off|shadow, killSwitch, сарын хязгаар — өөрчлөлт бүр `messenger_audit`-д нэг batch-д),
@@ -477,12 +502,15 @@ AI-д орохгүй). Сервер ≥ 1 минут тутам зөвхөн «�
 2. **Vercel → Settings → Environment Variables (Production):** `GCP_PROJECT_ID=skinaid-mn`, `GCP_PROJECT_NUMBER`,
    `GCP_SERVICE_ACCOUNT_EMAIL`, `GCP_WORKLOAD_IDENTITY_POOL_ID=vercel`, `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=vercel`,
    `ANTHROPIC_API_KEY`, `PSID_SALT` (≥ 32 санамсаргүй тэмдэгт), `CRON_SECRET` (≥ 16). Meta апп үүссэний дараа: `META_APP_SECRET`,
-   `META_VERIFY_TOKEN` (өөрөө зохиосон урт мөр), `META_APP_ID`, `META_PAGE_ID` (SkinAid пэйжийн id). `META_PAGE_TOKEN` 1-р үе шатанд
-   зөвхөн cron-ын token шалгалтад (заавал биш). Нууцыг git, чат, лог-д ХЭЗЭЭ Ч бүү бич. Env солисны дараа Redeploy.
+   `META_VERIFY_TOKEN` (өөрөө зохиосон урт мөр), `META_APP_ID`, `META_PAGE_ID` (SkinAid пэйжийн id). `META_PAGE_TOKEN` (Meta → Messenger
+   API Settings → пэйжийн «Generate token») — cron-ын token шалгалт ба «Автомат» горимын илгээлтэд (сүүдэрт заавал биш). Нууцыг git, чат, лог-д ХЭЗЭЭ Ч бүү бич. Env солисны дараа Redeploy.
 3. **Rules нийтлэх:** `firestore.rules`-ийг console → Firestore → Rules-д буулгаж Publish (доорх «Rules шалгах»).
 4. **Meta developer апп → Webhooks:** Callback URL `https://www.skinaid.mn/api/messenger`, Verify token = `META_VERIFY_TOKEN`,
    field: `messages`, `message_echoes`, `messaging_postbacks`, `messaging_referrals`, `messaging_handovers`, `standby`.
 5. **Admin → Messenger AI → Тохиргоо → «Сүүдэр»** → Хадгалах. «Серверийн төлөв»-д webhook-ийн сүүлийн цаг гарч эхэлнэ.
+6. **«Автомат» горим (туршилт):** «Серверийн төлөв»-д «Пэйжийн token (илгээхэд): хүчинтэй» байгааг шалгана → өөрийн Facebook
+   акаунтаар пэйж рүү бичнэ → «Ноорог» таб, тэр ноорогийн «Туршилтын акаунт болгох» → Тохиргоо → «Автомат» + «Зөвхөн туршилтын
+   акаунт» → Хадгалах. Дахин бичихэд AI шууд хариулж, ноорогт «✓ Үйлчлүүлэгчид илгээсэн» гарна.
 
 **Яаралтай зогсоох:** admin → Messenger AI → «Яаралтай зогсоох» (нэг товч; мессеж хадгалагдахаа больж, AI ажиллахгүй). Бүрэн
 салгах: Vercel env-ээс `ANTHROPIC_API_KEY`-г устгах эсвэл Meta аппын webhook-ийг унтраах.

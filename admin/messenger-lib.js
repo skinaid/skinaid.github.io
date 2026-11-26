@@ -121,6 +121,8 @@ export const SEND_REASON_TEXT = {
   error: 'серверийн алдаа',
 };
 export const sendReasonText = (code) => SEND_REASON_TEXT[String(code ?? '')] || String(code ?? '');
+/** Илгээсэн мессежийн төрөл (өдрийн нэгтгэл sent.<төрөл> — api/_lib/outbound.js SEND_KINDS) */
+export const SEND_KIND_TEXT = { reply: 'AI-ийн хариу', handoff: '«ажилтанд дамжууллаа» мэдэгдэл', media: 'зураг/файлын мэдэгдэл' };
 
 /**
  * Ноорогийн илгээлтийн төлөв → { tone, text } (картын тэмдэг); илгээх оролдлого хийгээгүй (сүүдэр, хуучин ноорог) = null.
@@ -429,18 +431,23 @@ export function lastDays(n, nowMs = Date.now()) {
 const addMap = (into, m) => { for (const [k, v] of Object.entries(m && typeof m === 'object' ? m : {})) into[k] = (into[k] || 0) + (Number(v) || 0); };
 /** Өдрийн баримтууд (id → data) → нийт ба өдөр бүрийн ноорог */
 export function aggregateDays(byDay, days) {
-  const t = { drafts: 0, routes: {}, intents: {}, runs: {}, echo: {}, costMicroUsd: 0, adminCostMicroUsd: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, tests: 0, evals: 0 };
+  const t = { drafts: 0, routes: {}, intents: {}, runs: {}, echo: {}, sent: {}, sendSkip: {}, sendFail: {}, costMicroUsd: 0, adminCostMicroUsd: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, tests: 0, evals: 0 };
   const series = [];
   for (const day of days) {
     const d = byDay[day] || {};
     series.push({ day, drafts: Number(d.drafts) || 0 });
     t.drafts += Number(d.drafts) || 0;
-    for (const k of ['routes', 'intents', 'runs', 'echo']) addMap(t[k], d[k]);
+    for (const k of ['routes', 'intents', 'runs', 'echo', 'sent', 'sendSkip', 'sendFail']) addMap(t[k], d[k]);
     for (const k of ['costMicroUsd', 'adminCostMicroUsd', 'inputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'tests', 'evals']) t[k] += Number(d[k]) || 0;
   }
   const denom = t.cacheReadTokens + t.inputTokens + t.cacheWriteTokens;
   t.cacheHit = denom ? t.cacheReadTokens / denom : null;
   t.aiErrors = (t.runs.error || 0) + (t.runs.refusal || 0);
+  // «Автомат» горимын илгээлт (api/_lib/store.js finishOutbound / markSendSkipped-ийн өдрийн нэгтгэл)
+  const sum = (m) => Object.values(m).reduce((n, v) => n + (Number(v) || 0), 0);
+  t.sentTotal = sum(t.sent);
+  t.sendSkipTotal = sum(t.sendSkip);
+  t.sendFailTotal = sum(t.sendFail);
   return { totals: t, series };
 }
 

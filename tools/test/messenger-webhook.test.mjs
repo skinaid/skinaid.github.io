@@ -252,9 +252,11 @@ test("манай аппын echo (META_APP_ID) = ботын мессеж, төл
   const take = plan(conv0, [ev("t", "handover", T, { handover: "take" }), ev("u", "message", T + 1, { text: "Сайн уу" })]);
   assert.equal(take.conversation.state, "human");
   assert.deepEqual(take.action, { type: "none", reason: "human_active" });
-  // standby (Page Inbox яриаг эзэмшиж байна) — сүүдэр горимд ноорог бичсээр (юу ч илгээхгүй; 3-р үе шат хаана)
+  // standby (Page Inbox яриаг эзэмшиж байна) — ноорог бичсээр; action.standby = true (outbound.js илгээхгүй)
   const sb = plan(conv0, [ev("s", "message", T, { text: "Сайн уу", standby: true })]);
-  assert.deepEqual(sb.action, { type: "agent", replyToEventId: "s" });
+  assert.deepEqual(sb.action, { type: "agent", replyToEventId: "s", standby: true });
+  // standby биш мессежид талбар огт байхгүй
+  assert.deepEqual(plan(conv0, [ev("n", "message", T, { text: "Сайн уу" })]).action, { type: "agent", replyToEventId: "n" });
   const ref = plan(conv0, [ev("r", "referral", T, { referral: { source: "SHORTLINK", ref: "x" } })]);
   assert.deepEqual(ref.action, { type: "none", reason: "no_user_message" });
   assert.equal(ref.conversation.referral.ref, "x");

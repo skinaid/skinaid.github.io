@@ -7,7 +7,7 @@
    ========================================================================== */
 import { collection, query, where, orderBy, limit, getDocs, getDoc, doc, documentId } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, errText, session, setStatus } from './core.js?v=2c361933';
-import { usd, lastDays, aggregateDays, ratingStats, AUTO_GATE, ECHO_TEXT, RUN_STATUS_TEXT, ubMonth } from './messenger-lib.js?v=2244b555';
+import { usd, lastDays, aggregateDays, ratingStats, AUTO_GATE, ECHO_TEXT, RUN_STATUS_TEXT, SEND_KIND_TEXT, sendReasonText, ubMonth } from './messenger-lib.js?v=29e907a6';
 
 const RATING_LIMIT = 500;
 const box = $('#msOverview'), status = $('#msOvStatus'), chips = $('#msOvChips');
@@ -80,13 +80,18 @@ function render(agg, r) {
       ${tile('«Автомат боломжтой» — шууд эсвэл бага засвар', pct(r.gate.share), `${Number(r.auto.rated)} үнэлгээ · зорилт ≥ ${Math.round(AUTO_GATE.share * 100)}% ${gateHtml(r)}`)}
       ${tile(`AI хариуны зардал (${days} хоног)`, esc(usd(t.costMicroUsd)), `Туршилт, eval ${esc(usd(t.adminCostMicroUsd))} · нийт ${esc(usd(total))}${usage && settings ? ` · энэ сар бүгд ${esc(usd(usage.costMicroUsd))} / $${esc(String(settings.monthlyCostCapUsd))}` : ''}`)}
       ${tile('AI алдаа, татгалзал', Number(t.aiErrors), Object.entries(t.runs).map(([k, v]) => `${esc(RUN_STATUS_TEXT[k] || k)} ${Number(v)}`).join(' · ') || '—')}
+      ${tile('Үйлчлүүлэгчид илгээсэн («Автомат»)', Number(t.sentTotal), [
+        ...Object.entries(t.sent).map(([k, v]) => `${esc(SEND_KIND_TEXT[k] || other(k))} ${Number(v)}`),
+        t.sendFailTotal ? `илгээж чадаагүй ${Number(t.sendFailTotal)} (${Object.entries(t.sendFail).map(([k, v]) => `${esc(sendReasonText(k))} ${Number(v)}`).join(', ')})` : '',
+        t.sendSkipTotal ? `илгээгээгүй ${Number(t.sendSkipTotal)} (${Object.entries(t.sendSkip).map(([k, v]) => `${esc(sendReasonText(k))} ${Number(v)}`).join(', ')})` : '',
+      ].filter(Boolean).join(' · ') || 'Хугацаанд юу ч илгээгээгүй')}
       ${tile('Кэшээс уншсан', pct(t.cacheHit), 'Давтагдах заавар, мэдлэгийг кэшээс уншсан хувь — өндөр бол хямд')}
     </dl>
     <div class="ms-ov-grid">
       <section class="panel"><h3 class="ms-sub">Өдөр бүрийн ноорог</h3>${agg.series.length ? daily(agg.series) : ''}</section>
       <section class="panel"><h3 class="ms-sub">Чиглэл (код шийдсэн)</h3>${routeEntries.length ? bars(routeEntries, (k) => ROUTE_LABEL[k] || other(k), t.drafts) : '<p class="muted">Мэдээлэл алга.</p>'}</section>
       <section class="panel"><h3 class="ms-sub">Сэдэв (эхний 8)</h3>${intentEntries.length ? bars(intentEntries, (k) => INTENT_LABEL[k] || other(k), t.drafts) : '<p class="muted">Мэдээлэл алга.</p>'}</section>
-      <section class="panel"><h3 class="ms-sub">Пэйжийн хариу хэнийх вэ</h3>${echoEntries.length ? bars(echoEntries, (k) => ECHO_TEXT[k] || other(k)) : '<p class="muted">Хугацаанд пэйжээс хариу илгээгдээгүй.</p>'}<p class="muted ms-small">3-р үе шатнаас өмнө «Meta автомат» гэж андуурсан ажилтны хариуг шалгана (ажилтан ≤ 15 с-д хариулбал автомат гэж тоологддог).</p></section>
+      <section class="panel"><h3 class="ms-sub">Пэйжийн хариу хэнийх вэ</h3>${echoEntries.length ? bars(echoEntries, (k) => ECHO_TEXT[k] || other(k)) : '<p class="muted">Хугацаанд пэйжээс хариу илгээгдээгүй.</p>'}<p class="muted ms-small">«Meta автомат» гэж андуурсан ажилтны хариуг шалгана (сүүдэрт ажилтан ≤ 15 с-д, «Автомат» горимын амьд ярианд ≤ 8 с-д хариулбал автомат гэж тоологддог).</p></section>
     </div>
     <p class="muted ms-small">Өдрийн нэгтгэл энэ хувилбараас (2026-11-27) хойш тоологдоно. Хугацаа = Улаанбаатарын ${days} хуанлийн өдөр (өнөөдрийг оруулаад); үнэлгээ = энэ хугацаанд «Ноорог»-т үнэлсэн ноорог.</p>`;
 }

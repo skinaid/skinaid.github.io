@@ -3,14 +3,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as A from '../../admin/messenger-lib.js';
-import { SOCIAL_MODE_TEXT, SOCIAL_MODES, SOCIAL_RATING_TEXT, SOCIAL_RATINGS, SOCIAL_ROUTES } from '../../api/_lib/social/labels.js';
-import { normalizeSettings as serverNormalize, parseSocialCaps, SOCIAL_CAP_LIMITS, SOCIAL_DEFAULTS } from '../../api/_lib/social/settings-logic.js';
+import { SEND_REASON_TEXT, SOCIAL_AUDIENCE_TEXT, SOCIAL_AUDIENCES, SOCIAL_MODE_TEXT, SOCIAL_MODES, SOCIAL_RATING_TEXT, SOCIAL_RATINGS, SOCIAL_ROUTES, TEST_THREADS_MAX } from '../../api/_lib/social/labels.js';
+import { isLive, normalizeSettings as serverNormalize, parseSocialCaps, SOCIAL_CAP_LIMITS, SOCIAL_DEFAULTS } from '../../api/_lib/social/settings-logic.js';
+import { SEND_KINDS } from '../../api/_lib/outbound.js';
 import { configStatus } from '../../api/_lib/config.js';
 import { ubMonth as serverMonth } from '../../api/_lib/store.js';
 
 test('admin ↔ сервер: горим, үнэлгээ, route, таг, анхдагч ижил', () => {
   assert.deepEqual(A.MODES.map((m) => m.key), [...SOCIAL_MODES]);
   for (const m of A.MODES) assert.deepEqual({ label: m.label, hint: m.hint }, SOCIAL_MODE_TEXT[m.key]);
+  // «Автомат» горим: үзэгчид, туршилтын акаунтын дээд тоо, илгээлтийн шалтгааны текст = сервер
+  assert.deepEqual(A.AUDIENCES.map((a) => a.key), [...SOCIAL_AUDIENCES]);
+  for (const a of A.AUDIENCES) assert.deepEqual({ label: a.label, hint: a.hint }, SOCIAL_AUDIENCE_TEXT[a.key]);
+  assert.equal(A.TEST_THREADS_MAX, TEST_THREADS_MAX);
+  assert.deepEqual(A.SEND_REASON_TEXT, { ...SEND_REASON_TEXT });
+  assert.deepEqual(Object.keys(A.SEND_KIND_TEXT).sort(), [...SEND_KINDS].sort());
   assert.deepEqual(A.RATINGS.map((r) => r.key), [...SOCIAL_RATINGS]);
   for (const r of A.RATINGS) assert.equal(r.label, SOCIAL_RATING_TEXT[r.key]);
   assert.deepEqual(Object.keys(A.ROUTE_TONE).sort(), [...SOCIAL_ROUTES].sort());
@@ -23,9 +30,14 @@ test('admin ↔ сервер: горим, үнэлгээ, route, таг, анх�
 });
 
 test('admin: normalizeSettings, parseCaps = серверийнх (ижил оролт → ижил гаралт)', () => {
-  for (const d of [null, {}, { mode: 'shadow' }, { mode: 'shadow', killSwitch: true }, { mode: 'x', killSwitch: 'y', monthlyRunCap: 5.5, monthlyCostCapUsd: 2000 }, { mode: 'shadow', monthlyRunCap: 10, monthlyCostCapUsd: 1.25 }]) {
+  const H = 'c'.repeat(64);
+  for (const d of [null, {}, { mode: 'shadow' }, { mode: 'shadow', killSwitch: true }, { mode: 'x', killSwitch: 'y', monthlyRunCap: 5.5, monthlyCostCapUsd: 2000 }, { mode: 'shadow', monthlyRunCap: 10, monthlyCostCapUsd: 1.25 },
+    { mode: 'auto' }, { mode: 'auto', autoAudience: 'all' }, { mode: 'auto', autoAudience: 'x', testThreads: [H, H, 'bad', 7] }, { mode: 'auto', testThreads: 'x' },
+    { mode: 'auto', killSwitch: true, autoAudience: 'all', testThreads: Array.from({ length: 12 }, (_, i) => i.toString(16).padStart(64, '0')) }]) {
     const s = serverNormalize(d);
-    assert.deepEqual(A.normalizeSettings(d), { mode: s.mode, killSwitch: s.killSwitch, monthlyRunCap: s.monthlyRunCap, monthlyCostCapUsd: s.monthlyCostCapUsd }, JSON.stringify(d));
+    assert.deepEqual(A.normalizeSettings(d), { mode: s.mode, killSwitch: s.killSwitch, monthlyRunCap: s.monthlyRunCap, monthlyCostCapUsd: s.monthlyCostCapUsd, autoAudience: s.autoAudience, testThreads: s.testThreads }, JSON.stringify(d));
+    // «Амьд яриа»-ны тодорхойлолт admin ба серверт ИЖИЛ (тууз, картын тэмдэг худал хэлэхгүй)
+    for (const t of [H, 'd'.repeat(64), 'bad']) assert.equal(A.isLiveThread(A.normalizeSettings(d), t), isLive(s, t), `${JSON.stringify(d)} ${t.slice(0, 3)}`);
   }
   for (const [r, u] of [['3000', '12,5'], ['3000', '1,000'], ['', ''], ['1,000', '$12.5'], ['100001', '1'], ['1', '1000.5'], ['-1', '1'], ['abc', '1'], ['0', '0']]) {
     const srv = parseSocialCaps(r, u);

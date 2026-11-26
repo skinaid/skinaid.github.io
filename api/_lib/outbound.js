@@ -3,8 +3,8 @@
  *
  * Архитектурын дүрэм (tools/test/messenger-architecture.test.mjs):
  *   · Meta-ийн Send API-г зөвхөн social/meta-send.js дуудна; meta-send.js-ийг ЗӨВХӨН энэ файл импортолно.
- *   · Энэ файлыг ЗӨВХӨН pipeline.js (webhook-ийн боловсруулалт) ба runtime.js (холболт) импортолно. Агент (agent.js),
- *     admin-ийн туршилт/eval (admin-api.js), cron хэзээ ч илгээхгүй.
+ *   · Энэ файлыг ЗӨВХӨН runtime.js (холболт) импортолж, ЗӨВХӨН pipeline-д өгнө; `sendGuarded`-ийг ЗӨВХӨН pipeline.js
+ *     (webhook-ийн боловсруулалт) дуудна. Агент (agent.js), admin-ийн туршилт/eval (admin-api.js), cron хэзээ ч илгээхгүй.
  *
  * Илгээх нөхцөл — БҮГД биелсэн үед л (аль нэг нь үгүй = илгээхгүй, шалтгааны кодтой; fail-closed):
  *   1. `recipient` (PSID) байгаа — зөвхөн webhook-ийн санах ойгоос; хаана ч хадгалагдахгүй, логлогдохгүй. Cron / гацсан
