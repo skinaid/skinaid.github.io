@@ -11,12 +11,12 @@
    ========================================================================== */
 import { collection, query, limit, getDocs, doc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, DEFAULTS } from './core.js?v=2c361933';
-import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=5acdb312';
+import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=8848d02a';
 import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
   exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, apiErrorText, EXCLUDE_TEXT, usd3,
   kbBudget, exampleBudget, KB_BUDGET,
-} from './messenger-lib.js?v=93f1be2b';
+} from './messenger-lib.js?v=b1c66c99';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');
@@ -66,8 +66,8 @@ async function api(action, payload = {}) {
   } catch (_) { throw codeErr('network'); }
   let j = null;
   try { j = await res.json(); } catch (_) { j = null; }
-  // JSON биш хариу (GitHub Pages / localhost / өөр сервер) = функц энэ хаяг дээр алга
-  if (!j || typeof j !== 'object' || (!j.ok && typeof j.error !== 'string')) throw codeErr('no_server');
+  // JSON биш хариу: 404/405/501 (GitHub Pages, localhost) = функц энэ хаяг дээр алга; бусад (504 timeout г.м.) = серверийн алдаа
+  if (!j || typeof j !== 'object' || (!j.ok && typeof j.error !== 'string')) throw codeErr([404, 405, 501].includes(res.status) ? 'no_server' : 'server_error');
   if (!res.ok || !j.ok) throw codeErr(j.error, j);
   return j;
 }
@@ -86,29 +86,39 @@ async function commitWithRev(ops) {
 }
 
 /* ---------- Ачаалах ---------- */
-async function loadCol(name, into) {
-  const snap = await getDocs(query(collection(db, name), limit(READ_LIMIT)));
-  into.clear();
-  snap.docs.forEach((s) => { if (s.id !== KB_REV_ID) into.set(s.id, { id: s.id, ...s.data() }); });
+/** Баримтуудыг уншина (тэмдэг `_rev`-ийг тооцохгүй — +1); Map-ийг дуудагч generation шалгасны ДАРАА л дүүргэнэ */
+async function readCol(name) {
+  const snap = await getDocs(query(collection(db, name), limit(READ_LIMIT + 1)));
+  return snap.docs.filter((s) => s.id !== KB_REV_ID).slice(0, READ_LIMIT).map((s) => ({ id: s.id, ...s.data() }));
 }
+const fill = (into, rows) => { into.clear(); rows.forEach((r) => into.set(r.id, r)); };
 /** Жишээний жагсаалт (ноорогийн карт «Жишээнд орсон»-ыг харуулахад ч) — нэг удаа */
 export function loadExamples() {
   if (exReady) return Promise.resolve();
   if (loadingEx) return loadingEx;
   const g = gen;
-  loadingEx = loadCol('messenger_examples', ex)
-    .then(() => { if (!alive(g)) return; exReady = true; renderEx(); syncOpeners(); deps.onExamplesChange(); })
-    .finally(() => { loadingEx = null; });
-  return loadingEx;
+  const p = readCol('messenger_examples')
+    .then((rows) => { if (!alive(g)) return; fill(ex, rows); exReady = true; renderEx(); syncOpeners(); deps.onExamplesChange(); })
+    .finally(() => { if (loadingEx === p) loadingEx = null; });
+  loadingEx = p;
+  return p;
 }
 function loadKb() {
   if (kbReady) return Promise.resolve();
   if (loadingKb) return loadingKb;
   const g = gen;
-  loadingKb = loadCol('messenger_kb', kb)
-    .then(() => { if (!alive(g)) return; kbReady = true; renderKb(); syncOpeners(); })
-    .finally(() => { loadingKb = null; });
-  return loadingKb;
+  const p = readCol('messenger_kb')
+    .then(async (rows) => {
+      // 100-аас олон бичлэгтэй бол «Брэнд дуу хоолой» (id-аар сүүлд эрэмбэлэгддэг) жагсаалтаас гарч болно — тусад нь (1 read)
+      if (rows.length >= READ_LIMIT && !rows.some((r) => r.id === KB_VOICE_ID)) {
+        const v = await getDoc(doc(db, 'messenger_kb', KB_VOICE_ID));
+        if (v.exists()) rows = [...rows, { id: KB_VOICE_ID, ...v.data() }];
+      }
+      if (!alive(g)) return; fill(kb, rows); kbReady = true; renderKb(); syncOpeners();
+    })
+    .finally(() => { if (loadingKb === p) loadingKb = null; });
+  loadingKb = p;
+  return p;
 }
 function load() {
   const g = gen;
@@ -367,6 +377,7 @@ async function delKb(id, btn) {
     if (kbEdit && kbEdit.id === id) { kbEdit = null; kbForm.hidden = true; }
     renderKb();
     snack(`«${title}» устгагдлаа`);
+    setBusy('');   // товчийг идэвхжүүлээд фокус (идэвхгүй товч фокус авдаггүй)
     btnKbNew.focus();
   } catch (e) {
     if (!alive(g)) return;
@@ -533,6 +544,7 @@ async function delEx(id, btn) {
     renderEx();
     deps.onExamplesChange();
     snack('Жишээ устгагдлаа');
+    setBusy('');
     btnExNew.focus();
   } catch (e) {
     if (!alive(g)) return;
@@ -578,10 +590,12 @@ export async function exampleFromDraftAction(d, opener) {
   }
   const state = exampleState(d, cur);
   const notice = state === 'stale'
-    ? 'Ноорогийн үнэлгээ өөрчлөгдсөн тул жишээг шинэ үнэлгээгээр бөглөлөө. Нэр, нас, эрүүл мэндийн хувийн мэдээллийг арилгаад хадгална уу.'
+    ? 'Ноорогийн үнэлгээ өөрчлөгдсөн тул жишээний төрөл, хариуг шинэ үнэлгээгээр бөглөлөө (асуулт нь жишээнд хадгалсан хэлбэрээрээ). Хувийн мэдээлэл үлдээгүйг шалгаад хадгална уу.'
     : 'Үйлчлүүлэгчийн бодит мессеж — нэр, нас, эрүүл мэндийн хувийн мэдээллийг арилгаад хадгална уу. Жишээ AI-ийн БҮХ ярианд ашиглагдана.';
-  if (state === 'same') openEx(id, { opener });
-  else openEx(cur ? id : null, { newId: id, prefill: v, notice, opener });
+  if (state === 'same') { openEx(id, { opener }); return; }
+  // Хуучирсан: асуултыг жишээнд аль хэдийн (нэргүй болгосон) хэлбэрээр нь үлдээж, зөвхөн төрөл/хариу/тайлбарыг шинэ үнэлгээгээр
+  const prefill = state === 'stale' && cur ? { ...v, userText: cur.userText || v.userText } : v;
+  openEx(cur ? id : null, { newId: id, prefill, notice, opener });
 }
 /** «Жишээнд орсон» карт → засах */
 export function editExample(id, opener) { openEx(id, { opener }); }
@@ -661,6 +675,7 @@ export function teardown() {
   clearErrors(kbForm); clearErrors(exForm);
   kbList.innerHTML = ''; exList.innerHTML = '';
   tryText.value = ''; tryDrafts.checked = false; knowDrafts.checked = false;
+  kbTitle.value = ''; kbBody.value = ''; exUser.value = ''; exReply.value = ''; exNote.value = '';
   tryText.removeAttribute('aria-invalid');
   refreshCounters(tryForm);
   tryOut.innerHTML = ''; knowOut.innerHTML = '';

@@ -35,8 +35,9 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMe
 
 export const CATALOG_LIMITS = Object.freeze({ services: 80, packages: 30, descriptionChars: 200 });
 /** Мэдлэгийн (FAQ) бичлэг, эмчилгээний хуудас, брэнд дуу хоолойн хязгаар — prompt-ийн хэмжээ (кэштэй ч) хяналттай */
-// entryChars = гарчиг (≤ 120) + « — » + агуулга (admin ≤ 1500) — admin-ий хязгаарт багтсан бичлэг тасрахгүй
-export const KB_LIMITS = Object.freeze({ entries: 60, entryChars: 1700, totalChars: 24_000, voiceChars: 1500 });
+// entryChars = гарчиг (≤ 120) + « — » + агуулга (admin ≤ 1500) + мөр шилжилт → « · » (+2 тэмдэгт) — admin-ий хязгаарт
+// багтсан бичлэг ихэнхдээ тасрахгүй (тасарвал «AI-д юу орж байна»-д харагдана)
+export const KB_LIMITS = Object.freeze({ entries: 60, entryChars: 1900, totalChars: 24_000, voiceChars: 1700 });
 export const PAGE_LIMITS = Object.freeze({ pages: 40, pageChars: 900, totalChars: 20_000 });
 
 /** 50000 → «50,000» */
@@ -44,10 +45,11 @@ export function groupThousands(n) {
   return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-/** Нууцалсны дараа ч PII үлдсэн бол хоосон (баримтыг бүхэлд нь хасна — LLM руу явахгүй) */
+/** Нууцалсны дараа ч PII үлдсэн бол хоосон (баримтыг бүхэлд нь хасна — LLM руу явахгүй). Удирдлагын тэмдэгтийг хасаж,
+ *  тасалсан ЭЦСИЙН текстийг JSON хэлбэрээр ч шалгана (аудит 2026-11-27: каталогийн нэг талбар бүх ноорогийг зогсоож болох байв). */
 function clean(text, max) {
-  const s = redactForLlm(String(text ?? '').replace(/\s+/g, ' ').trim()).slice(0, max);
-  return findPii(s).length ? '' : s;
+  const s = redactForLlm(String(text ?? '').replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim()).slice(0, max).trim();
+  return findPii(s).length || findPii(JSON.stringify(s)).length ? '' : s;
 }
 
 /** Хоосон зайг нэгтгэнэ (мөр шилжилтийг « · » болгож бүтцийг хадгална), удирдлагын тэмдэгтийг хасна */

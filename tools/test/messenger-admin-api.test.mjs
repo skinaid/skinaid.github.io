@@ -321,3 +321,19 @@ test('cron: ноорогоос үүссэн жишээ (x_) 180 хоногийн
   assert.match(src, /COL\.usage\]/);
   assert.match(src, /purgeDraftExamples/);
 });
+
+test('баталгаажуулалт: туршилтын сарын ЗАРДЛЫН хязгаар (сарын хязгаарын 20%); мэдлэг ачаалж чадаагүй → knowledge_error', async () => {
+  const code = async (res) => [res.status, (await res.json()).error];
+  const s = setup();
+  s.fake.seed(`messenger_usage/${ubMonth(new Date(NOW))}`, { runs: 0, testCostMicroUsd: 10_000_000 }, encodeFields);
+  assert.deepEqual(await code(await s.call({ action: 'test', text: 'Сайн уу' })), [429, 'month_tests'], '$50-ийн 20% = $10');
+  const k = setup();
+  // Мэдлэгийн толгойн уншилт (settings/site …) л унана — туршилтын тоо нөөцлөгдсөний дараа
+  k.fake.failNext.push({ match: (u, init) => u.endsWith(':batchGet') && String(init.body).includes('settings%2Fsite') === false && String(init.body).includes('settings/site'), throw: new TypeError('network down') });
+  assert.deepEqual(await code(await k.call({ action: 'test', text: 'Сайн уу' })), [500, 'knowledge_error']);
+  assert.equal(k.claudeCalls.length, 0);
+  // Амжилттай туршилт сарын туршилтын зардлыг тоолно
+  const ok = setup();
+  await ok.call({ action: 'test', text: 'Сайн уу' });
+  assert.ok(ok.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).testCostMicroUsd > 0);
+});

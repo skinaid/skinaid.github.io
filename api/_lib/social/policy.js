@@ -45,8 +45,10 @@ export const NO_SOURCE_REPLY_MAX = 400;
  */
 
 const PLACEHOLDER_RE = /\{[^{}\s]{1,30}\}/u;
-/** Үгүйсгэсэн өгүүлбэр — доторх хөнгөлөлт/үнэгүй/бэлэг гэх үг санал болохгүй */
-const NEGATED_RE = /(?<!\p{L})(?:байхгүй|үгүй|хийхгүй|хийдэггүй|олгохгүй|олгодоггүй|байдаггүй|боломжгүй|хамаарахгүй|үйлчлэхгүй)(?!\p{L})/iu;
+/** Үгүйсгэсэн өгүүлбэр — доторх хөнгөлөлт/үнэгүй/бэлэг гэх үг санал болохгүй: «биш», «үгүй», «…гүй» (өгөхгүй, өгдөггүй,
+ *  хөнгөлөлтгүй, байхгүй г.м.) — «үнэгүй» (= төлбөргүй) үгүйсгэл биш (аудит 2026-11-27) */
+const isNegated = (sentence) => (sentence.toLowerCase().match(/\p{L}+/gu) || [])
+  .some((w) => w === 'биш' || w === 'үгүй' || (w.endsWith('гүй') && !w.startsWith('үнэгүй')));
 
 /**
  * Иш татсан баримтаас зөвшөөрөгдөх дүн, хувь, санал (хөнгөлөлтийн үг)-ийн текст.
@@ -55,7 +57,7 @@ const NEGATED_RE = /(?<!\p{L})(?:байхгүй|үгүй|хийхгүй|хийд
 export function citedAllowance(facts, sourceIds) {
   const ids = new Set(sourceIds);
   const text = facts.filter((f) => ids.has(f.id)).map((f) => f.text).join('\n');
-  const offerText = text.split(/[.!?;\n·]+/u).filter((x) => !NEGATED_RE.test(x)).join('\n').toLowerCase();
+  const offerText = text.split(/[.!?;\n·]+/u).filter((x) => !isNegated(x)).join('\n').toLowerCase();
   return { amounts: moneyMentions(text), percents: percentMentions(text).map((n) => Math.round(n)), offerText };
 }
 

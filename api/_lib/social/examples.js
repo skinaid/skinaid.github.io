@@ -5,7 +5,8 @@
  * Зарчим:
  *   · Жишээ = хэв маяг, өнгө аясын үлгэр, БАРИМТ БИШ: доторх үнэ, хувь policy-ийн зөвшөөрсөн дүнд ОРОХГҮЙ (мэдлэг л).
  *   · Текстийг нууцална (redactForLlm) — ноорогоос үүссэн жишээний асуулт аль хэдийн нууцлагдсан, гараар бичсэнийг давхар.
- *   · Дараалал = id (кэш тогтвортой), хязгаартай; хасагдсаныг шалтгаантай буцаана (admin «Prompt-д юу орж байна»).
+ *   · Сонголт: ШИНЭ нь эхэнд (дуудагч updatedAt-аар эрэмбэлж өгнө — store.readKnowledgeLists), хязгаартай; prompt-ийн дараалал
+ *     = id (кэш тогтвортой); хасагдсаныг шалтгаантай буцаана (admin «AI-д юу орж байна»).
  */
 import { findPii, redactForLlm } from '../guardrails.js';
 
@@ -30,8 +31,9 @@ export function buildExamples(rows) {
   /** @type {ExcludedExample[]} */
   const excluded = [];
   let total = 0;
-  const sorted = [...(rows || [])].filter((r) => r && typeof r.id === 'string').sort((a, b) => a.id.localeCompare(b.id));
-  for (const r of sorted) {
+  // Оролтын дараалал = сонголтын давуу эрэмбэ (шинэ нь эхэнд); гаралтыг id-аар эрэмбэлнэ
+  const ordered = [...(rows || [])].filter((r) => r && typeof r.id === 'string');
+  for (const r of ordered) {
     if (r.kind !== 'good' && r.kind !== 'bad') { excluded.push({ id: r.id, reason: 'invalid' }); continue; }
     const customer = text(r.userText, EXAMPLE_LIMITS.customerChars);
     const reply = text(r.reply, EXAMPLE_LIMITS.replyChars);
@@ -46,5 +48,6 @@ export function buildExamples(rows) {
     total += size;
     items.push({ id: r.id, kind: r.kind, customer, reply, why });
   }
+  items.sort((a, b) => a.id.localeCompare(b.id));
   return { items, excluded };
 }

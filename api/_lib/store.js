@@ -32,6 +32,8 @@ export const KNOWLEDGE_READ_LIMIT = Object.freeze({ kb: 70, examples: 40, adminK
 /** Admin-ийн «Туршилтын асуулт»: өдөрт (messenger_usage/<УБ өдөр>.tests) ба сард (сарын AI хязгаарын 20%, ≥ 100) */
 export const ADMIN_TESTS_PER_DAY = 100;
 export const adminTestsPerMonth = (settings) => Math.max(100, Math.floor((Number(settings?.monthlyRunCap) || 0) * 0.2));
+/** Туршилтын сарын зардлын хязгаар (микро-доллар) = сарын зардлын хязгаарын 20% — үлдсэнийг Messenger-ийн ноорогт */
+export const adminTestCostPerMonth = (settings) => Math.round((Number(settings?.monthlyCostCapUsd) || 0) * 1e6 * 0.2);
 /** Өдрийн тоологчийн хадгалах хугацаа (хоног) — cron устгана */
 const DAY_DOC_DAYS = 90;
 
@@ -335,7 +337,7 @@ export function createStore(fs, opt = {}) {
      * (≤ 4 оролдлого); сарын туршилтын тоо — зөөлөн хязгаар.
      * @returns {Promise<{ ok: true, dayTests: number } | { ok: false, reason: 'day_cap'|'month_tests'|'busy' }>}
      */
-    async reserveAdminTest({ month, day, dayMax, monthMax }) {
+    async reserveAdminTest({ month, day, dayMax, monthMax, monthCostMax = Infinity }) {
       const dayPath = `${COL.usage}/${day}`;
       const monthPath = `${COL.usage}/${month}`;
       for (let i = 0; i < 4; i++) {
@@ -343,7 +345,8 @@ export function createStore(fs, opt = {}) {
         const d = m.get(dayPath);
         const dayTests = Number(d?.data?.tests) || 0;
         if (dayTests >= dayMax) return { ok: false, reason: 'day_cap' };
-        if ((Number(m.get(monthPath)?.data?.tests) || 0) >= monthMax) return { ok: false, reason: 'month_tests' };
+        const mo = m.get(monthPath)?.data;
+        if ((Number(mo?.tests) || 0) >= monthMax || (Number(mo?.testCostMicroUsd) || 0) >= monthCostMax) return { ok: false, reason: 'month_tests' };
         const t = now();
         try {
           await fs.commit([
@@ -373,9 +376,11 @@ export function createStore(fs, opt = {}) {
         ...run, draftId: null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY),
       }, { exists: false })];
       if (run.billable) {
+        const cost = Math.max(0, Math.round(run.costMicroUsd || 0));
         writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
           mask: ['month', 'updatedAt'],
-          transforms: [transforms.increment('runs', 1), transforms.increment('costMicroUsd', Math.max(0, Math.round(run.costMicroUsd || 0)))],
+          // testCostMicroUsd — туршилтын сарын зардлын дэд хязгаарт (adminTestCostPerMonth)
+          transforms: [transforms.increment('runs', 1), transforms.increment('costMicroUsd', cost), transforms.increment('testCostMicroUsd', cost)],
         }));
       }
       await fs.commit(writes);

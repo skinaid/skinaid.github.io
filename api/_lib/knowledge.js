@@ -116,9 +116,9 @@ export function createKnowledge(store, { now = Date.now, log = (m) => console.wa
   /** admin-ийн кэшгүй уншилт: variant → { at, value } */
   const memo = new Map();
 
-  async function loadProd() {
+  async function loadProd(revalidate) {
     const t = now();
-    if (cache && t - cache.checkedAt < KNOWLEDGE_CHECK_MS) return cache.value;
+    if (!revalidate && cache && t - cache.checkedAt < KNOWLEDGE_CHECK_MS) return cache.value;
     if (cache && t - failedAt < KNOWLEDGE_MEMO_MS) return cache.value;
     try {
       const heads = await store.readKnowledgeHeads();
@@ -141,23 +141,25 @@ export function createKnowledge(store, { now = Date.now, log = (m) => console.wa
 
   return {
     /**
-     * @param {{ includeDrafts?: boolean, fresh?: boolean }} [opt]  includeDrafts — ноорог мэдлэгтэй (admin туршилт);
-     *   fresh — кэшгүй, ноорог бичлэгийг ч «ороогүй» гэж жагсаана (admin «AI-д юу орж байна»)
+     * @param {{ includeDrafts?: boolean, fresh?: boolean, revalidate?: boolean }} [opt]  includeDrafts — ноорог мэдлэгтэй
+     *   (admin туршилт); fresh — ноорог бичлэгийг ч «ороогүй» гэж жагсаана (admin «AI-д юу орж байна»); revalidate —
+     *   үйлдвэрлэлийн кэшийн толгойг заавал шалгана (admin-ий туршилт: сая хадгалсан мэдлэг шууд тусна)
      * @returns {Promise<ReturnType<typeof buildKnowledge>>}
      */
     async load(opt = {}) {
       const variant = opt.includeDrafts === true ? 'drafts' : opt.fresh === true ? 'fresh' : '';
       if (!variant) {
-        if (!inflight) inflight = loadProd().finally(() => { inflight = null; });
+        if (!inflight) inflight = loadProd(opt.revalidate === true).finally(() => { inflight = null; });
         return inflight;
       }
+      // Admin-ийн кэшгүй уншилт: толгой (4 read) өөрчлөгдөөгүй бөгөөд 30 с дотор бол өмнөхийг; үйлдвэрлэлийн кэшийг ХӨНДӨХГҮЙ
+      // (fresh нь бүх төлөвийн ≤ 100 бичлэг уншдаг — 100-аас олон бол нийтэлсэн нь хасагдаж болзошгүй)
+      const heads = await store.readKnowledgeHeads();
       const m = memo.get(variant);
-      if (m && now() - m.at < KNOWLEDGE_MEMO_MS) return m.value;
-      const [heads, lists] = await Promise.all([store.readKnowledgeHeads(), store.readKnowledgeLists({ includeDrafts: variant === 'drafts', all: true })]);
+      if (m && m.rev === heads.rev && now() - m.at < KNOWLEDGE_MEMO_MS) return m.value;
+      const lists = await store.readKnowledgeLists({ includeDrafts: variant === 'drafts', all: true });
       const value = buildKnowledge({ ...heads, ...lists }, { includeDrafts: variant === 'drafts' });
-      memo.set(variant, { at: now(), value });
-      // «fresh» = үйлдвэрлэлийн мэдлэгтэй ИЖИЛ (нийтэлсэн л) — кэшийг ч шинэчилнэ
-      if (variant === 'fresh') cache = { at: now(), checkedAt: now(), rev: heads.rev, value };
+      memo.set(variant, { at: now(), rev: heads.rev, value });
       return value;
     },
   };

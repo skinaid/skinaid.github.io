@@ -8,13 +8,13 @@
    ========================================================================== */
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
-import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=5acdb312';
-import * as bookings from './m-bookings.js?v=a603ffe0';
-import * as settings from './m-settings.js?v=81bb0ef9';
-import * as home from './m-home.js?v=7aa84f9f';
-import * as catalog from './m-catalog.js?v=c14391b5';
+import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=8848d02a';
+import * as bookings from './m-bookings.js?v=dff72c83';
+import * as settings from './m-settings.js?v=6c5e5012';
+import * as home from './m-home.js?v=3556773b';
+import * as catalog from './m-catalog.js?v=c4f719c6';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import * as messenger from './m-messenger.js?v=4fb73141';
+import * as messenger from './m-messenger.js?v=8252d845';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';

@@ -3,7 +3,7 @@
    ========================================================================== */
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, fmtDate, errText, session, setStatus, str } from './core.js?v=2c361933';
-import { registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, snack, attachCounters, refreshCounters, captureFocus } from './ui.js?v=5acdb312';
+import { registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, snack, attachCounters, refreshCounters, captureFocus } from './ui.js?v=8848d02a';
 
 const form = $('#siteForm'), status = $('#siteStatus'), errBox = $('#siteErr'), btn = $('#btnSaveSite');
 const loadBox = $('#siteLoad'), loadMsg = $('#siteLoadMsg');

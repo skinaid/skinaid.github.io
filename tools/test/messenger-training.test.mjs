@@ -270,3 +270,57 @@ test('аудит: имэйлийг РД-ээс өмнө нууцална («mail
   assert.equal(redactForLlm('bold.bat@mail.mn 99112233'), '[имэйл] [утас]');
   assert.equal(redactForLlm('РД: ИЙ12345678'), 'РД: [РД]');
 });
+
+// ── Баталгаажуулах аудит 2026-11-27 ───────────────────────────────────────
+
+test('баталгаажуулалт: каталог/сайтын талбарт удирдлагын тэмдэгт — тухайн талбарыг л хасна, бүх ноорогийг зогсоохгүй', () => {
+  const k = buildKnowledge({ site: { hours: 'Даваа\u000199 112' }, catalog: { services: [{ id: 'exam-1', n: 'Үзлэг', d: 'Тун\u000112000 мг', p: '₮50,000' }], packages: [] } }, { pages: [] });
+  assert.ok(k.catalog.facts.some((f) => f.id === 'service:exam-1'));
+  assert.deepEqual(findPii(JSON.stringify(k.catalog.facts)), []);
+});
+
+test('баталгаажуулалт: үгүйсгэл — «өгөхгүй», «хөнгөлөлтгүй», «… биш», «өгдөггүй» хөнгөлөлтийг зөвшөөрөхгүй; «үнэгүй» (төлбөргүй) зөвшөөрнө', () => {
+  for (const body of ['Бид хөнгөлөлт өгөхгүй.', 'Энэ багц хөнгөлөлтгүй.', 'Зөвлөгөө үнэгүй биш.', 'Бэлэг өгдөггүй.']) {
+    const c = buildSocialCatalog({ ...base, kb: [{ id: 'k_n', title: 'Бодлого', body }] });
+    const d = decideReply({
+      mode: 'shadow', conversationState: 'bot', userText: 'Асуулт', facts: c.facts,
+      proposal: { intent: 'promotion', confidence: 0.9, needs_human: false, reply: 'Танд хөнгөлөлт, бэлэг байгаа, зөвлөгөө үнэгүй.', source_ids: ['kb:k_n'], quick_replies: [], reason: '' },
+      knownSourceIds: c.facts.map((f) => f.id), allowedAmounts: c.allowedAmounts, allowedPercents: c.allowedPercents, knownNumbers: c.knownNumbers, knowledgeText: c.knowledgeText,
+    });
+    assert.ok(d.reasons.includes('invented_offer'), body);
+  }
+});
+
+test('баталгаажуулалт: жишээ — ШИНЭ нь сонгогдоно (оролт = шинэ нь эхэнд), prompt-д id-аар эрэмбэлсэн', () => {
+  const newest = Array.from({ length: 15 }, (_, i) => ({ id: `x_${String(i).padStart(2, '0')}`, kind: 'good', userText: 'шинэ', reply: 'а' }));
+  const old = Array.from({ length: 20 }, (_, i) => ({ id: `e_${String(i).padStart(2, '0')}`, kind: 'good', userText: 'хуучин', reply: 'б' }));
+  const r = buildExamples([...newest, ...old]);
+  assert.equal(r.items.length, EXAMPLE_LIMITS.items);
+  assert.equal(r.items.filter((x) => x.id.startsWith('x_')).length, 15, 'бүх шинэ жишээ орсон');
+  assert.deepEqual(r.items.map((x) => x.id), [...r.items.map((x) => x.id)].sort(), 'id-аар эрэмбэлсэн');
+});
+
+test('баталгаажуулалт: admin-ий «fresh» уншилт үйлдвэрлэлийн кэшийг өөрчлөхгүй; толгой өөрчлөгдвөл memo шинэчлэгдэнэ', async () => {
+  const { createKnowledge } = await import('../../api/_lib/knowledge.js');
+  let rev = 'r1';
+  let kbRows = [{ id: 'k_a', data: { title: 'А', body: 'а', status: 'published' } }];
+  const lists = { calls: 0 };
+  const store = {
+    readKnowledgeHeads: async () => ({ site: {}, catalog: { services: [], packages: [] }, voice: null, rev }),
+    readKnowledgeLists: async (o) => { lists.calls++; return { kb: o.all ? [] : kbRows, examples: [] }; },
+  };
+  const k = createKnowledge(store, { now: () => 0, log: () => {} });
+  const prod = await k.load();
+  assert.equal(prod.catalog.facts.filter((f) => f.kind === 'kb').length, 1);
+  await k.load({ fresh: true });   // хуурамч: all=true үед хоосон (100-аас олон бичлэгийн үзэгдэл)
+  assert.equal((await k.load()).catalog.facts.filter((f) => f.kind === 'kb').length, 1, 'үйлдвэрлэлийн кэш хэвээр');
+  const before = lists.calls;
+  await k.load({ fresh: true });
+  assert.equal(lists.calls, before, 'толгой ижил, 30 с дотор — дахин уншихгүй');
+  rev = 'r2';
+  await k.load({ fresh: true });
+  assert.equal(lists.calls, before + 1, 'толгой өөрчлөгдсөн — дахин уншина');
+  // revalidate: 60 с-ийн дотор ч толгойг шалгаж шинэ мэдлэгийг авна
+  kbRows = [...kbRows, { id: 'k_b', data: { title: 'Б', body: 'б', status: 'published' } }];
+  assert.equal((await k.load({ revalidate: true })).catalog.facts.filter((f) => f.kind === 'kb').length, 2);
+});

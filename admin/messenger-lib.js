@@ -110,7 +110,7 @@ export const KB_STATUS = [
   { key: 'published', label: 'Нийтэлсэн', hint: 'AI 1 минутын дотор ашиглаж эхэлнэ.' },
 ];
 /** Сервер prompt-д оруулах хэмжээ (api/_lib/social/catalog-safe.js KB_LIMITS, examples.js EXAMPLE_LIMITS — тест тулгана) */
-export const KB_BUDGET = { chars: 24000, entries: 60, entryChars: 1700 };
+export const KB_BUDGET = { chars: 24000, entries: 60, entryChars: 1900 };
 export const EX_BUDGET = { items: 30, customer: 500, reply: 600, why: 200, total: 12000 };
 export const EX_KINDS = [
   { key: 'good', label: 'Сайн жишээ', hint: 'AI ингэж хариулбал зөв.' },

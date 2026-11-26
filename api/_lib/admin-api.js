@@ -18,7 +18,7 @@ import { anthropicConfigured } from './config.js';
 import { AuthError, createTokenVerifier } from './admin-auth.js';
 import { readBody } from './webhook.js';
 import { redactForLlm } from './guardrails.js';
-import { ADMIN_TESTS_PER_DAY, adminTestsPerMonth, ubDay, ubMonth } from './store.js';
+import { ADMIN_TESTS_PER_DAY, adminTestCostPerMonth, adminTestsPerMonth, ubDay, ubMonth } from './store.js';
 import { capReached } from './agent.js';
 import { buildSocialRequest, SOCIAL_PROMPT_VERSION } from './social/prompt.js';
 import { describeError } from './errors.js';
@@ -68,6 +68,9 @@ export function createAdminHandler(deps) {
         return fail(500, 'knowledge_error');
       }
       const ids = (kind) => k.catalog.facts.filter((f) => f.kind === kind).map((f) => f.id);
+      // Жишээний блок давхар PII шалгалтаар хасагдсан бол (prompt.js) — орсон гэж бүү харуул
+      const examplesIn = req.context.examples > 0;
+      const excluded = examplesIn ? k.excluded : [...k.excluded, ...k.examples.map((e) => ({ id: `example:${e.id}`, kind: 'example', reason: 'pii' }))];
       return json({
         ok: true,
         knowledge: {
@@ -77,8 +80,8 @@ export function createAdminHandler(deps) {
           kb: ids('kb'),
           pages: ids('page'),
           voice: Boolean(k.catalog.voiceBrief),
-          examples: k.examples.map((e) => ({ id: e.id, kind: e.kind })),
-          excluded: k.excluded,
+          examples: examplesIn ? k.examples.map((e) => ({ id: e.id, kind: e.kind })) : [],
+          excluded,
           truncated: k.catalog.truncated,
           allowedAmounts: k.catalog.allowedAmounts,
           allowedPercents: k.catalog.allowedPercents,
@@ -113,9 +116,16 @@ export function createAdminHandler(deps) {
     if (capReached(await rt.store.readUsage(month), settings)) return fail(429, 'month_cap');
     // Claude-ийг дуудахаас ӨМНӨ тоолно (зэрэг хүсэлт, бүртгэл бичигдээгүй ч хязгаар ажиллана)
     const monthMax = adminTestsPerMonth(settings);
-    const r0 = await rt.store.reserveAdminTest({ month, day, dayMax: ADMIN_TESTS_PER_DAY, monthMax });
+    const r0 = await rt.store.reserveAdminTest({ month, day, dayMax: ADMIN_TESTS_PER_DAY, monthMax, monthCostMax: adminTestCostPerMonth(settings) });
     if (!r0.ok) return fail(429, r0.reason, { limit: r0.reason === 'month_tests' ? monthMax : ADMIN_TESTS_PER_DAY });
-    const k = await rt.knowledge.load(body.includeDrafts === true ? { includeDrafts: true } : {});
+    let k;
+    try {
+      // Ноорогтой эсвэл үйлдвэрлэлийн мэдлэг — толгойг заавал шалгана (сая хадгалсан мэдлэг шууд тусна)
+      k = await rt.knowledge.load(body.includeDrafts === true ? { includeDrafts: true } : { revalidate: true });
+    } catch (e) {
+      log(`[messenger] admin test: мэдлэг ачаалж чадсангүй: ${describeError(e)}`);
+      return fail(500, 'knowledge_error');
+    }
     if (clock() - started > TEST_START_BUDGET_MS) return fail(503, 'timeout');
     const r = await rt.agent.testDraft({ k, text: redactForLlm(raw) });
     try {

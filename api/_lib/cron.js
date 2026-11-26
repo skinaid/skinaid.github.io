@@ -54,7 +54,7 @@ export function createCronHandler(deps) {
         msgs += r.deleted;
       }
       out.purged.messages = msgs;
-      if (Date.now() < deadline - 3000) out.purged.draftExamples = await rt.store.purgeDraftExamples(200);
+      if (Date.now() < deadline - 3000) out.purged.draftExamples = await rt.store.purgeDraftExamples(500);
       const m = metaConfig(env);
       if (m.pageToken && m.pageId && Date.now() < deadline) {
         try {

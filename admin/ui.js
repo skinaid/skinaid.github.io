@@ -228,7 +228,10 @@ function ensureBar() {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const f = forms.get(currentView); if (!f || !session.user) return;
     if (b.dataset.act === 'save') { b.disabled = true; try { await f.save(); } finally { b.disabled = false; } }
-    else if (await dialog({ title: 'Өөрчлөлтийг хаях уу?', body: 'Хадгалаагүй өөрчлөлт алга болж, маягт сүүлд хадгалсан байдалдаа буцна.', confirm: 'Өөрчлөлтийг хаях', cancel: 'Үргэлжлүүлэн засах', danger: true })) { f.discard(); announce('Өөрчлөлтийг хаялаа.'); }
+    else if (await dialog({ title: 'Өөрчлөлтийг хаях уу?', body: 'Хадгалаагүй өөрчлөлт алга болж, маягт сүүлд хадгалсан байдалдаа буцна.', confirm: 'Өөрчлөлтийг хаях', cancel: 'Үргэлжлүүлэн засах', danger: true })) {
+      // discard() false буцаавал (жишээ нь хадгалалт явж байна) хаяагүй — «хаялаа» гэж бүү мэдэгд
+      if (f.discard() !== false) announce('Өөрчлөлтийг хаялаа.');
+    }
     // Мөр нуугдсан бол фокусыг маягтын өөрийн «Хадгалах» товч руу (body руу унахгүй)
     if (bar.hidden && (bar.contains(document.activeElement) || document.activeElement === document.body)) {
       const a = anchorsOf(f).find((x) => x.offsetParent !== null);
