@@ -20,6 +20,13 @@
 //   payment.amount = жинхэнэ үнэ (эсвэл тогтмол урьдчилгаа)
 // Давхар захиалга (API §2.3): ижил утсаар ИЖИЛ үйлчилгээнд дахин захиалбал 409 DUPLICATE_BOOKING (огноо, цаг, үйлчилгээ);
 //   «Тийм, дахин захиалах» → allow_duplicate: true-тай дахин илгээхэд захиалга үүснэ
+// Үзүүлэх ажилтан (API §2.1, UB Beauty 0167): serviceStaff-д бичсэн үйлчилгээнд ЗӨВХӨН тэр хүмүүс —
+//   «AHA 70% Химийн гуужуулалт» → 2 эмч, «Үрэвсэлт батганы нэг удаагийн эмчилгээ» → 2 гоо засалч,
+//   «Карбокситой нүүрний массаж» → 1 гоо засалч; бусад = тохируулаагүй (захиалга авдаг бүх ажилтан, ресепшн ч).
+//   GET /doctors?service_id= шүүнэ; бусад ажилтанд /availability, POST /bookings → 422 DOCTOR_UNAVAILABLE.
+//   Ажиллаж байхад солих: /__mock?staff=<service_id>:<doctor_id,doctor_id>  (хоосон = тохиргоог арилгах;
+//   байхгүй id = «хэн ч захиалга авдаггүй» → /services-ээс хасагдана)
+//   Ажилтан захиалга авахаа больсон (is_bookable = false): /__mock?unbook=<doctor_id>; буцаах: /__mock?rebook=<doctor_id>
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
@@ -36,6 +43,10 @@ const services = [
   // Эмнэлэг үнийг НУУСАН (UB Beauty 0212 «Үнийг нийтэд харуулах» унтраалттай): API price: null, price_hidden: true;
   // төлөх дүн (prepay) = жинхэнэ үнэ → зөвхөн payment.amount-д
   { id: '6f1c2a10-0000-4000-8000-000000000006', name: 'REJURAN Healer 2 мл', category: '03. Тарилга', duration_min: 60, price: 750000, price_max: null, hidden: true },
+  // Үзүүлэх ажилтантай (serviceStaff) — эзэмшигчийн 2 жишээ + ганц хүнтэй үйлчилгээ
+  { id: '6f1c2a10-0000-4000-8000-000000000007', name: 'AHA 70% Химийн гуужуулалт', category: '02. Батга, сорви', duration_min: 45, price: 120000, price_max: null },
+  { id: '6f1c2a10-0000-4000-8000-000000000008', name: 'Үрэвсэлт батганы нэг удаагийн эмчилгээ', category: '02. Батга, сорви', duration_min: 60, price: 90000, price_max: null },
+  { id: '6f1c2a10-0000-4000-8000-000000000009', name: 'Карбокситой нүүрний массаж', category: '05. Массаж', duration_min: 60, price: 70000, price_max: null },
 ];
 /** API-д гарах хэлбэр — нуусан үнэ null (UB Beauty src/lib/price-visibility.ts `withPublicPrice`) */
 const publicService = ({ hidden, ...s }) => (hidden ? { ...s, price: null, price_max: null, price_hidden: true } : { ...s, price_hidden: false });
@@ -44,7 +55,23 @@ const doctors = [
   { id: '7a2b3c40-0000-4000-8000-000000000001', name: 'Б.Сарнай', title: 'Арьсны эмч', days: [0, 1, 2, 3, 4], from: 10, to: 18 },
   { id: '7a2b3c40-0000-4000-8000-000000000002', name: 'Д.Энхжин', title: 'Гоо засалч', role: 'cosmetologist', days: [1, 2, 3, 4, 5], from: 11, to: 19 },
   { id: '7a2b3c40-0000-4000-8000-000000000003', name: 'Г.Тэмүүлэн', title: 'Арьсны эмч', days: [0, 2, 4], from: 14, to: 19 },
+  { id: '7a2b3c40-0000-4000-8000-000000000005', name: 'Ч.Номин', title: 'Гоо засалч', role: 'cosmetologist', days: [0, 2, 3, 5, 6], from: 10, to: 17 },
+  { id: '7a2b3c40-0000-4000-8000-000000000006', name: 'С.Сувд', title: 'Сувилагч', role: 'nurse', days: [0, 1, 2, 3, 4], from: 9, to: 13 },
 ];
+const D = (n) => `7a2b3c40-0000-4000-8000-00000000000${n}`;
+/** service_id → үзүүлэх ажилтны id-ууд (UB Beauty service_staff). Байхгүй = тохируулаагүй = бүх ажилтан. */
+const serviceStaff = new Map([
+  ['6f1c2a10-0000-4000-8000-000000000007', [D(1), D(3)]],
+  ['6f1c2a10-0000-4000-8000-000000000008', [D(2), D(5)]],
+  ['6f1c2a10-0000-4000-8000-000000000009', [D(2)]],
+]);
+const off = new Set();       // захиалга авдаггүй болсон ажилтан (/__mock?unbook=)
+const bookable = () => doctors.filter((d) => !off.has(d.id));
+const lc = (v) => String(v || '').toLowerCase();   // UB Beauty UUID-г жижиг үсгээр тулгадаг
+// UB Beauty service-staff-logic.ts-ийн хялбаршуулсан хуулбар
+const eligibleStaff = (serviceId) => { const m = serviceStaff.get(serviceId); return m ? bookable().filter((d) => m.includes(d.id)) : bookable(); };
+const staffAllowed = (serviceId, doctorId) => { const m = serviceStaff.get(serviceId); return !m || m.includes(lc(doctorId)); };
+const doctorView = (d) => ({ id: d.id, name: state.hideNames ? null : d.name, title: state.hideNames ? null : d.title, photo_url: null, staff_role: d.role || 'doctor' });
 const bookings = [];          // { id, doctor_id, service_id, phone, start, end, status, created, pay: { amount, status, checks, phone } | null, view }
 const WD = ['Ням', 'Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба'];
 
@@ -145,7 +172,14 @@ const server = createServer(async (req, res) => {
     if (q.has('pay')) { const b = bookings.find((x) => x.id === q.get('pay')); if (b && b.pay && b.status === 'pending_payment') { b.pay.status = 'paid'; b.status = 'confirmed'; } }
     if (q.has('expire')) { const b = bookings.find((x) => x.id === q.get('expire')); if (b && b.pay) b.created = Date.now() - state.holdSec * 1000 - 1000; }
     if (q.has('reset')) { bookings.length = 0; idem.clear(); }
-    return send(res, 200, { state, bookings }, origin);
+    if (q.has('unbook')) off.add(lc(q.get('unbook')));
+    if (q.has('rebook')) off.delete(lc(q.get('rebook')));
+    if (q.has('staff')) {
+      const [sid, ids = ''] = String(q.get('staff')).split(':');
+      const list = ids.split(',').map((x) => x.trim()).filter(Boolean);
+      if (list.length) serviceStaff.set(sid, list); else serviceStaff.delete(sid);
+    }
+    return send(res, 200, { state, bookings, serviceStaff: Object.fromEntries(serviceStaff), unbooked: [...off] }, origin);
   }
   const body = req.method === 'POST' ? await new Promise((r) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => r(b)); }) : '';
   await new Promise((r) => setTimeout(r, state.delay));
@@ -165,10 +199,17 @@ const server = createServer(async (req, res) => {
       },
     }, origin);
   }
-  if (req.method === 'GET' && path === '/services') return send(res, 200, { services: services.map(publicService) }, origin);
+  // Тохируулсан ч үзүүлэх ажилтан нь захиалга авдаггүй үйлчилгээ /services-д гарахгүй (API §2.1)
+  if (req.method === 'GET' && path === '/services') {
+    const staffed = bookable().length > 0;   // ажилтангүй эмнэлэг (эмнэлгийн түвшний захиалга) = бүх үйлчилгээ
+    return send(res, 200, { services: services.filter((s) => !staffed || eligibleStaff(s.id).length).map(publicService) }, origin);
+  }
   if (req.method === 'GET' && path === '/doctors') {
-    const list = doctors.map((d) => ({ id: d.id, name: state.hideNames ? null : d.name, title: state.hideNames ? null : d.title, photo_url: null, staff_role: d.role || 'doctor' }));
-    return send(res, 200, { doctors: list, doctor_required: true }, origin);
+    const sid = url.searchParams.get('service_id') || '';
+    if (sid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sid)) return fail(res, origin, 400, 'VALIDATION', 'service_id');
+    if (sid && !services.some((s) => s.id === sid.toLowerCase())) return fail(res, origin, 422, 'SERVICE_UNAVAILABLE');
+    const list = (sid ? eligibleStaff(sid.toLowerCase()) : bookable()).map(doctorView);
+    return send(res, 200, { doctors: list, doctor_required: bookable().length > 0, service_id: sid ? sid.toLowerCase() : null }, origin);
   }
   if (req.method === 'GET' && path === '/availability') {
     const q = url.searchParams;
@@ -177,9 +218,9 @@ const server = createServer(async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from || dayNum(to) - dayNum(from) + 1 > 14) return fail(res, origin, 400, 'VALIDATION', 'from');
     if (to < ubToday() || dayNum(to) > dayNum(ubToday()) + HORIZON) return fail(res, origin, 422, 'OUTSIDE_HORIZON');
     if (!service) return fail(res, origin, 422, 'SERVICE_UNAVAILABLE');
-    const doctor = doctors.find((d) => d.id === q.get('doctor_id'));
+    const doctor = bookable().find((d) => d.id === lc(q.get('doctor_id')));
     if (!q.get('doctor_id')) return fail(res, origin, 422, 'DOCTOR_REQUIRED', 'doctor_id');
-    if (!doctor) return fail(res, origin, 422, 'DOCTOR_UNAVAILABLE');
+    if (!doctor || !staffAllowed(service.id, doctor.id)) return fail(res, origin, 422, 'DOCTOR_UNAVAILABLE');
     const days = [];
     for (let d = from; d <= to; d = addDays(d, 1)) days.push({ date: d, slots: slotsFor(service, doctor, d) });
     return send(res, 200, { service_id: service.id, doctor_id: doctor.id, duration_min: service.duration_min, timezone: 'Asia/Ulaanbaatar', days }, origin);
@@ -207,8 +248,8 @@ const server = createServer(async (req, res) => {
     const service = services.find((s) => s.id === b.service_id);
     if (!service) return fail(res, origin, 422, 'SERVICE_UNAVAILABLE');
     if (!b.doctor_id) return fail(res, origin, 422, 'DOCTOR_REQUIRED', 'doctor_id');
-    const doctor = doctors.find((d) => d.id === b.doctor_id);
-    if (!doctor) return fail(res, origin, 422, 'DOCTOR_UNAVAILABLE');
+    const doctor = bookable().find((d) => d.id === lc(b.doctor_id));
+    if (!doctor || !staffAllowed(service.id, doctor.id)) return fail(res, origin, 422, 'DOCTOR_UNAVAILABLE');
     const start = new Date(String(b.start)); if (Number.isNaN(start.getTime())) return fail(res, origin, 400, 'VALIDATION', 'start');
     if (b.allow_duplicate !== true) {
       const dup = duplicateOf(phone, service);

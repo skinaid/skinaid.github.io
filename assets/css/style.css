@@ -787,6 +787,8 @@ article.post:not(.post--link):hover .post__media img { transform: none; }
   border: 1.5px solid var(--purple-200); background: #fff; font-weight: 700; font-size: 14px; line-height: 1.3; color: var(--purple-900); transition: all .2s;
 }
 .ub__chip small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.ub__solo { padding: 10px 0; font-size: 14.5px; line-height: 1.45; color: var(--ink-2); }   /* сонгох юм биш — энгийн текст */
+.ub__solo strong { color: var(--purple-900); }
 .ub__chip:hover span { border-color: var(--purple); }
 .ub__chip input:checked + span { background: var(--purple); border-color: var(--purple); color: #fff; }
 .ub__chip input:checked + span small { color: rgba(255, 255, 255, .85); }

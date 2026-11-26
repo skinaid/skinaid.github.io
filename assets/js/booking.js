@@ -1,7 +1,8 @@
 /* ==========================================================================
    SKIN AID — booking.js (ES module)
    Онлайн цаг захиалга: UB Beauty «Вэб суваг» REST API (UB Beauty репо → docs/API-WEB-CHANNEL.md).
-   Урсгал: үйлчилгээ → эмч → өдөр → тэр өдрийн сул цаг → нэр, утас, тэмдэглэл → POST /bookings.
+   Урсгал: үйлчилгээ → тэр үйлчилгээг хийдэг мэргэжилтэн (GET /doctors?service_id=, OS «Үзүүлэх ажилтан»; дүрэм
+   booking-staff.js) → өдөр → тэр өдрийн сул цаг → нэр, утас, тэмдэглэл → POST /bookings.
 
    - API-г хуудас ачаалахад БИШ, захиалгын хэсэг ойртох / «Цаг захиалах» дарах үед л дуудна.
    - Нийтийн түлхүүр (pk_…) `X-Api-Key` толгойд. Сайтын origin нь OS → Вэб суваг → «Зөвшөөрсөн домэйн»-д
@@ -17,6 +18,7 @@
    Локал хөгжүүлэлт: README → «Онлайн цаг захиалга» (tools/ub-mock-server.mjs).
    ========================================================================== */
 import { API_BASE, PUBLISHABLE_KEY } from './ubbeauty-config.js?v=8eb0f74a';
+import { cleanStaff, providersFor, roleWords, personWords, keepChoice } from './booking-staff.js?v=c2cd0d52';
 
 const form = document.getElementById('ubForm');
 if (form) setup(form);
@@ -32,11 +34,9 @@ function setup(form) {
   const NOTE_MAX = 300;
   const WD_SHORT = ['Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя', 'Ня'];
   const WD_LONG = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
-  const NON_PROVIDER = new Set(['receptionist', 'manager']);
   const PAY_POLL_MS = 4000;        // GET /bookings/{id} — зөвхөн DB (QPay руу хандахгүй)
   const PAY_CHECK_MS = 30000;      // POST …/payment/check — QPay-ээс бодит шалгалт (захиалга бүрт ≤ 6/мин)
   const PAY_KEY = 'skinaid:ub-pay';
-  const ROLE_ORDER = ['doctor', 'cosmetologist', 'massage', 'nurse'];
 
   let apiBase = API_BASE;
   let apiKey = String(PUBLISHABLE_KEY || '').trim();
@@ -127,9 +127,18 @@ function setup(form) {
     summary: $('ub-summary'), alert: $('ub-alert'), status: $('ub-status'), done: $('ub-done'),
     submit: form.querySelector('button[type="submit"]'), intro: form.querySelector('[data-ub-intro]'),
   };
+  const legend = el.docGroup.querySelector('legend');
   const S = {
-    channel: {}, services: [], doctors: [], doctorRequired: false,
-    serviceId: '', doctor: null,       // doctor: id | 'any' (аль ч эмч) | null (эмчгүй эмнэлэг)
+    channel: {}, services: [], doctorRequired: false,
+    all: [],                           // шүүлтгүй /doctors — «тохируулаагүй үйлчилгээ» илрүүлэх суурь, нэр/үүрэг хайх
+    doctors: [],                       // ОДООГИЙН үйлчилгээг хийдэг мэргэжилтэн (booking-staff.js providersFor)
+    staffFor: '',                      // S.doctors аль үйлчилгээнийх вэ ('' = ачаалж байна / хараахан үгүй)
+    staffCache: new Map(),             // serviceId → мэргэжилтэн (нэг зочлолтод дахин татахгүй; rate limit 60/мин)
+    staffRetry: '',                    // DOCTOR_UNAVAILABLE-ийн дараа жагсаалтыг шинэчилсэн үйлчилгээ (давталтгүй)
+    allStale: false,                   // S.all хуучирсан байж болно (DOCTOR_UNAVAILABLE / refresh) → /doctors-ийг дахин татна
+    auto: true,                        // сүүлийн loadWeek хоосон бол дараагийн 2 долоо хоног руу шилжих байсан эсэх
+    serviceId: '', doctor: null,       // doctor: id | 'any' (аль нь ч болно) | null (ажилтангүй эмнэлэг)
+    picked: false,                     // S.doctor-ийг үйлчлүүлэгч өөрөө сонгосон (ганц хүнтэй үйлчилгээний автомат сонголт биш)
     week: '', avail: null, date: '', slot: null,   // avail: Map<date, slot[]>; slot: { start, end, label, docs[] }
     seq: 0, pending: null, busy: false, ready: false,
     pay: null,                         // { id, until, poll, check, name, phone, booking } — төлбөр хүлээж буй захиалга
@@ -147,7 +156,11 @@ function setup(form) {
   const horizon = () => { const h = Number(S.channel.horizon_days); return Number.isFinite(h) && h >= 1 ? Math.min(h, 90) : 30; };
   const lastDay = () => addDays(ubToday(), horizon());
   const svc = () => S.services.find((s) => s.id === S.serviceId) || null;
-  const docName = (id) => { const d = S.doctors.find((x) => x.id === id); return d && d.name ? d.name : ''; };
+  const sameId = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+  const staffById = (id) => (id && (S.doctors.find((d) => sameId(d.id, id)) || S.all.find((d) => sameId(d.id, id)))) || null;
+  const docName = (id) => { const d = staffById(id); return d && typeof d.name === 'string' ? d.name.trim() : ''; };
+  // Мэргэжилтний жагсаалт энэ үйлчилгээнийх бэлэн эсэх (ажилтангүй эмнэлэгт хэрэггүй)
+  const staffReady = () => !S.doctorRequired || (S.staffFor !== '' && S.staffFor === S.serviceId);
   const announce = (t) => { el.status.textContent = t; };
 
   const contactsHtml = () => `<div class="form__channels">
@@ -185,7 +198,7 @@ function setup(form) {
       note.innerHTML = `${esc(NOTICE[reason])} <button type="button" class="form__retry" data-ub-retry>Онлайн захиалгыг дахин ачаалах</button>`;
       note.querySelector('[data-ub-retry]').addEventListener('click', () => {
         bf.hidden = true; note.remove(); form.hidden = false; clearAlert();
-        if (S.ready) { el.service.focus(); return; }
+        if (S.ready) { el.service.focus(); if (S.serviceId) onService({ refresh: true, auto: true }); return; }
         booted = false; boot();
       });
     } else if (note) {
@@ -209,11 +222,13 @@ function setup(form) {
       sel.value = name;
     }
     put('#f-date', S.date);
-    const want = S.slot ? `Хүссэн цаг: ${dateLong(S.date)} ${S.slot.label}${S.slot.docs[0] && docName(S.slot.docs[0]) ? ', эмч ' + docName(S.slot.docs[0]) : ''}` : '';
+    const who = S.slot && S.slot.docs[0] ? staffById(S.slot.docs[0]) : null;
+    const whoTxt = who && docName(who.id) ? `, ${personWords(who).lower} ${docName(who.id)}` : '';
+    const want = S.slot ? `Хүссэн цаг: ${dateLong(S.date)} ${S.slot.label}${whoTxt}` : '';
     put('#f-msg', [want, el.note.value.trim()].filter(Boolean).join('\n'));
   }
 
-  /* ---------- Эхлүүлэх: үйлчилгээ, эмч, сувгийн тохиргоо ---------- */
+  /* ---------- Эхлүүлэх: үйлчилгээ, ажилтан, сувгийн тохиргоо ---------- */
   let booted = false;
   async function boot() {
     if (booted) return;
@@ -231,23 +246,19 @@ function setup(form) {
     S.services = (Array.isArray(sv && sv.services) ? sv.services : []).filter((s) =>
       s && typeof s.id === 'string' && typeof s.name === 'string' && (Number.isFinite(s.price) || s.price === null)
         && Number.isFinite(s.duration_min));
-    // Захиалга авдаг ажилтан. Ресепшн, менежерийг сайтын сонголтоос хасна (API үйлчилгээ↔ажилтны холбоос өгдөггүй).
-    // «Аль нь ч болно» үед эмч → гоо засалч → массаж → сувилагч дарааллаар (дотроо sort_order) оноогдоно.
-    const all = (Array.isArray(dc && dc.doctors) ? dc.doctors : []).filter((d) => d && typeof d.id === 'string');
-    const rank = (d) => { const i = ROLE_ORDER.indexOf(d.staff_role); return i < 0 ? ROLE_ORDER.length : i; };
-    const providers = all.map((d, i) => ({ ...d, order: i })).filter((d) => !NON_PROVIDER.has(d.staff_role))
-      .sort((a, b) => rank(a) - rank(b) || a.order - b.order);
-    S.doctors = providers.length ? providers : all;
-    S.doctorRequired = Boolean(dc && dc.doctor_required) || all.length > 0;
+    // Захиалга авдаг бүх ажилтан (шүүлтгүй). Үйлчилгээ бүрийн мэргэжилтнийг onService → /doctors?service_id= өгнө;
+    // энэ жагсаалт = тохируулаагүй үйлчилгээг таних суурь (booking-staff.js providersFor), нэр/үүргийг id-аар хайх
+    S.all = cleanStaff(dc && dc.doctors);
+    S.doctorRequired = Boolean(dc && dc.doctor_required) || S.all.length > 0;
     if (!S.services.length) { fallback('paused'); return; }
 
     if (S.channel.new_booking_status === 'pending_confirmation' && el.intro) {
-      el.intro.textContent = 'Үйлчилгээ, эмч, сул цагаа сонгоод хүсэлт илгээнэ үү. Ресепшн цагийг баталгаажуулаад тантай холбогдоно.';
+      el.intro.textContent = 'Үйлчилгээ, мэргэжилтэн, сул цагаа сонгоод хүсэлт илгээнэ үү. Ресепшн цагийг баталгаажуулаад тантай холбогдоно.';
     }
     if (prepayMode()) {
       // Эмнэлгийн QPay холболт бэлэн биш бол захиалга бүр PAYMENT_UNAVAILABLE болно — шууд нөөц маягт
       if (S.channel.prepay && S.channel.prepay.ready === false) { fallback('paused'); return; }
-      if (el.intro) el.intro.textContent = 'Үйлчилгээ, эмч, сул цагаа сонгоод QPay-ээр төлнө үү — төлбөр төлөгдмөгц цаг тань баталгаажна.';
+      if (el.intro) el.intro.textContent = 'Үйлчилгээ, мэргэжилтэн, сул цагаа сонгоод QPay-ээр төлнө үү — төлбөр төлөгдмөгц цаг тань баталгаажна.';
     }
     renderServices();
     renderDoctors();
@@ -279,26 +290,81 @@ function setup(form) {
     el.service.disabled = false;
   }
 
-  function renderDoctors() {
-    el.docGroup.hidden = true;
-    if (!S.doctorRequired || !S.doctors.length) { S.doctor = null; return; }   // эмчгүй эмнэлэг: doctor_id илгээхгүй
-    if (S.doctors.length === 1) { S.doctor = S.doctors[0].id; return; }
-    S.doctor = 'any';
-    const named = S.doctors.filter((d) => typeof d.name === 'string' && d.name.trim());
-    if (named.length < S.doctors.length) return;   // нэр нуусан суваг: «аль ч эмч» автоматаар
-    const chip = (value, title, sub, checked) => `<label class="ub__chip${value === 'any' ? ' ub__chip--auto' : ''}"><input type="radio" name="ub-doctor" value="${esc(value)}"${checked ? ' checked' : ''}><span>${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`;
-    el.docs.innerHTML = chip('any', 'Сул цагтай мэргэжилтэн', 'Бүх мэргэжилтний сул цагийг нэг дор харна', true)
-      + `<div class="ub__providers">${named.map((d) => chip(d.id, d.name.trim(), typeof d.title === 'string' ? d.title.trim() : '', false)).join('')}</div>`;
+  // Мэргэжилтний хэсэг = ЗӨВХӨН сонгосон үйлчилгээг хийдэг хүмүүс (S.doctors). Шошго үүргээс: «Эмч» / «Гоо засалч» /
+  // холимог бол «Мэргэжилтэн». Ганц хүн → автоматаар, «Энэ үйлчилгээг … хийнэ»; олон → «Сул цагтай …» + нэрс.
+  // notice = HTML (escape хийсэн) — жагсаалт өөрчлөгдсөн тухай мэдэгдлийг хүмүүсийн дээр (үйлчлүүлэгчийн харж буй газарт)
+  function renderDoctors(loading, notice) {
+    el.docGroup.setAttribute('aria-busy', String(Boolean(loading)));
+    if (!S.serviceId || !S.doctorRequired) { el.docGroup.hidden = true; el.docs.innerHTML = ''; el.docs.style.minHeight = ''; return; }   // ажилтангүй эмнэлэг: doctor_id илгээхгүй
+    if (loading) {
+      // Өмнөх үйлчилгээний хүмүүсийг сонгуулахгүй; хэсэг харагдаж байсан бол өндөр, шошгыг хадгална (layout үсрэхгүй)
+      if (el.docGroup.hidden) legend.textContent = 'Мэргэжилтэн';
+      else el.docs.style.minHeight = `${el.docs.offsetHeight}px`;
+      el.docs.innerHTML = '<p class="ub__hint ub__loading">Энэ үйлчилгээг хийдэг мэргэжилтний жагсаалтыг ачаалж байна…</p>';
+      el.docGroup.hidden = false;
+      return;
+    }
+    el.docs.style.minHeight = '';
+    const list = S.doctors;
+    const w = roleWords(list);
+    legend.textContent = w.noun;
+    const named = list.filter((d) => typeof d.name === 'string' && d.name.trim());
+    // Хэн ч үгүй (noProvider мессеж сул цагийн хэсэгт) эсвэл нэр нуусан суваг (автоматаар оноогдоно) — хэсэггүй
+    if (!list.length || named.length < list.length) {
+      el.docGroup.hidden = true; el.docs.innerHTML = '';
+      if (notice) showAlert(notice);
+      return;
+    }
+    const note = notice ? `<p class="ub__alert" role="alert">${notice}</p>` : '';
+    if (list.length === 1) {
+      el.docs.innerHTML = `${note}<p class="ub__solo">Энэ үйлчилгээг <strong>${esc(list[0].name.trim())}</strong> хийнэ.</p>`;
+      el.docGroup.hidden = false;
+      return;
+    }
+    // Албан тушаал шошготой ижил бол («Гоо засалч» доор «Гоо засалч») давтахгүй
+    const sub = (d) => { const t = typeof d.title === 'string' ? d.title.trim() : ''; return t.toLowerCase() === w.lower ? '' : t; };
+    const chip = (value, title, small) => `<label class="ub__chip${value === 'any' ? ' ub__chip--auto' : ''}"><input type="radio" name="ub-doctor" value="${esc(value)}"${sameId(value, S.doctor) ? ' checked' : ''}><span>${esc(title)}${small ? `<small>${esc(small)}</small>` : ''}</span></label>`;
+    el.docs.innerHTML = note + chip('any', `Сул цагтай ${w.lower}`, `Бүх ${w.gen} сул цагийг нэг дор харна`)
+      + `<div class="ub__providers">${list.map((d) => chip(d.id, d.name.trim(), sub(d))).join('')}</div>`;
     el.docGroup.hidden = false;
+  }
+
+  // Үйлчилгээг хийдэг мэргэжилтэн (кэштэй). Алдааг дуудсан газар шийднэ (availError).
+  // S.allStale: хэн нэг нь захиалга авахаа больсон байж болно — «тохируулаагүй» танихын суурь S.all-ийг хамт шинэчилж,
+  // хуучин суурьтай ангилсан бүх кэшийг хаяна (эс бөгөөс тохируулаагүй үйлчилгээ «тохируулсан» мэт ресепшн харагдана).
+  async function loadStaff(id) {
+    if (!S.allStale && S.staffCache.has(id)) return S.staffCache.get(id);
+    const [data, base] = await Promise.all([
+      api(`/doctors?service_id=${encodeURIComponent(id)}`),
+      S.allStale ? api('/doctors') : null,
+    ]);
+    if (base) { S.all = cleanStaff(base.doctors); S.staffCache.clear(); S.allStale = false; }
+    const { staff } = providersFor(cleanStaff(data.doctors), S.all);
+    S.staffCache.set(id, staff);
+    return staff;
+  }
+
+  // Тохируулсан ч одоо хэн ч захиалга авдаггүй (API ихэвчлэн ийм үйлчилгээг /services-ээс хасдаг — зочлолтын явцад өөрчлөгдсөн)
+  function noProvider() {
+    S.avail = new Map();
+    renderCalendar();
+    el.slotGroup.disabled = false;
+    const msg = 'Энэ үйлчилгээг одоогоор онлайнаар захиалах боломжгүй байна. Утсаар эсвэл Messenger-ээр цагаа захиална уу.';
+    el.slots.innerHTML = `<p class="ub__hint">${esc(msg)}</p>${contactsHtml()}`;
+    announce(msg);
   }
 
   /* ---------- Сул цаг ---------- */
   async function fetchAvailability(from, to) {
+    const sid = S.serviceId;
+    // «Аль нь ч болно» = ЗӨВХӨН энэ үйлчилгээг хийдэг хүмүүс (S.doctors); ажилтангүй эмнэлэг = doctor_id-гүй нэг хүсэлт
     const ids = S.doctor === 'any' ? S.doctors.map((d) => d.id) : [S.doctor];
-    const q = (id) => `/availability?service_id=${encodeURIComponent(S.serviceId)}&from=${from}&to=${to}${id ? '&doctor_id=' + encodeURIComponent(id) : ''}`;
+    const q = (id) => `/availability?service_id=${encodeURIComponent(sid)}&from=${from}&to=${to}${id ? '&doctor_id=' + encodeURIComponent(id) : ''}`;
     const results = await Promise.allSettled(ids.map((id) => api(q(id))));
     const okCount = results.filter((r) => r.status === 'fulfilled').length;
-    if (!okCount) throw results[0].reason;
+    // DOCTOR_UNAVAILABLE = OS-ийн тохиргоо эсвэл ажилтны төлөв зочлолтын явцад өөрчлөгдсөн (loadWeek → S.allStale)
+    const stale = results.find((r) => r.status === 'rejected' && r.reason && r.reason.code === 'DOCTOR_UNAVAILABLE');
+    if (!okCount) throw (stale || results[0]).reason;
     // «Аль нь ч болно»: ажилтан бүрийн сул цагийг нэгтгэнэ — нэг цагт хэд хэдэн хүн сул бол S.doctors-ийн дарааллаар эхнийх нь авна
     const byDate = new Map();
     results.forEach((r, i) => {
@@ -316,12 +382,15 @@ function setup(form) {
     });
     const out = new Map();
     byDate.forEach((m, d) => out.set(d, Array.from(m.values()).sort((a, b) => (a.start < b.start ? -1 : 1))));
-    return out;
+    return { avail: out, stale: Boolean(stale) };
   }
 
   // Сонгосон 2 долоо хоногийн сул цагийг татна. auto = хоосон бол дараагийн 2 долоо хоног руу автоматаар шилжинэ.
   async function loadWeek(auto, keepDate) {
     if (!S.serviceId) return;
+    if (!staffReady()) { renderCalendar(); return; }   // мэргэжилтний жагсаалт ачаалж байна — onService дуусмагц дуудна
+    if (S.doctorRequired && !S.doctors.length) { noProvider(); return; }   // doctor_id-гүй хүсэлт = DOCTOR_REQUIRED
+    S.auto = Boolean(auto);
     const seq = ++S.seq;
     const today = ubToday();
     const last = lastDay();
@@ -333,9 +402,10 @@ function setup(form) {
     renderCalendar(); renderSlots(); renderSummary();
     announce('Сул цаг ачаалж байна…');
     let avail = new Map();
+    let stale = false;
     if (from <= to) {
       try {
-        avail = await fetchAvailability(from, to);
+        ({ avail, stale } = await fetchAvailability(from, to));
       } catch (e) {
         if (seq !== S.seq) return;
         availError(e);
@@ -343,6 +413,8 @@ function setup(form) {
       }
     }
     if (seq !== S.seq) return;   // хэрэглэгч энэ хооронд өөр үйлчилгээ/эмч/долоо хоног сонгосон
+    S.staffRetry = '';
+    if (stale) S.allStale = true;   // «Аль нь ч болно»-гийн зарим нь татгалзсан — дараагийн жагсаалтыг шинээр
     const firstDay = Array.from(avail.keys()).sort().find((d) => avail.get(d).length);
     if (!firstDay && auto && addDays(S.week, RANGE_DAYS) <= last) {
       S.week = addDays(S.week, RANGE_DAYS);
@@ -354,19 +426,38 @@ function setup(form) {
     if (!(S.date && (S.avail.get(S.date) || []).length)) S.date = firstDay || '';
     renderCalendar(); renderSlots();
     const n = S.date ? S.avail.get(S.date).length : 0;
-    announce(S.date ? `${dateLong(S.date)}: ${n} сул цаг` : 'Энэ хугацаанд сул цаг алга');
+    // Ганц хүнтэй үйлчилгээ: сонгох товчгүй тул дэлгэц уншигчид хэн хийхийг хэлнэ (үйлчилгээ сонгоход л)
+    const solo = auto && S.doctorRequired && S.doctors.length === 1 && docName(S.doctors[0].id) ? `Энэ үйлчилгээг ${docName(S.doctors[0].id)} хийнэ. ` : '';
+    announce(solo + (S.date ? `${dateLong(S.date)}: ${n} сул цаг` : 'Энэ хугацаанд сул цаг алга'));
   }
 
+  // Мэргэжилтэн (/doctors?service_id=) эсвэл сул цаг (/availability) ачаалахад гарсан алдаа
   function availError(e) {
+    // Сонгосон хүн энэ үйлчилгээг хийхээ больсон (OS-д зочлолтын явцад өөрчилсөн) → жагсаалтыг НЭГ удаа шинэчилнэ
+    if (e.code === 'DOCTOR_UNAVAILABLE' && S.doctorRequired && S.staffRetry !== S.serviceId) {
+      S.staffRetry = S.serviceId;
+      onService({ refresh: true, auto: S.auto });
+      return;
+    }
     S.avail = new Map();
     renderCalendar();
     el.slotGroup.disabled = false;
+    if (!staffReady()) { el.docGroup.hidden = true; el.docs.innerHTML = ''; el.docGroup.setAttribute('aria-busy', 'false'); }   // «ачаалж байна» үлдээхгүй
     if (UNAVAILABLE.has(e.code) && !TRANSIENT.has(e.code)) { fallback('paused'); return; }
+    const ready = staffReady();
+    const w = roleWords(ready ? S.doctors : []);
+    // Тодорхой нэгнийг сонгосон, үйлчилгээг хийдэг өөр хүн байгаа үед л «өөр … сонгох» санал болгоно
+    const picked = ready && S.doctors.length > 1 && S.doctor && S.doctor !== 'any';
+    if (e.code === 'DOCTOR_UNAVAILABLE' && !picked) { noProvider(); return; }
     const msg = e.code === 'RATE_LIMITED'
       ? 'Хэт олон хүсэлт ирлээ. Хэдэн секунд хүлээгээд дахин ачаална уу.'
-      : e.code === 'SERVICE_UNAVAILABLE' || e.code === 'DOCTOR_UNAVAILABLE'
-        ? 'Энэ үйлчилгээ эсвэл эмч одоогоор онлайнаар захиалагдахгүй байна. Өөрийг сонгох эсвэл утсаар холбогдоно уу.'
-        : 'Сул цагийг ачаалж чадсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу.';
+      : e.code === 'SERVICE_UNAVAILABLE'
+        ? 'Энэ үйлчилгээ одоогоор онлайнаар захиалагдахгүй байна. Өөр үйлчилгээ сонгох эсвэл утсаар холбогдоно уу.'
+        : e.code === 'DOCTOR_UNAVAILABLE'
+          ? `${docName(S.doctor) || `Сонгосон ${w.lower}`} энэ үйлчилгээнд одоогоор онлайн цаг авахгүй байна. Өөр ${w.lower} сонгох эсвэл утсаар холбогдоно уу.`
+          : !ready
+            ? 'Мэргэжилтний жагсаалтыг ачаалж чадсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу.'
+            : 'Сул цагийг ачаалж чадсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу.';
     el.slots.innerHTML = `<p class="ub__hint">${esc(msg)}</p>
       <div class="form__channels"><button type="button" class="btn btn--primary btn--sm" data-ub-reload>Дахин ачаалах</button>
       <a class="btn btn--outline btn--sm" href="${TEL}">${PHONE_TXT} залгах</a></div>`;
@@ -412,8 +503,10 @@ function setup(form) {
     el.slotGroup.disabled = false;
     if (!S.date) {
       const any = Array.from(S.avail.values()).some((l) => l.length);
+      // Өөр хүн сонгох нь зөвхөн тодорхой нэгнийг сонгосон, үйлчилгээг хийдэг бусад хүн байгаа үед утгатай
+      const other = S.doctors.length > 1 && S.doctor !== 'any' ? `Өөр ${roleWords(S.doctors).lower}, үйлчилгээ` : 'Өөр үйлчилгээ';
       el.slots.innerHTML = any ? '<p class="ub__hint">Өдрөө сонгоно уу.</p>'
-        : `<p class="ub__hint">Ойрын ${horizon()} хоногт энэ сонголтоор онлайн сул цаг алга. Өөр эмч, үйлчилгээ сонгох эсвэл утсаар лавлана уу.</p>${contactsHtml()}`;
+        : `<p class="ub__hint">Ойрын ${horizon()} хоногт энэ сонголтоор онлайн сул цаг алга. ${esc(other)} сонгох эсвэл утсаар лавлана уу.</p>${contactsHtml()}`;
       return;
     }
     const list = S.avail.get(S.date) || [];
@@ -433,20 +526,64 @@ function setup(form) {
   }
 
   /* ---------- Үйлдлүүд ---------- */
-  function onService() {
-    S.serviceId = el.service.value;
-    clearAlert();
+  // Үйлчилгээ сонгох → тэр үйлчилгээг хийдэг мэргэжилтэн → сул цаг.
+  // refresh: ИЖИЛ үйлчилгээний жагсаалтыг кэшгүй дахин татна (DOCTOR_UNAVAILABLE, «Дахин ачаалах»), долоо хоног/өдрийг хадгална.
+  // quiet: сонгосон хүн хасагдсаныг дуудагч өөрөө мэдэгдсэн (submitError).
+  async function onService(opts = {}) {
+    const refresh = opts.refresh === true;
+    const hadFocus = el.docs.contains(document.activeElement);   // хүмүүсийн жагсаалт дахин зурагдахад фокусыг сэргээнэ
+    if (!refresh) {
+      S.serviceId = el.service.value;
+      clearAlert();
+      S.week = monday(ubToday());
+      S.date = '';
+    }
     const s = svc();
     el.info.textContent = s && prepayMode() ? prepayText(s) : '';
-    S.week = monday(ubToday());
-    if (!s) { S.avail = null; S.slot = null; S.date = ''; renderCalendar(); renderSlots(); renderSummary(); return; }
-    loadWeek(true);
+    const listed = S.staffFor;   // өмнөх жагсаалт аль үйлчилгээнийх байсан (refresh-ийн мэдэгдэлд)
+    S.avail = null; S.slot = null; S.staffFor = '';
+    const seq = ++S.seq;   // хурдан өөр үйлчилгээ сонговол хуучин хариу дарахгүй (loadWeek-тэй нэг тоолуур)
+    if (!s) { S.doctors = []; renderDoctors(); renderCalendar(); renderSlots(); renderSummary(); announce(''); return; }
+    if (S.doctorRequired) {
+      // Үйлчлүүлэгчийн ӨӨРӨӨ сонгосон хүнийг л дараагийн үйлчилгээнд авч явна (автомат сонголтыг биш)
+      const prev = S.doctor;
+      const chosen = S.picked ? prev : null;
+      const prevName = docName(prev);   // шинэчилсэн жагсаалт/S.all-д байхгүй болж магадгүй тул өмнө нь авна
+      const sid = S.serviceId;
+      if (refresh) S.allStale = true;
+      let staff = S.allStale ? null : S.staffCache.get(sid);
+      if (!staff) {
+        renderDoctors(true); renderCalendar(); renderSlots(); renderSummary();
+        try {
+          staff = await loadStaff(sid);
+        } catch (e) {
+          if (seq !== S.seq) return;
+          availError(e);
+          return;
+        }
+        if (seq !== S.seq) return;
+      }
+      S.doctors = staff;
+      S.doctor = keepChoice(chosen, staff);   // шинэ үйлчилгээг бас хийдэг бол сонголт хэвээр, эс бөгөөс «Аль нь ч болно»
+      S.picked = Boolean(chosen) && sameId(chosen, S.doctor);
+      S.staffFor = sid;
+      const removed = refresh && !opts.quiet && listed === sid && prev && prev !== 'any' && !sameId(prev, S.doctor) && prevName;
+      renderDoctors(false, removed ? `<strong>${esc(prevName)}</strong> энэ үйлчилгээг одоогоор хийхгүй байна. Жагсаалтыг шинэчиллээ — цагаа дахин сонгоно уу.` : '');
+      if (hadFocus) {
+        const f = el.docs.querySelector('input:checked') || el.docs.querySelector('input');
+        (f || el.service).focus({ preventScroll: true });
+      }
+      if (!staff.length) { renderSummary(); noProvider(); return; }
+    }
+    renderSummary();
+    // refresh: долоо хоног/өдрийг хадгална; анх сонгосон шиг хоосон бол дараагийн 2 долоо хоног руу шилжих эсэх = opts.auto
+    if (refresh) loadWeek(opts.auto === true, true); else loadWeek(true);
   }
 
   form.addEventListener('change', (e) => {
     const t = e.target;
     if (t === el.service) { onService(); return; }
-    if (t.name === 'ub-doctor') { S.doctor = t.value; clearAlert(); S.week = monday(ubToday()); loadWeek(true); return; }
+    if (t.name === 'ub-doctor') { S.doctor = t.value; S.picked = t.value !== 'any'; clearAlert(); S.week = monday(ubToday()); loadWeek(true); return; }
     if (t.name === 'ub-day') {
       S.date = t.value; S.slot = null;
       renderSlots(); renderSummary();
@@ -461,7 +598,7 @@ function setup(form) {
   form.addEventListener('click', (e) => {
     const nav = e.target.closest('[data-ub-week]');
     if (nav && !nav.disabled) { S.week = addDays(S.week, RANGE_DAYS * Number(nav.dataset.ubWeek)); loadWeek(false); return; }
-    if (e.target.closest('[data-ub-reload]')) { loadWeek(false, true); return; }
+    if (e.target.closest('[data-ub-reload]')) { if (staffReady()) loadWeek(S.auto, true); else onService({ refresh: true, auto: true }); return; }
     if (e.target.closest('[data-ub-retry-submit]')) { el.submit.click(); return; }
     const dupGo = e.target.closest('[data-ub-dup-go]');
     if (dupGo) { S.dupOk = dupGo.dataset.ubDupGo || ''; el.submit.click(); return; }
@@ -604,8 +741,19 @@ function setup(form) {
       showAlert('Хэт олон оролдлого хийгдлээ. Хэсэг хүлээгээд дахин оролдох эсвэл утсаар захиална уу.' + contactsHtml());
       return;
     }
-    if (code === 'DOCTOR_REQUIRED' || code === 'DOCTOR_UNAVAILABLE' || code === 'SERVICE_UNAVAILABLE') {
-      showAlert('Сонгосон үйлчилгээ эсвэл эмч одоогоор онлайнаар захиалагдахгүй байна. Өөрийг сонгох эсвэл утсаар холбогдоно уу.' + contactsHtml());
+    if (code === 'DOCTOR_UNAVAILABLE') {
+      // Оноогдсон хүн энэ үйлчилгээг хийхээ больсон (OS «Үзүүлэх ажилтан» өөрчлөгдсөн) эсвэл захиалга авахгүй болсон
+      const who = S.slot && S.slot.docs[0] ? docName(S.slot.docs[0]) : '';
+      showAlert(`<strong>${who ? esc(who) : 'Сонгосон мэргэжилтэн'} энэ үйлчилгээнд одоогоор онлайн цаг авахгүй байна.</strong> Жагсаалт болон сул цагийг шинэчиллээ — цагаа дахин сонгоно уу.${contactsHtml()}`);
+      onService({ refresh: true, quiet: true });
+      return;
+    }
+    if (code === 'SERVICE_UNAVAILABLE') {
+      showAlert('Энэ үйлчилгээ одоогоор онлайнаар захиалагдахгүй байна. Өөр үйлчилгээ сонгох эсвэл утсаар холбогдоно уу.' + contactsHtml());
+      return;
+    }
+    if (code === 'DOCTOR_REQUIRED') {
+      showAlert('Энэ цагийг онлайнаар захиалж чадсангүй. Сул цагийг шинэчиллээ — дахин сонгох эсвэл утсаар холбогдоно уу.' + contactsHtml());
       loadWeek(false, true);
       return;
     }
@@ -619,10 +767,11 @@ function setup(form) {
     const when = `${dateLong(date)} ${esc(b.label || (S.slot && S.slot.label) || '')}`;
     const service = (b.service && b.service.name) || (svc() && svc().name) || '';
     const doctor = (b.doctor && b.doctor.name) || '';
+    const role = personWords(b.doctor && staffById(b.doctor.id)).noun;   // «Эмч» / «Гоо засалч» / «Мэргэжилтэн»
     return { when, html: `<dl class="ub__receipt">
         <dt>Огноо, цаг</dt><dd>${when}</dd>
         ${service ? `<dt>Үйлчилгээ</dt><dd>${esc(service)}</dd>` : ''}
-        ${doctor ? `<dt>Эмч</dt><dd>${esc(doctor)}</dd>` : ''}
+        ${doctor ? `<dt>${esc(role)}</dt><dd>${esc(doctor)}</dd>` : ''}
         ${name ? `<dt>Нэр, утас</dt><dd>${esc(name)}, ${esc(phone)}</dd>` : ''}
       </dl>` };
   }
