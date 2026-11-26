@@ -42,6 +42,11 @@ export const TEST_START_BUDGET_MS = 25_000;
 export const EVAL_EST_MICRO_USD = 20_000;
 /** Eval-ийн хэсэг: хүсэлт ирснээс хойш ийм хугацаа өнгөрсөн бол Claude-ийг дуудахгүй (Claude ≤ 25 с + commit-д нөөц) */
 export const EVAL_START_BUDGET_MS = 10_000;
+/**
+ * Eval-ийн эхний хэсэгт эхний кейсийг ганцаар явуулж prompt-ийн кэшийг бичүүлэхэд хүлээх дээд хугацаа. Ердийн дуудлага
+ * ≈ 4 с; удвал үлдсэнийг хүлээлгүй эхлүүлнэ (функцийн 60 с: эхлэх ≤ 10 с + энэ 8 с + Claude ≤ 25 с + commit).
+ */
+export const EVAL_WARMUP_MS = 8_000;
 const RUN_ID_RE = /^ev[a-z0-9]{8,30}$/;
 /** Эрхийн алдаа (401 биш 403): нэвтэрсэн ч admin биш */
 const FORBIDDEN = new Set(['not_admin', 'email_not_verified', 'bad_provider']);
@@ -58,7 +63,7 @@ const countBy = (arr, key) => arr.reduce((m, x) => ({ ...m, [x[key]]: (m[x[key]]
 /**
  * @param {{ getRuntime: () => ({ store: any, knowledge: any, agent: any } | null), env?: Record<string, string|undefined>,
  *   verifyIdToken?: (t: unknown) => Promise<{ email: string, uid: string }>, now?: () => Date, log?: (m: string) => void,
- *   origin?: string, clock?: () => number }} deps
+ *   origin?: string, clock?: () => number, warmupMs?: number }} deps
  */
 export function createAdminHandler(deps) {
   const env = deps.env ?? process.env;
@@ -67,6 +72,8 @@ export function createAdminHandler(deps) {
   const verify = deps.verifyIdToken ?? createTokenVerifier();
   const origin = deps.origin ?? ADMIN_ORIGIN;
   const clock = deps.clock ?? Date.now;
+  /** Eval-ийн эхний кейсийг ганцаар явуулж кэш бичүүлэхэд хүлээх дээд хугацаа (тест богиносгоно) */
+  const warmupMs = deps.warmupMs ?? EVAL_WARMUP_MS;
   /** Инстанст нэг удаад нэг туршилт (олон таб, давхар дарах) */
   let testInFlight = false;
   let lastCrisisCheck = -Infinity;
@@ -188,10 +195,22 @@ export function createAdminHandler(deps) {
       if (claim.state === 'busy') return fail(409, 'busy', { retryAfterMs: claim.retryAfterMs });
       const rev = knowledgeRevOf(k);
       const cases = EVAL_CASES.slice(from, from + EVAL_LIMITS.chunk);
-      const settled = await Promise.allSettled(cases.map(async (c) => {
+      const runCase = async (c) => {
         const turns = c.turns.map((x) => ({ role: x.role, text: redactForLlm(x.text) }));
         return { c, r: await rt.agent.testDraft({ k, turns, kind: 'eval' }) };
-      }));
+      };
+      // Эхний хэсэг: кэш хоосон байж болно (мэдлэг/заавар сая өөрчлөгдсөн). Зэрэг 6 дуудлага тус бүр кэшээ шинээр бичдэг
+      // (production 2026-11-26: +$0.33) — эхний кейсийг ГАНЦААР явуулж кэш бичүүлээд (≤ warmupMs хүлээнэ), үлдсэнийг зэрэг.
+      const pending = [];
+      if (from === 0 && cases.length > 1) {
+        const first = runCase(cases[0]);
+        pending.push(first);
+        let timer;
+        await Promise.race([first.catch(() => {}), new Promise((res) => { timer = setTimeout(res, warmupMs); })]);
+        clearTimeout(timer);
+      }
+      for (const c of cases.slice(pending.length)) pending.push(runCase(c));
+      const settled = await Promise.allSettled(pending);
       const out = settled.map((s, i) => {
         const c = cases[i];
         if (s.status === 'rejected') {

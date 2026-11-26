@@ -67,6 +67,8 @@ async function runOne(c) {
   results.push({ id: c.id, tags: c.tags, ...g, route: d.route, intent: d.intent, reasons: d.reasons, reply: p.reply.slice(0, 300), ms: Date.now() - t0, costMicroUsd: cost });
 }
 const queue = [...selected];
+// Эхний кейсийг ганцаар: prompt-ийн кэшийг бичүүлнэ — эс бөгөөс зэрэг дуудлага бүр кэшээ шинээр бичнэ (admin-api.js eval_chunk-тэй ижил)
+if (queue.length > 1 && concurrency > 1) await runOne(queue.shift());
 await Promise.all(Array.from({ length: concurrency }, async () => { while (queue.length && !stopped) await runOne(queue.shift()); }));
 
 const sum = summarize(results);

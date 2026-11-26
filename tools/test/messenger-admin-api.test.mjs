@@ -120,7 +120,7 @@ const CATALOG = { services: [{ id: 'exam-1', c: 'exam', n: 'Арьсны үзл�
 const ENV = { ANTHROPIC_API_KEY: 'sk-ant-test-not-real' };
 const reply = (over = {}) => JSON.stringify({ intent: 'price', confidence: 0.9, needs_human: false, reply: 'Арьсны үзлэг ₮50,000.', source_ids: ['service:exam-1'], quick_replies: [], reason: 'Үнэ', ...over });
 
-function setup({ settings = { mode: 'shadow', killSwitch: false, monthlyRunCap: 3000, monthlyCostCapUsd: 50 }, claude, env = ENV, verifyIdToken } = {}) {
+function setup({ settings = { mode: 'shadow', killSwitch: false, monthlyRunCap: 3000, monthlyCostCapUsd: 50 }, claude, env = ENV, verifyIdToken, warmupMs } = {}) {
   const fake = createFakeFirestore();
   const clock = () => new Date(NOW);
   const fs = createFirestore({ projectId: 'skinaid-mn', getAccessToken: async () => 'tok', fetchImpl: fake.fetchImpl });
@@ -138,7 +138,7 @@ function setup({ settings = { mode: 'shadow', killSwitch: false, monthlyRunCap: 
   const logs = [];
   const rt = { store, knowledge, agent };
   const handler = createAdminHandler({
-    getRuntime: () => rt, env, now: clock, log: (m) => logs.push(m),
+    getRuntime: () => rt, env, now: clock, log: (m) => logs.push(m), warmupMs,
     verifyIdToken: verifyIdToken ?? (async (tok) => {
       if (tok === 'good') return { email: 'hello@skinaid.mn', uid: 'u' };
       throw new AuthError(tok === 'notadmin' ? 'not_admin' : 'bad_signature');
@@ -562,6 +562,47 @@ test('eval тайлан: «шаардлагагүй ажилтанд шилжү�
   assert.ok(over.every((f) => f.reasons.includes('llm_needs_human')), JSON.stringify(over.slice(0, 2)));
   assert.equal(fin.summary.handoffReasons.llm_needs_human, over.length);
   assert.ok(!JSON.stringify(fin.failures.map((f) => f.reasons)).includes('Ажилтан'), 'шалтгаан = код, текст биш');
+});
+
+test('eval: эхний хэсэгт эхний кейс ГАНЦААР (кэш бичүүлнэ), үлдсэн нь түүний дараа зэрэг; удвал хүлээлгүй эхлүүлнэ; дараагийн хэсэг шууд зэрэг', async () => {
+  // Хуурамч Claude: дуудлага бүр гараар шийдэгдэнэ — хэзээ хэд нь эхэлснийг хянана
+  const mk = (warmupMs) => {
+    const waiting = [];
+    const s = setup({ warmupMs, claude: () => new Promise((res) => { waiting.push(() => res({ status: 'ok', text: reply(), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } })); }) });
+    return { s, call: s.call, waiting };
+  };
+  const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  const until = async (fn) => { for (let i = 0; i < 200 && !fn(); i++) await tick(5); };
+
+  const a = mk(10_000);
+  const st = await (await a.call({ action: 'eval_start' })).json();
+  const p0 = a.call({ action: 'eval_chunk', runId: st.runId, from: 0 });
+  await until(() => a.waiting.length >= 1);
+  await tick(60);
+  assert.equal(a.waiting.length, 1, 'эхний кейс ганцаар явж байна — бусад нь хүлээнэ');
+  a.waiting[0]();
+  await until(() => a.waiting.length >= st.chunk);
+  assert.equal(a.waiting.length, st.chunk, 'эхнийх дууссаны дараа үлдсэн 5 зэрэг');
+  a.waiting.slice(1).forEach((f) => f());
+  const r0 = await (await p0).json();
+  assert.equal(r0.ok, true);
+  assert.deepEqual(r0.results.map((x) => x.id), (await import('../../api/_lib/generated/eval-cases.js')).EVAL_CASES.slice(0, st.chunk).map((c) => c.id), 'дараалал хэвээр');
+  // Дараагийн хэсэг (кэш аль хэдийн дулаан) — хүлээлгүй бүгд зэрэг
+  const before = a.waiting.length;
+  const p1 = a.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk });
+  await until(() => a.waiting.length >= before + st.chunk);
+  assert.equal(a.waiting.length, before + st.chunk);
+  a.waiting.slice(before).forEach((f) => f());
+  assert.equal((await (await p1).json()).ok, true);
+
+  // Эхний дуудлага удвал (warmupMs) үлдсэнийг хүлээлгүй эхлүүлнэ — функцийн хугацаанд багтана
+  const b = mk(40);
+  const sb = await (await b.call({ action: 'eval_start' })).json();
+  const pb = b.call({ action: 'eval_chunk', runId: sb.runId, from: 0 });
+  await until(() => b.waiting.length >= sb.chunk);
+  assert.equal(b.waiting.length, sb.chunk, 'эхнийх дуусаагүй ч үлдсэн нь эхэлсэн');
+  b.waiting.forEach((f) => f());
+  assert.equal((await (await pb).json()).results.length, sb.chunk);
 });
 
 test('аудит: cron messenger_status-аас зөвхөн eval-ийн баримтыг устгана (main, evals — expireAt-тэй байсан ч хэвээр)', async () => {
