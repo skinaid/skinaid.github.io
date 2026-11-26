@@ -29,6 +29,9 @@ admin/pages-status.js         — «Эмчилгээний хуудас» цэс
 admin/home-data.js            — «Нүүр хуудас» цэсийн анхны утга + сайтын зургийн жагсаалт (build үүсгэнэ, эх: content/home.json)
 admin/claims.js               — tools/lib/claims.mjs-ийн хуулбар: admin хориотой үгийг анхааруулна (build үүсгэнэ)
 firestore.rules               — Firestore аюулгүй байдлын дүрэм (console-д нийтэлсэнтэй ижил байлгана)
+api/                          — Vercel Functions: messenger.js (Meta webhook), cron/daily.js, _lib/ (туслах код) — «Messenger AI»
+package.json, package-lock.json — ЗӨВХӨН api/-ийн хамаарал (сайтын build хамааралгүй; build script БҮҮ нэм — статик output өөрчлөгдөнө)
+tools/evals/messenger.jsonl   — Messenger AI-ийн eval кейс (offline: tools/test/messenger-policy.test.mjs)
 firebase.json, .firebaserc    — Firebase CLI хэрэглэх үед (заавал биш)
 assets/img/                   — Лого (logo.png, logo-white.png), favicon, og-image; өөрийн зургуудаа энд хийнэ
 tools/build.mjs (+ tools/lib) — Build: header/footer, JSON-LD, статик жагсаалт, эмчилгээний хуудсууд, asset хувилбар,
@@ -212,6 +215,8 @@ node tools/ub-mock-server.mjs
   нийтэд уншигдана (зөвхөн нүүр хуудас; нүүр нээх бүрт 3 read болно), admin «Нүүр хуудас» бичнэ. Хязгаар: `assets/js/home-render.js`
   LIMITS = `firestore.rules` validHero/validPost. `baseRev` = хадгалах үеийн `content/home.json`-ийн хувилбар (index.html `data-home-rev`).
 
+- `messenger_*`, `ai_runs` — Messenger AI (доорх «Messenger AI» хэсэг).
+
 ### Дүрэм шинэчлэх
 
 `firestore.rules`-ийг засаад Firebase console → Firestore Database → Rules editor-т бүхэлд нь буулгаж **Publish** дарна
@@ -281,6 +286,74 @@ metrics дээр Verified 100% ойролцоо. Token-гүй хүсэлт та�
 - Firebase web config (`apiKey` гэх мэт) нууц биш, нийтэд ил байх зориулалттай. Аюулгүй байдал нь дүрэм + allowlist.
 - Захиалгын өгөгдөл хувийн мэдээлэл тул admin хуудсыг зөвхөн итгэлтэй төхөөрөмжөөс нээж, ажлаа дуусаад "Гарах" дарна.
 - SDK хувилбар (`12.16.0`) `firebase-config.js`-ийн `SDK_VERSION` болон `assets/js/*.js`, `admin/*.js` доторх бүх gstatic import URL-д ижил байна; шинэчлэхдээ бүгдийг нь солино (`node tools/build.mjs --check` зөрүүг илрүүлнэ).
+
+## Messenger AI (Facebook Messenger-ийн AI туслах)
+
+**1-р үе шат — «Суурь, сүүдэр» (2026-11-25):** Messenger-т ирсэн асуулт бүрт AI хариуны НООРОГ бичнэ. **Үйлчлүүлэгч рүү юу ч
+илгээхгүй** — илгээх код (Send API) огт байхгүй (`tools/test/messenger-architecture.test.mjs` шалгана). Ажилтан Meta Inbox-оос
+өөрөө хариулж, admin → «Messenger AI» → «Ноорог»-д «Зөв / Засвартай / Буруу» гэж үнэлнэ. Эмнэлгийн асуулт, гаж нөлөө, зураг/видео/дуу,
+гомдол, мөнгө буцаалт, хөнгөлөлт, жирэмсэн/хүүхэд үргэлж «Ажилтанд шилжүүлнэ» (код шийднэ, AI биш — `api/_lib/social/policy.js`).
+Дараагийн үе шат: 2 = сургалт ба eval, 3 = туслах → зөвшөөрсөн сэдвээр автомат (эзэмшигчийн шийдвэрээр).
+
+```
+Messenger → Meta → POST https://www.skinaid.mn/api/messenger
+  X-Hub-Signature-256 (түүхий body) → event (давхардалгүй) → 200 → waitUntil:
+  echo ангилал (манай бот / Meta-ийн автомат хариу / ажилтан) → зураг = LLM-гүй → нууцлах (утас, имэйл, РД)
+  → мэдлэг (settings/site + settings/catalog) → Claude (claude-opus-5-5, effort low) → бодлого → messenger_drafts
+Өдөр бүр УБ 04:00: /api/cron/daily — гацсан event, хадгалах хугацаа, статус
+```
+
+| Файл | Үүрэг |
+|---|---|
+| `api/messenger.js`, `api/_lib/webhook.js` | GET verify (`META_VERIFY_TOKEN`), POST гарын үсэг (`META_APP_SECRET`), event хадгалах |
+| `api/_lib/pipeline.js`, `store.js` | Ярианы түгжээ, echo загвар, төлвийн машин, гацсан event нөхөх (2 мин), Firestore |
+| `api/_lib/agent.js`, `claude.js`, `knowledge.js` | Мэдлэг → prompt (кэштэй) → Claude (`fallbacks: "default"`) → бодлого → ноорог |
+| `api/_lib/social/` | UB Beauty-ээс (skinaid/ubbeauty@1a43c95c) шилжүүлсэн цэвэр модулиуд (файл бүрийн толгойд эх сурвалж) |
+| `api/_lib/firestore.js`, `gcp-auth.js` | Firestore REST (firebase-admin-гүй), Google-ийн серверийн эрх (WIF / SA key) |
+| `admin/m-messenger.js` | «Ноорог» (үнэлгээ), «Тохиргоо» (горим, яаралтай зогсоолт, сарын хязгаар, серверийн төлөв) — **дараагийн PR** (#6/#7-ийн admin бүтэц merge болсны дараа) |
+
+**Хувийн мэдээлэл.** PSID хадгалахгүй (`PSID_SALT`-аар HMAC → `psidHash`). Текст ЗӨВХӨН нууцалсан. Зураг/видео/дууны зөвхөн төрөл
+(URL-гүй), LLM руу хэзээ ч явахгүй. Захиалгын (`bookings`) өгөгдөлд хүрэхгүй. `ai_runs`-д текст байхгүй (токен, зардал, хугацаа л).
+Хадгалах хугацаа (cron устгана): event 30, ярианы мессеж 180, ноорог 180, `ai_runs` 400, echo загвар 90 хоног; audit — хязгааргүй.
+
+**Firestore** (бүгдийг admin уншина; сервер IAM-аар бичнэ — rules серверт хамаарахгүй):
+`messenger_settings/main` (admin: горим off|shadow, killSwitch, сарын хязгаар — өөрчлөлт бүр `messenger_audit`-д нэг batch-д),
+`messenger_drafts` (сервер үүсгэнэ, admin зөвхөн `rating/note/ratedAt/ratedBy`), `messenger_threads/{psidHash}` + `messages`,
+`messenger_events`, `ai_runs`, `messenger_usage/{YYYY-MM}`, `messenger_status/main`, `messenger_echo_templates`,
+`messenger_kb`, `messenger_examples` (2-р үе шатны «Сургалт»). Query бүр composite index ШААРДАХГҮЙ.
+Spark квот: нэг хэрэглэгчийн мессежид ойролцоогоор 11 write + 20 read (өдөрт ~1,500 мессеж хүртэл багтана); нэг ярианд өдөрт ≤ 40 удаа AI (нэг хэрэглэгч квот, сарын хязгаарыг дуусгахгүй); admin «Ноорог» нэг нээлтэд ≤ 30 + 3 read.
+
+### Эзэмшигчийн алхам (нэг удаа)
+
+1. **Google Cloud (төсөл skinaid-mn) — Workload Identity Federation** (урт хугацааны түлхүүргүй; https://vercel.com/docs/oidc/gcp):
+   APIs & Services → «IAM Service Account Credentials API», «Security Token Service API» асаах → IAM & Admin → Workload Identity
+   Federation → Create pool `vercel` → Provider: OIDC, ID `vercel`, Issuer `https://oidc.vercel.com/<team-slug>`, Audience: Allowed
+   audiences = `https://vercel.com/<team-slug>`, Attribute mapping `google.subject` = `assertion.sub` → Service Accounts → Create
+   `messenger-ai`, role **Cloud Datastore User** (өөр эрхгүй) → тэр service account → Permissions → Grant access: principal
+   `principal://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/vercel/subject/owner:<team-slug>:project:skinaid.github.io-y1vf:environment:production`,
+   role **Workload Identity User** (`<team-slug>`, төслийн нэрийг Vercel → Settings → General-оос яг хуулна). (Байгууллагын бодлого service account key үүсгэхийг зөвшөөрдөг бол нөөц зам: key JSON →
+   `FIREBASE_SERVICE_ACCOUNT`. WIF-ийг санал болгоно.)
+2. **Vercel → Settings → Environment Variables (Production):** `GCP_PROJECT_ID=skinaid-mn`, `GCP_PROJECT_NUMBER`,
+   `GCP_SERVICE_ACCOUNT_EMAIL`, `GCP_WORKLOAD_IDENTITY_POOL_ID=vercel`, `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=vercel`,
+   `ANTHROPIC_API_KEY`, `PSID_SALT` (≥ 32 санамсаргүй тэмдэгт), `CRON_SECRET` (≥ 16). Meta апп үүссэний дараа: `META_APP_SECRET`,
+   `META_VERIFY_TOKEN` (өөрөө зохиосон урт мөр), `META_APP_ID`, `META_PAGE_ID` (SkinAid пэйжийн id). `META_PAGE_TOKEN` 1-р үе шатанд
+   зөвхөн cron-ын token шалгалтад (заавал биш). Нууцыг git, чат, лог-д ХЭЗЭЭ Ч бүү бич. Env солисны дараа Redeploy.
+3. **Rules нийтлэх:** `firestore.rules`-ийг console → Firestore → Rules-д буулгаж Publish (доорх «Rules шалгах»).
+4. **Meta developer апп → Webhooks:** Callback URL `https://www.skinaid.mn/api/messenger`, Verify token = `META_VERIFY_TOKEN`,
+   field: `messages`, `message_echoes`, `messaging_postbacks`, `messaging_referrals`, `messaging_handovers`, `standby`.
+5. **Admin → Messenger AI → Тохиргоо → «Сүүдэр»** → Хадгалах (admin цэсийн PR merge болсны дараа). Тэр хүртэл горим анхдагчаар
+   «Унтраалттай» — webhook юу ч хадгалахгүй, AI ажиллахгүй.
+
+**Яаралтай зогсоох:** admin → Messenger AI → «Яаралтай зогсоох» (нэг товч; мессеж хадгалагдахаа больж, AI ажиллахгүй). Бүрэн
+салгах: Vercel env-ээс `ANTHROPIC_API_KEY`-г устгах эсвэл Meta аппын webhook-ийг унтраах.
+
+**Rules шалгах** (emulator-гүй — Java байхгүй): нийтлэхээс өмнө console → Rules → Rules Playground; нийтэлсний дараа admin хуудаснаас
+(App Check-тэй хөтөч) зөвшөөрөгдсөн: тохиргоо+audit batch, ноорогийн үнэлгээ; хориотой: audit-гүй тохиргоо, audit засах/устгах, ноорогийн
+`reply` засах, ноорог үүсгэх, `messenger_events`/`ai_runs`/`messenger_status` бичих, нэвтрээгүй унших. Туршилтын мөрийг устгана.
+
+**Тест:** `node --test 'tools/test/*.test.mjs'` — `messenger-*.test.mjs` (webhook задлалт, echo, бодлого, eval 14 кейс, санах ойн
+хуурамч Firestore REST-тэй бүтэн урсгал, архитектур, rules, мэдлэг, admin). Сүлжээ, `npm install` шаардахгүй. Бодит Meta-тай E2E нь
+Meta апп (0-р үе шат) үүссэний дараа.
 
 ## Байршуулалт
 

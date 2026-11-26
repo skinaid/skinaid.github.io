@@ -2,6 +2,20 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": false,
   "trailingSlash": false,
+  "functions": {
+    "api/messenger.js": {
+      "maxDuration": 60
+    },
+    "api/cron/daily.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 20 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

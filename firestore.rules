@@ -137,6 +137,125 @@ service cloud.firestore {
         );
     }
 
+    // ---------- Messenger AI (1-р үе шат: сүүдэр — үйлчлүүлэгч рүү юу ч илгээхгүй) ----------
+    // Сервер (Vercel функц, api/) Google-ийн service account-аар (IAM, WIF) бичдэг — энэ дүрэм серверт ХАМААРАХГҮЙ.
+    // Admin (client) бичих эрх ЗӨВХӨН: тохиргоо (+ нэг batch-д audit), мэдлэг/жишээ (2-р үе шат), ноорогийн үнэлгээ.
+    // Хязгаар = api/_lib/social/settings-logic.js, labels.js (tools/test/messenger-rules.test.mjs тулгана).
+    function messengerAudit(id) {
+      return getAfter(/databases/$(database)/documents/messenger_audit/$(id)).data;
+    }
+    function messengerSettingsAfter() {
+      return getAfter(/databases/$(database)/documents/messenger_settings/main).data;
+    }
+
+    match /messenger_settings/{doc} {
+      allow read: if isAdmin();
+      // Өөрчлөлт бүр ижил batch-д шинэ audit мөртэй (lastAuditId → messenger_audit, at == request.time)
+      allow create, update: if isAdmin()
+        && doc == 'main'
+        && incoming().keys().hasOnly(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'lastAuditId', 'updatedAt', 'updatedBy'])
+        && incoming().keys().hasAll(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'lastAuditId', 'updatedAt', 'updatedBy'])
+        && incoming().mode in ['off', 'shadow']
+        && incoming().killSwitch is bool
+        && incoming().monthlyRunCap is int && incoming().monthlyRunCap >= 0 && incoming().monthlyRunCap <= 100000
+        && incoming().monthlyCostCapUsd is number && incoming().monthlyCostCapUsd >= 0 && incoming().monthlyCostCapUsd <= 1000
+        && isStr(incoming().lastAuditId, 8, 64) && incoming().lastAuditId.matches('^[A-Za-z0-9_-]+$')
+        && incoming().updatedAt == request.time
+        && incoming().updatedBy == request.auth.token.email
+        && messengerAudit(incoming().lastAuditId).at == request.time
+        && messengerAudit(incoming().lastAuditId).action == 'settings';
+      allow delete: if false;
+    }
+
+    // Append-only: зөвхөн үүсгэнэ (засах, устгах хориотой); тохиргооны өөрчлөлттэй нэг batch-д л
+    match /messenger_audit/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && incoming().keys().hasOnly(['action', 'by', 'at', 'detail'])
+        && incoming().keys().hasAll(['action', 'by', 'at', 'detail'])
+        && incoming().action == 'settings'
+        && incoming().by == request.auth.token.email
+        && incoming().at == request.time
+        && incoming().detail is map
+        && incoming().detail.keys().hasOnly(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd'])
+        && messengerSettingsAfter().lastAuditId == id
+        && incoming().detail.get('mode', '') == messengerSettingsAfter().mode
+        && incoming().detail.get('killSwitch', null) == messengerSettingsAfter().killSwitch
+        && incoming().detail.get('monthlyRunCap', -1) == messengerSettingsAfter().monthlyRunCap
+        && incoming().detail.get('monthlyCostCapUsd', -1) == messengerSettingsAfter().monthlyCostCapUsd;
+      allow update, delete: if false;
+    }
+
+    // Мэдлэг, жишээ (2-р үе шатны «Сургалт» UI) — admin бичнэ
+    match /messenger_kb/{id} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && id.matches('^[A-Za-z0-9_-]{1,40}$')
+        && incoming().keys().hasOnly(['title', 'body', 'status', 'updatedAt', 'updatedBy'])
+        && isStr(incoming().get('title', ''), 1, 120)
+        && isStr(incoming().get('body', ''), 1, 4000)
+        && incoming().get('status', '') in ['draft', 'published']
+        && incoming().updatedAt == request.time
+        && incoming().updatedBy == request.auth.token.email;
+      allow delete: if isAdmin();
+    }
+    match /messenger_examples/{id} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && id.matches('^[A-Za-z0-9_-]{1,40}$')
+        && incoming().keys().hasOnly(['userText', 'reply', 'kind', 'note', 'updatedAt', 'updatedBy'])
+        && isStr(incoming().get('userText', ''), 1, 2000)
+        && isStr(incoming().get('reply', ''), 0, 2000)
+        && incoming().get('kind', '') in ['good', 'bad']
+        && isStr(incoming().get('note', ''), 0, 500)
+        && incoming().updatedAt == request.time
+        && incoming().updatedBy == request.auth.token.email;
+      allow delete: if isAdmin();
+    }
+
+    // Ноорог: сервер үүсгэнэ; admin ЗӨВХӨН үнэлгээ (rating/note/ratedAt/ratedBy). «Засвартай» = зөв хариуг заавал бичнэ.
+    match /messenger_drafts/{id} {
+      allow read: if isAdmin();
+      allow update: if isAdmin()
+        && incoming().diff(resource.data).affectedKeys().hasOnly(['rating', 'note', 'ratedAt', 'ratedBy'])
+        && incoming().rating in ['good', 'edited', 'wrong']
+        && isStr(incoming().note, 0, 2000)
+        && (incoming().rating != 'edited' || incoming().note.trim().size() >= 2)
+        && incoming().ratedAt == request.time
+        && incoming().ratedBy == request.auth.token.email;
+      allow create, delete: if false;
+    }
+
+    // Зөвхөн сервер бичнэ (admin уншина)
+    match /messenger_threads/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+      match /messages/{mid} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+    match /messenger_events/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /ai_runs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /messenger_usage/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /messenger_status/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /messenger_echo_templates/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Бусад бүх зам: хориотой
     match /{document=**} {
       allow read, write: if false;
