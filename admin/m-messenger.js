@@ -1,6 +1,7 @@
 /* ==========================================================================
-   SKIN AID admin — Модуль: Messenger AI (1-р үе шат: сүүдэр — үйлчлүүлэгч рүү юу ч илгээхгүй)
-   «Ноорог»: AI-ийн бичсэн хариуны санал (messenger_drafts) → «Зөв / Засвартай / Буруу» үнэлгээ.
+   SKIN AID admin — Модуль: Messenger AI (сүүдэр — үйлчлүүлэгч рүү юу ч илгээхгүй)
+   «Ноорог»: AI-ийн бичсэн хариуны санал (messenger_drafts) → «Зөв / Засвартай / Буруу» үнэлгээ → «Жишээ болгох».
+   «Сургалт» (2-р үе шат): m-messenger-train.js — туршилтын асуулт, мэдлэг, жишээ, AI-д юу орж байна.
    «Тохиргоо»: горим (Унтраалттай / Сүүдэр), яаралтай зогсоох, сарын таг (messenger_settings/main + audit нэг batch-д),
    серверийн төлөв (messenger_status/main, messenger_usage/{сар} — сервер бичнэ).
    Квот: ноорог нэг удаад ≤ 30 read («Цааш ачаалах»), тохиргоо 3 read. Цэсийг нээх хүртэл юу ч уншихгүй.
@@ -8,8 +9,9 @@
    ========================================================================== */
 import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
-import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=70a601a4';
-import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd } from './messenger-lib.js?v=99c0ae43';
+import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=8848d02a';
+import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft } from './messenger-lib.js?v=b1c66c99';
+import * as training from './m-messenger-train.js?v=e01063c5';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };
@@ -44,6 +46,7 @@ function selectTab(name, focus = false) {
     $(`#${t.getAttribute('aria-controls')}`).hidden = !on;
     if (on && focus) t.focus();
   });
+  if (name === 'train') training.openTraining();
 }
 tabList.addEventListener('click', (e) => { const t = e.target.closest('[role="tab"]'); if (t) selectTab(t.dataset.tab); });
 tabList.addEventListener('keydown', (e) => {
@@ -63,6 +66,25 @@ chips.addEventListener('click', (e) => {
   $$('.chip', chips).forEach((c) => { const on = c.dataset.f === filter; c.classList.toggle('is-active', on); c.setAttribute('aria-pressed', String(on)); });
   renderDrafts();
 });
+
+/** Үнэлсэн ноорог → жишээ: юу болохыг товчны дэргэд тайлбарлана */
+const EX_HINT = {
+  good: 'AI-ийн энэ хариу сайн жишээ болно.',
+  edited: 'Таны бичсэн зөв хариу сайн жишээ болно.',
+  wrong: 'AI-ийн энэ хариу муу жишээ болно (тэмдэглэл = яагаад буруу).',
+};
+/** Ноорогийн картын «Жишээ» мөр: боломжгүй бол юу ч үгүй; хуучирсан бол «шинэчлэх» */
+function exampleRow(d) {
+  const st = training.draftExampleState(d);
+  if (st === 'none') return '';
+  const id = esc(d.id);
+  if (st === 'same') return `<div class="ms-exrow"><span class="ms-ex-done">✓ Жишээнд орсон</span> <button class="btn btn--ghost btn--sm" type="button" data-ex-edit="${id}">Жишээг засах</button></div>`;
+  if (st === 'stale') return `<div class="ms-exrow"><span class="ms-ex-stale">Үнэлгээ өөрчлөгдсөн</span> <button class="btn btn--outline btn--sm" type="button" data-ex="${id}">Жишээг шинэчлэх</button></div>`;
+  return `<div class="ms-exrow"><button class="btn btn--outline btn--sm" type="button" data-ex="${id}">Жишээ болгох</button> <small class="muted">${esc(EX_HINT[d.rating] || '')}</small></div>`;
+}
+/** Энэ картын үнэлгээ/тэмдэглэл ХАДГАЛСАН утгаас ялгаатай эсэх (утгаар — буцааж бичсэн бол зөрөхгүй) */
+const cardDirty = (d) => (ratingPick.has(d.id) && ratingPick.get(d.id) !== (d.rating || ''))
+  || (noteDraft.has(d.id) && noteDraft.get(d.id).trim() !== String(d.note || '').trim());
 
 const noteLabel = (required) => (required ? 'Зөв хариу <span class="req">*</span> <small>(AI-ийн оронд юу гэж хариулах байсан)</small>' : 'Тэмдэглэл <small>(заавал биш)</small>');
 const turnHtml = (t) => `<li><span class="ms-who">${esc(ROLE_TEXT[t.role] || t.role)}</span> ${t.text ? esc(t.text) : `<em class="muted">(${esc((t.attachments || []).join(', ') || 'хоосон')})</em>`}</li>`;
@@ -97,6 +119,7 @@ function cardHtml(d) {
       </div>
       <div class="actions"><button class="btn btn--primary btn--sm" type="button" data-save="${id}"${busy.has(d.id) ? ' disabled' : ''}>Үнэлгээ хадгалах</button><span class="status${err ? ' is-err' : ''}" id="mss-${id}" data-st="${id}" role="status">${esc(err)}</span></div>
     </fieldset>
+    ${exampleRow(d)}
   </article>`;
 }
 
@@ -149,15 +172,30 @@ async function loadDrafts(append = false) {
 }
 more.addEventListener('click', () => loadDrafts(true));
 $('#btnMsReload').addEventListener('click', async () => {
-  if ((settingsDirty() || notesDirty()) && !(await dialog({ title: 'Хадгалаагүй өөрчлөлт байна', body: 'Дахин ачаалбал хадгалаагүй тохиргоо болон үнэлгээний тэмдэглэл алга болно.', confirm: 'Хадгалалгүй ачаалах', cancel: 'Болих', danger: true }))) return;
+  if ((settingsDirty() || notesDirty() || training.isDirty()) && !(await dialog({ title: 'Хадгалаагүй өөрчлөлт байна', body: 'Дахин ачаалбал хадгалаагүй тохиргоо, үнэлгээний тэмдэглэл, мэдлэг/жишээний засвар алга болно.', confirm: 'Хадгалалгүй ачаалах', cancel: 'Болих', danger: true }))) return;
   ratingPick.clear(); noteDraft.clear(); cardErr.clear();
+  const onTrain = !$('#msPanelTrain').hidden;
+  training.teardown();
   loadDrafts(false); loadSettings();
+  if (onTrain) training.openTraining(); else training.loadExamples().catch(() => {});
+  refreshDirty();
 });
 
-list.addEventListener('click', (e) => {
+list.addEventListener('click', async (e) => {
   if (e.target.closest('[data-retry]')) { loadDrafts(false); return; }
   const b = e.target.closest('[data-save]');
-  if (b) saveRating(b.dataset.save);
+  if (b) { saveRating(b.dataset.save); return; }
+  const x = e.target.closest('[data-ex]');
+  if (x) {
+    const d = drafts.find((r) => r.id === x.dataset.ex);
+    // Хадгалаагүй үнэлгээтэй бол эхлээд хадгалуулна (жишээ нь ХАДГАЛСАН үнэлгээнээс үүснэ)
+    if (d && cardDirty(d)) { showCardErr(d.id, 'Эхлээд «Үнэлгээ хадгалах» дарна уу.'); x.focus(); return; }
+    // Урьдчилан бөглөсөн засварлагч «Сургалт» табд нээгдэнэ (хувийн мэдээллийг арилгаад хадгална)
+    if (d) await training.exampleFromDraftAction(d, x);
+    return;
+  }
+  const xe = e.target.closest('[data-ex-edit]');
+  if (xe) training.editExample(exampleIdForDraft(xe.dataset.exEdit), xe);
 });
 list.addEventListener('change', (e) => {
   const r = e.target.closest('input[type="radio"]');
@@ -270,7 +308,7 @@ const notesDirty = () => {
   for (const [id, n] of noteDraft) if (n.trim() !== ((byId.get(id) || {}).note || '').trim()) return true;
   return false;
 };
-const isDirty = () => settingsDirty() || notesDirty();
+const isDirty = () => settingsDirty() || notesDirty() || training.isDirty();
 const lockForm = (on) => { $$('.panel', form).forEach((p) => { p.inert = on; }); btnSave.disabled = on; btnStop.disabled = on; };
 lockForm(true);
 
@@ -416,8 +454,12 @@ form.addEventListener('change', refreshDirty);
 // isDirty нь үнэлгээг ч тооцно — гарах/хаахад анхааруулга гарна.
 registerForm('messenger', {
   isDirty,
+  // Харагдаж буй табын маягтыг ЭХЛЭЭД хадгална (Сургалт таб дээр Ctrl+S = мэдлэг/жишээ)
   save: async () => {
-    if (settingsDirty()) await save();
+    const onTrain = !$('#msPanelTrain').hidden;
+    if (onTrain && training.isDirty()) await training.save();
+    else if (settingsDirty()) await save();
+    else if (training.isDirty()) { selectTab('train'); await training.save(); }
     else if (notesDirty()) {
       selectTab('drafts');
       const id = [...ratingPick.keys(), ...noteDraft.keys()].find((k) => $(`[data-save="${CSS.escape(k)}"]`, list));
@@ -427,21 +469,39 @@ registerForm('messenger', {
     }
   },
   discard: () => {
-    if (saving) return;
+    if (saving) return false;
+    if (training.discard() === false) { snack('Хадгалалт дуусаагүй байна — дуусахыг хүлээнэ үү.'); return false; }
     if (saved) fill(saved);
     ratingPick.clear(); noteDraft.clear(); cardErr.clear();
     clearErrors(form); renderDrafts(); refreshDirty();
   },
   reset: () => { teardown(); },
-  anchor: $('#msActions'),
+  // Таб бүрийн «Хадгалах» мөр — харагдаж байвал доод хадгалах мөрийг давхар гаргахгүй
+  anchors: [$('#msActions'), $('#msKbActions'), $('#msExActions')],
 });
 
 /* ---------- Нээх / хаах ---------- */
+/** Жишээ нэмэгдсэн/устсан: зөвхөн картуудын «Жишээ» мөрийг шинэчилнэ (тэмдэглэл бичиж буй textarea-ийн фокус алдагдахгүй) */
+function refreshExampleRows() {
+  for (const d of drafts) {
+    const card = $(`.ms-card[data-id="${CSS.escape(d.id)}"]`, list);
+    if (!card) continue;
+    const old = $('.ms-exrow', card);
+    const had = old && old.contains(document.activeElement);
+    const html = exampleRow(d);
+    if (old) old.remove();
+    if (html) card.insertAdjacentHTML('beforeend', html);
+    if (had) $('.ms-exrow button', card)?.focus();
+  }
+}
+training.initTraining({ selectTab, onExamplesChange: refreshExampleRows, onDirty: () => refreshDirty() });
 function open() {
   if (opened || !session.user) return;
   opened = true;
   loadSettings();
   loadDrafts(false);
+  // Ноорогийн карт «Жишээнд орсон»-ыг харуулахад (≤ 100 read); алдаа гарвал карт товчтой хэвээр
+  training.loadExamples().catch(() => {});
 }
 /** Нэвтэрсний дараа (admin.js) — цэс идэвхтэй бол шууд, эс бөгөөс анх нээх үед уншина */
 export function load() {
@@ -451,6 +511,8 @@ window.addEventListener('hashchange', () => { if (/^#\/messenger/.test(location.
 export function teardown() {
   opened = false; ready = false; saved = null; drafts = []; cursor = null; lastState = null; lastUsage = { runs: 0, costMicroUsd: 0 };
   ratingPick.clear(); noteDraft.clear(); busy.clear(); cardErr.clear();
+  training.teardown();
+  selectTab('drafts');
   lockForm(true);
   list.innerHTML = ''; meta.textContent = ''; more.hidden = true; stateBox.innerHTML = '';
   $('#msModeBanner').hidden = true;

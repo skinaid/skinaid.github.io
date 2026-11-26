@@ -12,6 +12,7 @@
  */
 import { FirestoreError } from './firestore.js';
 import { describeError } from './errors.js';
+import { ubDay } from './store.js';
 import { AUTOMATION_TEMPLATE_MIN_CONVERSATIONS, echoFingerprint, planBatch } from './social/conversation-logic.js';
 
 export const ROUNDS_MAX = 6;
@@ -29,8 +30,6 @@ function errorCode(e) {
   return String((e && e.message) || 'error').split(/[:\s]/)[0].slice(0, 60) || 'error';
 }
 const asDate = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : null);
-/** Улаанбаатарын өдөр («2026-11-25») */
-const ubDay = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 
 /**
  * @param {{ store: ReturnType<import('./store.js').createStore>, agent: ReturnType<import('./agent.js').createAgent>,

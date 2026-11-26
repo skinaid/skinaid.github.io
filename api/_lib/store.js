@@ -22,7 +22,20 @@ export const COL = Object.freeze({
   status: 'messenger_status',
   echo: 'messenger_echo_templates',
   audit: 'messenger_audit',
+  kb: 'messenger_kb',
+  examples: 'messenger_examples',
 });
+/** messenger_kb-ийн тусгай баримт: `voice` = брэнд дуу хоолой; `_rev` = мэдлэг/жишээ өөрчлөгдсөн тэмдэг (admin нэг batch-д бичнэ) */
+export const KB_IDS = Object.freeze({ voice: 'voice', rev: '_rev' });
+/** Нэг ачаалалтын унших дээд тоо (Spark квот) ≈ prompt-д орох хязгаар + нөөц (catalog-safe.js 60, examples.js 30) */
+export const KNOWLEDGE_READ_LIMIT = Object.freeze({ kb: 70, examples: 40, adminKb: 100 });
+/** Admin-ийн «Туршилтын асуулт»: өдөрт (messenger_usage/<УБ өдөр>.tests) ба сард (сарын AI хязгаарын 20%, ≥ 100) */
+export const ADMIN_TESTS_PER_DAY = 100;
+export const adminTestsPerMonth = (settings) => Math.max(100, Math.floor((Number(settings?.monthlyRunCap) || 0) * 0.2));
+/** Туршилтын сарын зардлын хязгаар (микро-доллар) = сарын зардлын хязгаарын 20% — үлдсэнийг Messenger-ийн ноорогт */
+export const adminTestCostPerMonth = (settings) => Math.round((Number(settings?.monthlyCostCapUsd) || 0) * 1e6 * 0.2);
+/** Өдрийн тоологчийн хадгалах хугацаа (хоног) — cron устгана */
+const DAY_DOC_DAYS = 90;
 
 /** Хадгалах хугацаа (хоног) — README «Messenger AI»-тай ижил */
 export const RETENTION_DAYS = Object.freeze({ events: 30, messages: 180, drafts: 180, runs: 400, echo: 90 });
@@ -41,6 +54,11 @@ const asDate = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : nul
 /** Улаанбаатарын цагаар сар («2026-11») — сарын тагийн түлхүүр */
 export function ubMonth(date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit' }).format(date).slice(0, 7);
+}
+
+/** Улаанбаатарын цагаар өдөр («2026-11-25») — өдрийн тоологчийн түлхүүр (messenger_usage/<өдөр>) */
+export function ubDay(date) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
 /**
@@ -63,6 +81,67 @@ export function createStore(fs, opt = {}) {
     async readSiteDocs() {
       const m = await fs.batchGet(['settings/site', 'settings/catalog']);
       return { site: m.get('settings/site')?.data ?? null, catalog: m.get('settings/catalog')?.data ?? null };
+    },
+
+    /**
+     * Мэдлэгийн бүх эх (knowledge.js): сайт + admin «Сургалт»-ийн мэдлэг, жишээ. Query = нэг талбарын equality эсвэл
+     * шүүлтгүй (composite index-гүй); эрэмбийг knowledge/catalog-safe id-аар хийнэ (кэш тогтвортой).
+     * @param {{ includeDrafts?: boolean }} [opt]  true — ноорог мэдлэгийг ч уншина (admin-ийн туршилт)
+     */
+    async readKnowledgeDocs(opt = {}) {
+      const [heads, lists] = await Promise.all([this.readKnowledgeHeads(), this.readKnowledgeLists(opt)]);
+      return { ...heads, ...lists };
+    },
+
+    /**
+     * Мэдлэгийн «толгой»: сайтын 2 баримт + брэнд дуу хоолой + `_rev` (4 read). `rev` = тэдгээрийн updateTime — admin
+     * мэдлэг/жишээ/каталог/тохиргоо засахад өөрчлөгдөнө (knowledge.js кэшийг зөвхөн тэр үед дахин ачаална).
+     */
+    async readKnowledgeHeads() {
+      const paths = ['settings/site', 'settings/catalog', `${COL.kb}/${KB_IDS.voice}`, `${COL.kb}/${KB_IDS.rev}`];
+      const m = await fs.batchGet(paths);
+      return {
+        site: m.get(paths[0])?.data ?? null,
+        catalog: m.get(paths[1])?.data ?? null,
+        voice: m.get(paths[2])?.data ?? null,
+        rev: paths.map((p) => m.get(p)?.updateTime ?? '-').join('|'),
+      };
+    },
+
+    /**
+     * Мэдлэг (нийтэлсэн; admin-д бүгд) ба жишээ (ШИНЭ нь эхэнд — prompt-ийн хязгаарт шинэ жишээ ордог). Query = нэг талбарын
+     * equality эсвэл нэг талбарын orderBy (composite index-гүй). `voice`, `_rev`-ийг жагсаалтаас хасна (толгойд бий).
+     * @param {{ includeDrafts?: boolean, all?: boolean }} [opt]
+     */
+    async readKnowledgeLists(opt = {}) {
+      const kbQuery = opt.includeDrafts || opt.all
+        ? { collection: COL.kb, limit: KNOWLEDGE_READ_LIMIT.adminKb }
+        : { collection: COL.kb, where: [['status', '==', 'published']], limit: KNOWLEDGE_READ_LIMIT.kb };
+      const [kb, examples] = await Promise.all([
+        fs.query(kbQuery),
+        fs.query({ collection: COL.examples, orderBy: [['updatedAt', 'desc']], limit: KNOWLEDGE_READ_LIMIT.examples }),
+      ]);
+      const special = new Set(Object.values(KB_IDS));
+      const rows = (docs) => docs.map((d) => ({ id: d.id, data: d.data }));
+      return { kb: rows(kb.filter((d) => !special.has(d.id))), examples: rows(examples) };
+    },
+
+    /** Мэдлэгийн тэмдгийг сервер шинэчилнэ (cron жишээ устгасны дараа) — admin-ийн бичдэг хэлбэртэй ижил */
+    async bumpKnowledgeRev() {
+      const t = now();
+      await fs.commit([setWrite(`${COL.kb}/${KB_IDS.rev}`, { title: 'Кэшийн тэмдэг (систем)', body: t.toISOString(), status: 'draft', updatedAt: t, updatedBy: 'system' })]);
+    },
+
+    /** Ноорогоос үүссэн (`x_`) жишээ — сүүлд засснаас хойш RETENTION_DAYS.drafts өнгөрсөн бол устгана (нууцлалын бодлого: 180 хоног) */
+    async purgeDraftExamples(limit = 200) {
+      const cutoff = new Date(now().getTime() - RETENTION_DAYS.drafts * DAY);
+      const docs = await fs.query({ collection: COL.examples, where: [['updatedAt', '<=', cutoff]], orderBy: [['updatedAt', 'asc']], limit });
+      const old = docs.filter((d) => d.id.startsWith('x_'));
+      if (old.length) {
+        await fs.commit(old.map((d) => deleteWrite(d.path)));
+        await this.bumpKnowledgeRev();
+      }
+      return old.length;
     },
 
     /** messenger_status/main-ийн зарим талбарыг шинэчилнэ (merge) */
@@ -250,6 +329,61 @@ export function createStore(fs, opt = {}) {
     async readUsage(month) {
       const d = await fs.get(`${COL.usage}/${month}`);
       return { runs: Number(d?.data?.runs) || 0, costMicroUsd: Number(d?.data?.costMicroUsd) || 0 };
+    },
+
+    /**
+     * Admin-ийн туршилтыг Claude-ийг дуудахаас ӨМНӨ тоолно (аудит 2026-11-27: өмнө нь дараа нь тоолдог байсан тул зэрэг
+     * хүсэлт эсвэл бүртгэл бичигдэхгүй үед хязгаар ажиллахгүй байв). Өдрийн тоог updateTime precondition-оор атомаар
+     * (≤ 4 оролдлого); сарын туршилтын тоо — зөөлөн хязгаар.
+     * @returns {Promise<{ ok: true, dayTests: number } | { ok: false, reason: 'day_cap'|'month_tests'|'busy' }>}
+     */
+    async reserveAdminTest({ month, day, dayMax, monthMax, monthCostMax = Infinity }) {
+      const dayPath = `${COL.usage}/${day}`;
+      const monthPath = `${COL.usage}/${month}`;
+      for (let i = 0; i < 4; i++) {
+        const m = await fs.batchGet([dayPath, monthPath]);
+        const d = m.get(dayPath);
+        const dayTests = Number(d?.data?.tests) || 0;
+        if (dayTests >= dayMax) return { ok: false, reason: 'day_cap' };
+        const mo = m.get(monthPath)?.data;
+        if ((Number(mo?.tests) || 0) >= monthMax || (Number(mo?.testCostMicroUsd) || 0) >= monthCostMax) return { ok: false, reason: 'month_tests' };
+        const t = now();
+        try {
+          await fs.commit([
+            setWrite(dayPath, { day, updatedAt: t, expireAt: new Date(t.getTime() + DAY_DOC_DAYS * DAY) }, {
+              mask: ['day', 'updatedAt', 'expireAt'],
+              transforms: [transforms.increment('tests', 1)],
+              ...(d ? { updateTime: d.updateTime } : { exists: false }),
+            }),
+            setWrite(monthPath, { month, updatedAt: t }, { mask: ['month', 'updatedAt'], transforms: [transforms.increment('tests', 1)] }),
+          ]);
+          return { ok: true, dayTests: dayTests + 1 };
+        } catch (e) {
+          if (!(e instanceof FirestoreError && e.isPrecondition)) throw e;
+        }
+      }
+      return { ok: false, reason: 'busy' };
+    },
+
+    /**
+     * Admin-ийн туршилт / eval-ийн Claude дуудлагын бүртгэл: ai_runs (текстгүй) + сарын зардал (хязгаарт тоологдоно) — НЭГ
+     * commit. messenger_drafts-д бичихгүй (үнэлгээний статистикийг бохирдуулахгүй). Туршилтын тоог reserveAdminTest тоолсон.
+     * @param {{ run: object, month: string }} p
+     */
+    async saveAdminRun({ run, month }) {
+      const t = now();
+      const writes = [setWrite(`${COL.runs}/${newId('r')}`, {
+        ...run, draftId: null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY),
+      }, { exists: false })];
+      if (run.billable) {
+        const cost = Math.max(0, Math.round(run.costMicroUsd || 0));
+        writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
+          mask: ['month', 'updatedAt'],
+          // testCostMicroUsd — туршилтын сарын зардлын дэд хязгаарт (adminTestCostPerMonth)
+          transforms: [transforms.increment('runs', 1), transforms.increment('costMicroUsd', cost), transforms.increment('testCostMicroUsd', cost)],
+        }));
+      }
+      await fs.commit(writes);
     },
 
     /**

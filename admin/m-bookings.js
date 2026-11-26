@@ -5,7 +5,7 @@
    ========================================================================== */
 import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, msOf, updateTitle } from './core.js?v=2c361933';
-import { ICON, dialog, snack, announce, registerForm, refreshDirty } from './ui.js?v=70a601a4';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty } from './ui.js?v=8848d02a';
 import { dayKey, dayGroup, GROUP_ORDER, relTime, matchBooking, telHref } from './lib.js?v=a9638bd3';
 
 const STATUS = { new: 'Шинэ', contacted: 'Холбогдсон', confirmed: 'Баталгаажсан', cancelled: 'Цуцалсан' };

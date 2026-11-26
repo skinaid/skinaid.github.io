@@ -44,18 +44,46 @@ test('мэдлэг: сайтын бодит каталог (catalog-defaults) �
   assert.deepEqual(buildSocialCatalog(knowledgeInput(null, { services: 'x' })).facts.map((f) => f.id), ['clinic', 'address']);
 });
 
-test('мэдлэг: 5 минутын кэш (Spark-ийн унших квот); яаралтай утас = сайтын admin-ийн утас эсвэл тогтмол', async () => {
-  let reads = 0;
+test('мэдлэг: кэш — толгойг ≥ 1 мин тутам (4 read), `_rev`/сайт өөрчлөгдвөл л бүрэн ачаална, 30 мин тутам заавал; алдаанд сүүлийн зөв утга', async () => {
   let t = 0;
-  const k = createKnowledge({ readSiteDocs: async () => { reads++; return { site: {}, catalog: { services: [], packages: [] } }; } }, { now: () => t });
-  await k.load();
+  let rev = 'a|b|-|-';
+  const calls = { heads: 0, lists: 0 };
+  let fail = false;
+  const store = {
+    readKnowledgeHeads: async () => { calls.heads++; if (fail) throw new Error('UNAVAILABLE'); return { site: {}, catalog: { services: [], packages: [] }, voice: null, rev }; },
+    readKnowledgeLists: async () => { calls.lists++; return { kb: [], examples: [] }; },
+  };
+  const k = createKnowledge(store, { now: () => t, log: () => {} });
+  const first = await k.load();
+  t += 30_000; await k.load();
+  assert.deepEqual(calls, { heads: 1, lists: 1 }, '1 минутын дотор шалгахгүй');
+  t += 60_000; await k.load();
+  assert.deepEqual(calls, { heads: 2, lists: 1 }, 'тэмдэг өөрчлөгдөөгүй — жагсаалт дахин уншихгүй');
+  rev = 'a|b|-|2026';
+  t += 60_000; await k.load();
+  assert.deepEqual(calls, { heads: 3, lists: 2 }, 'admin засвар → дахин ачаална');
+  t += 31 * 60_000; await k.load();
+  assert.deepEqual(calls, { heads: 4, lists: 3 }, '30 минут тутам заавал');
+  fail = true;
   t += 60_000;
-  await k.load();
-  assert.equal(reads, 1);
-  t += 5 * 60_000;
-  await k.load();
-  assert.equal(reads, 2);
-  assert.equal(clinicPhone({ phone: '7600-0505' }), '7600-0505');
+  assert.ok(await k.load(), 'алдаа → сүүлийн зөв мэдлэг');
+  t += 10_000; await k.load();
+  assert.equal(calls.heads, 5, 'алдааны дараа 30 с дахин оролдохгүй');
+  // Зэрэг дуудлага нэг л ачаалалт
+  const k2 = createKnowledge(store, { now: () => t, log: () => {} });
+  fail = false;
+  calls.heads = 0;
+  await Promise.all([k2.load(), k2.load(), k2.load()]);
+  assert.equal(calls.heads, 1);
+  // Admin-ийн кэшгүй уншилт 30 с давтахгүй
+  calls.lists = 0;
+  await k2.load({ fresh: true }); await k2.load({ fresh: true });
+  assert.equal(calls.lists, 1);
+  void first;
+  // Анхны ачаалалт (кэшгүй) амжилтгүй бол алдаа шиднэ
+  const k3 = createKnowledge({ readKnowledgeHeads: async () => { throw new Error('x'); }, readKnowledgeLists: async () => ({}) }, { now: () => 0, log: () => {} });
+  await assert.rejects(k3.load());
+assert.equal(clinicPhone({ phone: '7600-0505' }), '7600-0505');
   assert.equal(clinicPhone({ phone: '<script>' }), CLINIC.phoneDisplay);
   assert.equal(clinicPhone(null), CLINIC.phoneDisplay);
 });

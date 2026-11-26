@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=e22f516c">
-  <link rel="stylesheet" href="/admin/admin.css?v=16a2aec8">
+  <link rel="stylesheet" href="/admin/admin.css?v=d0a9b7a6">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -217,12 +217,13 @@
       <!-- Модуль: Messenger AI (1-р үе шат: сүүдэр) -->
       <section class="view" id="view-messenger" aria-labelledby="h-messenger" hidden>
         <div class="main__head">
-          <div><h1 id="h-messenger">Messenger AI</h1><p>Facebook Messenger-т ирсэн асуулт бүрт AI хариуны ноорог бичнэ. <strong>1-р үе шат: үйлчлүүлэгч рүү юу ч илгээхгүй</strong> — ажилтан Meta Inbox-оос өөрөө хариулж, энд ноорогт үнэлгээ өгнө. Эмнэлгийн асуулт, зураг, гомдол, мөнгөний асуудал үргэлж ажилтанд очно.</p></div>
+          <div><h1 id="h-messenger">Messenger AI</h1><p>Facebook Messenger-т ирсэн асуулт бүрт AI хариуны ноорог бичнэ. <strong>Үйлчлүүлэгч рүү юу ч илгээхгүй</strong> — ажилтан Meta Inbox-оос өөрөө хариулж, энд ноорогт үнэлгээ өгнө, «Сургалт»-д AI-д мэдлэг, жишээ заана. Эмнэлгийн асуулт, зураг, гомдол, мөнгөний асуудал үргэлж ажилтанд очно.</p></div>
           <button class="btn btn--outline btn--sm" type="button" id="btnMsReload">Дахин ачаалах</button>
         </div>
         <p class="ms-modebar" id="msModeBanner" role="status" hidden></p>
         <div class="ms-tabs" role="tablist" id="msTabs" aria-label="Messenger AI">
           <button type="button" role="tab" id="msTabDrafts" data-tab="drafts" aria-controls="msPanelDrafts" aria-selected="true">Ноорог</button>
+          <button type="button" role="tab" id="msTabTrain" data-tab="train" aria-controls="msPanelTrain" aria-selected="false" tabindex="-1">Сургалт</button>
           <button type="button" role="tab" id="msTabSettings" data-tab="settings" aria-controls="msPanelSettings" aria-selected="false" tabindex="-1">Тохиргоо</button>
         </div>
 
@@ -235,6 +236,100 @@
           <div class="actions actions--center">
             <button class="btn btn--outline btn--sm" type="button" id="msMore" hidden>Цааш ачаалах (хуучин ноорог)</button>
           </div>
+        </div>
+
+        <div id="msPanelTrain" role="tabpanel" aria-labelledby="msTabTrain" hidden>
+          <div class="hm-load" id="msTrLoad" role="alert" hidden><span id="msTrLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnMsTrRetry">Дахин оролдох</button></div>
+
+          <section class="panel" aria-labelledby="msTryH">
+            <h2 id="msTryH">Туршилтын асуулт</h2>
+            <p>Үйлчлүүлэгч асуусан мэт бичээд AI ямар ноорог бичихийг шалгана. <strong>Хэнд ч юу ч илгээхгүй</strong>, ноорог хадгалагдахгүй. Нэг удаа ойролцоогоор $0.01–0.02, сарын хязгаарт тоологдоно (өдөрт 100 хүртэл). Хадгалсан мэдлэг 1 минутын дотор тусна. Горим «Унтраалттай» үед ч туршина; яаралтай зогсоолт асаалттай бол туршихгүй.</p>
+            <form id="msTryForm" novalidate>
+              <div class="field">
+                <label for="ms-try">Үйлчлүүлэгчийн мессеж</label>
+                <textarea id="ms-try" maxlength="1000" rows="3" data-count-chars aria-describedby="msTryStatus" placeholder="жишээ: Арьсны үзлэг хэд вэ? Хэдэн цагт ажилладаг вэ?"></textarea>
+              </div>
+              <label class="ms-check"><input type="checkbox" id="ms-try-drafts"> <span>Ноорог (нийтлээгүй) мэдлэгийг хамт турших</span></label>
+              <div class="actions"><button class="btn btn--primary" type="submit" id="btnMsTry">AI-аас ноорог авах</button><span class="status" id="msTryStatus" role="status"></span></div>
+            </form>
+            <div class="ms-list ms-try-out" id="msTryOut"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="msKbH">
+            <div class="panel__head">
+              <h2 id="msKbH">Мэдлэг — түгээмэл асуулт, бодлого</h2>
+              <div class="actions actions--head">
+                <button class="btn btn--outline btn--sm" type="button" id="btnMsVoice">Брэнд дуу хоолой, заавар</button>
+                <button class="btn btn--primary btn--sm" type="button" id="btnMsKbNew">Шинэ мэдлэг</button>
+              </div>
+            </div>
+            <p>Зогсоол, төлбөрийн хэлбэр, цуцлах нөхцөл гэх мэт. «Нийтэлсэн» мэдлэгийг AI 1 минутын дотор ашиглаж эхэлнэ; энд бичсэн үнэ, хөнгөлөлтийг AI тухайн бичлэгийг иш татан хэлж болно. Утас, имэйл бүү бич — систем яаралтай үед өөрөө нэмдэг (тийм бичлэг AI-д орохгүй).</p>
+            <form id="msKbForm" class="ms-editor" novalidate hidden aria-labelledby="msKbFormH">
+              <h3 id="msKbFormH" class="ms-editor__title" tabindex="-1">Шинэ мэдлэг</h3>
+              <div class="err-summary" id="msKbErr" hidden></div>
+              <div class="field" id="msKbTitleField">
+                <label for="ms-kb-title">Гарчиг</label>
+                <input id="ms-kb-title" type="text" maxlength="120" data-count-chars autocomplete="off" placeholder="жишээ: Зогсоол бий юу?">
+              </div>
+              <div class="field">
+                <label for="ms-kb-body" id="ms-kb-body-l">Агуулга</label>
+                <p class="hint" id="ms-kb-body-hint">AI энэ текстийг баримт болгон иш татна. Товч, тодорхой бичнэ үү.</p>
+                <textarea id="ms-kb-body" maxlength="1500" rows="5" data-count-chars aria-describedby="ms-kb-body-hint"></textarea>
+              </div>
+              <fieldset class="ms-modes field" id="ms-kb-status"><legend>Төлөв</legend><div class="ms-radios" id="msKbStatus"></div></fieldset>
+              <div class="actions" id="msKbActions">
+                <button class="btn btn--primary" type="submit" id="btnMsKbSave">Хадгалах</button>
+                <button class="btn btn--ghost" type="button" id="btnMsKbCancel">Болих</button>
+                <span class="status" id="msKbSaveStatus" role="status"></span>
+              </div>
+            </form>
+            <p class="toolbar__meta" id="msKbMeta" role="status"></p>
+            <ul class="ms-items" id="msKbList" aria-labelledby="msKbH"></ul>
+          </section>
+
+          <section class="panel" aria-labelledby="msExH">
+            <div class="panel__head">
+              <h2 id="msExH">Жишээ — сайн ба муу хариу</h2>
+              <button class="btn btn--primary btn--sm" type="button" id="btnMsExNew">Шинэ жишээ</button>
+            </div>
+            <p>AI-д хэв маяг, өнгө аяс заана (үнэ, баримтыг мэдлэгээс л авна). «Ноорог» хэсэгт үнэлсэн ноорогоос «Жишээ болгох» товчоор бөглөөд хадгална. Хадгалсан жишээг AI 1 минутын дотор ашиглана; хязгаар хэтэрвэл хамгийн шинэ 30 нь орно.</p>
+            <form id="msExForm" class="ms-editor" novalidate hidden aria-labelledby="msExFormH">
+              <h3 id="msExFormH" class="ms-editor__title" tabindex="-1">Шинэ жишээ</h3>
+              <div class="err-summary" id="msExErr" hidden></div>
+              <div class="ms-privacy" id="msExPrivacy" role="note" hidden><strong>Хувийн мэдээлэл</strong> <span id="msExPrivacyMsg"></span></div>
+              <fieldset class="ms-modes field" id="ms-ex-kind"><legend>Төрөл</legend><div class="ms-radios" id="msExKinds"></div></fieldset>
+              <div class="field">
+                <label for="ms-ex-user">Үйлчлүүлэгчийн асуулт</label>
+                <textarea id="ms-ex-user" maxlength="2000" rows="2" data-count-chars></textarea>
+              </div>
+              <div class="field">
+                <label for="ms-ex-reply" id="ms-ex-reply-l">Хариу</label>
+                <textarea id="ms-ex-reply" maxlength="2000" rows="3" data-count-chars></textarea>
+              </div>
+              <div class="field">
+                <label for="ms-ex-note">Тайлбар <small>(яагаад сайн / муу вэ — заавал биш)</small></label>
+                <textarea id="ms-ex-note" maxlength="500" rows="2" data-count-chars></textarea>
+              </div>
+              <div class="actions" id="msExActions">
+                <button class="btn btn--primary" type="submit" id="btnMsExSave">Хадгалах</button>
+                <button class="btn btn--ghost" type="button" id="btnMsExCancel">Болих</button>
+                <span class="status" id="msExSaveStatus" role="status"></span>
+              </div>
+            </form>
+            <p class="toolbar__meta" id="msExMeta" role="status"></p>
+            <ul class="ms-items" id="msExList" aria-labelledby="msExH"></ul>
+          </section>
+
+          <section class="panel" aria-labelledby="msKnowH">
+            <h2 id="msKnowH">AI-д юу орж байна</h2>
+            <p>Сайтын каталог, эмчилгээний хуудас, нийтэлсэн мэдлэг, жишээнээс аль нь AI-д очиж байгааг, аль нь яагаад ороогүйг серверээс шалгана (төлбөргүй).</p>
+            <div class="actions">
+              <button class="btn btn--outline" type="button" id="btnMsKnow">Шалгах</button>
+              <label class="ms-check"><input type="checkbox" id="ms-know-drafts"> <span>Ноорог мэдлэгийг хамт</span></label>
+              <span class="status" id="msKnowStatus" role="status"></span>
+            </div>
+            <div id="msKnowOut"></div>
+          </section>
         </div>
 
         <div id="msPanelSettings" role="tabpanel" aria-labelledby="msTabSettings" hidden>
@@ -358,6 +453,6 @@
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=695218e6"></script>
-  <script type="module" src="/admin/admin.js?v=7ac702ca"></script>
+  <script type="module" src="/admin/admin.js?v=f6efa6e8"></script>
 </body>
 </html>

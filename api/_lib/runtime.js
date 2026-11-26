@@ -1,5 +1,6 @@
 /**
  * Жинхэнэ deps-ийг холбоно (нэг инстанст нэг удаа): GCP эрх → Firestore REST → store → мэдлэг, Claude → агент → pipeline.
+ * webhook, cron, admin (api/admin.js — мэдлэг, агентыг шууд ашиглана) хуваалцана.
  * Серверийн эрх тохируулаагүй бол null (webhook 200 буцааж логлоно, cron 503).
  */
 import { createGcpAuth } from './gcp-auth.js';
@@ -25,6 +26,6 @@ export function getRuntime(env = process.env) {
   const knowledge = createKnowledge(store);
   const agent = createAgent({ store, knowledge, callClaude: createClaudeCaller(), env });
   const pipeline = createPipeline({ store, agent, ownAppId: metaConfig(env).appId });
-  cached = { store, pipeline };
+  cached = { store, pipeline, knowledge, agent };
   return cached;
 }

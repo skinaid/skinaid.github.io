@@ -3,6 +3,9 @@
   "cleanUrls": false,
   "trailingSlash": false,
   "functions": {
+    "api/admin.js": {
+      "maxDuration": 60
+    },
     "api/messenger.js": {
       "maxDuration": 60
     },

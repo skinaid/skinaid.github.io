@@ -4,7 +4,7 @@
  *
  *   · Модель `claude-opus-5-5`, effort `low` (Opus 5.5-д thinking унтраах боломжгүй, анхдагч `medium` тул тодорхой заана).
  *   · Structured output: `output_config.format` = prompt.js SOCIAL_OUTPUT_SCHEMA (json_schema).
- *   · Prompt caching: system-ийн 2 блок `cache_control: ephemeral` (prompt.js). `usage.cache_read_input_tokens`-оор шалгана.
+ *   · Prompt caching: system-ийн 2–3 блок `cache_control: ephemeral, ttl 1h` (prompt.js). `usage.cache_read_input_tokens`-оор шалгана.
  *   · Refusal: server-side `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) — татгалзвал Anthropic-ийн
  *     санал болгосон моделиор дахин оролдоно; бүх гинж татгалзвал `stop_reason: "refusal"` → policy хүнд шилжүүлнэ.
  *   · Нууц: ANTHROPIC_API_KEY-г SDK env-ээс уншина; лог, алдааны кодонд хэзээ ч гаргахгүй.
@@ -32,19 +32,23 @@ export function apiErrorDetail(e) {
 export const MESSENGER_MODEL = 'claude-opus-5-5';
 export const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
-/** $/1M токен (2026-11, claude-api skill). Fallback моделиуд тусдаа үнэтэй; мэдэгдэхгүй бол хамгийн өндрийг авна. */
+/** $/1M токен (2026-11, claude-api skill). cacheWrite = 5 минутын (1.25×), cacheWrite1h = 1 цагийн (2×) кэш бичилт.
+ *  Fallback моделиуд тусдаа үнэтэй; мэдэгдэхгүй бол хамгийн өндрийг авна. */
 export const PRICES = Object.freeze({
-  'claude-opus-5-5': { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
-  'claude-opus-5': { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
-  'claude-opus-4-8': { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+  'claude-opus-5-5': { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5, cacheWrite1h: 8 },
+  'claude-opus-5': { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25, cacheWrite1h: 10 },
+  'claude-opus-4-8': { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25, cacheWrite1h: 10 },
 });
-const MAX_PRICE = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 };
+const MAX_PRICE = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25, cacheWrite1h: 10 };
 
 const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const priced = (model, u) => {
   const p = PRICES[model] ?? MAX_PRICE;
+  // cache_creation задаргаа байвал 1 цагийн бичилтийг 2×-ээр; үгүй бол бүгдийг 5 минутын үнээр
+  const w = n(u.cache_creation_input_tokens);
+  const w1h = Math.min(w, n(u.cache_creation?.ephemeral_1h_input_tokens));
   return (n(u.input_tokens) * p.input + n(u.output_tokens) * p.output + n(u.cache_read_input_tokens) * p.cacheRead
-    + n(u.cache_creation_input_tokens) * p.cacheWrite) / 1e6;
+    + (w - w1h) * p.cacheWrite + w1h * p.cacheWrite1h) / 1e6;
 };
 
 /**
