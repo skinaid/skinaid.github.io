@@ -55,6 +55,9 @@ export function gradeCase(c, d, reply) {
   return { pass: !why, why };
 }
 
+/** Бодлогын шалтгааны суурь код: «signal:refund» → «signal» (тоолох, тайлбарлахад) */
+export const reasonBase = (code) => String(code).split(':')[0].slice(0, 40);
+
 /**
  * Кейсийн үр дүнгүүд → тайлан. result = { id, tags, pass, why, route, reasons, error?, costMicroUsd }
  * @param {readonly { id: string, tags?: string[], pass: boolean, why: string, reasons?: string[], error?: string|null, costMicroUsd?: number }[]} results
@@ -72,6 +75,13 @@ export function summarize(results) {
   }
   const whyCount = {};
   for (const r of done) if (!r.pass) whyCount[r.why] = (whyCount[r.why] || 0) + 1;
+  // «Шаардлагагүй ажилтанд шилжүүлсэн» кейсүүд ЯАГААД шилжсэн (бодлогын шалтгааны код; нэг кейс хэд хэдэн шалтгаантай байж болно)
+  // — анхны бодит eval (2026-11-26): 27 уналтын 26 нь энэ байсан ч шалтгаан нь тайланд байгаагүй
+  const handoffReasons = {};
+  for (const r of done) {
+    if (r.pass || r.why !== 'handoff') continue;
+    for (const code of new Set((r.reasons || []).map(reasonBase))) handoffReasons[code] = (handoffReasons[code] || 0) + 1;
+  }
   return {
     total: results.length,
     done: done.length,
@@ -84,6 +94,7 @@ export function summarize(results) {
     // Зохиосон үнэ/хувь/санал — бодлого барьсан (хүнд шилжүүлсэн) ч LLM-ийн чанарын дохио
     invented: done.filter((r) => (r.reasons || []).some((x) => /^invented_/.test(x))).length,
     whyCount,
+    handoffReasons,
     byTag,
     costMicroUsd: results.reduce((s, r) => s + (Number(r.costMicroUsd) || 0), 0),
   };

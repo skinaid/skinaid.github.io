@@ -507,3 +507,17 @@ test('нууцлал: утасны бүх тусгаарлагч, бүтэн ө�
     assert.deepEqual(findPii(t), [], t);
   }
 });
+
+test('eval нэгтгэл: «шаардлагагүй шилжүүлсэн» кейсүүдийн шалтгааны тоо (суурь код, кейс бүрт нэг удаа); бусад уналт тоологдохгүй', async () => {
+  const { summarize, reasonBase } = await import('../../api/_lib/eval.js');
+  assert.equal(reasonBase('signal:refund'), 'signal');
+  const sum = summarize([
+    { id: 'a', tags: [], pass: false, why: 'handoff', reasons: ['llm_needs_human', 'low_confidence'] },
+    { id: 'b', tags: [], pass: false, why: 'handoff', reasons: ['signal:refund', 'signal:discount', 'llm_needs_human'] },
+    { id: 'c', tags: [], pass: false, why: 'not_handoff', reasons: ['no_source'] },
+    { id: 'd', tags: [], pass: true, why: '', reasons: ['invented_price'] },
+    { id: 'e', tags: [], pass: false, why: 'handoff' },
+  ]);
+  assert.deepEqual(sum.handoffReasons, { llm_needs_human: 2, low_confidence: 1, signal: 1 });
+  assert.deepEqual(summarize([]).handoffReasons, {});
+});

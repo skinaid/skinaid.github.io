@@ -373,6 +373,10 @@ test('admin API eval: эхлүүлэх → хэсгүүд → дуусгах; ү
   assert.equal(fin.summary.done, EVAL_CASES.length);
   assert.ok(fin.summary.pass > 0 && fin.summary.pass < EVAL_CASES.length);
   assert.ok(fin.failures.length > 0 && fin.failures.every((f) => f.id && f.why));
+  // Унасан кейс бүрт бодлогын шалтгааны код (текстгүй) — тайланд хадгалагдана
+  assert.ok(fin.failures.every((f) => Array.isArray(f.reasons) && f.reasons.length <= 6 && f.reasons.every((x) => /^[a-z_]+(:[a-z_]+)?$/.test(x))), JSON.stringify(fin.failures.slice(0, 3)));
+  assert.deepEqual(s.fake.read(`messenger_status/eval_${st.runId}`).failures[0].reasons, fin.failures[0].reasons, 'тайланд хадгалагдсан');
+  assert.deepEqual(fin.summary.handoffReasons, {}, 'энэ хуурамч AI шаардлагагүй шилжүүлээгүй');
   assert.equal(fin.compare, null, 'анхны ажиллагаа');
   assert.equal(s.fake.list('messenger_status/evalc_').length, 0, 'хэсгийн баримт устсан');
   const idx = s.fake.read('messenger_status/evals');
@@ -502,6 +506,19 @@ test('аудит (eval): AI-ийн гаралт буруу (нөөц шилжү�
   assert.equal(fin.summary.fallbacks, 2 * st.chunk);
   assert.equal(fin.summary.pass, 0);
   assert.equal(fin.knowledgeChanged, true);
+});
+
+test('eval тайлан: «шаардлагагүй ажилтанд шилжүүлсэн» кейс бүр шалтгаантай (AI өөрөө шилжүүлсэн г.м.), нэгтгэлд шалтгааны тоо', async () => {
+  // Хуурамч AI бүх асуултыг ажилтанд даатгана → шилжих ёсгүй кейсүүд «handoff»-оор унана
+  const s = setup({ claude: () => ({ status: 'ok', text: reply({ intent: 'other', needs_human: true, reply: 'Ажилтан удахгүй холбогдоно.', source_ids: [] }), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } }) });
+  const st = await (await s.call({ action: 'eval_start' })).json();
+  await s.call({ action: 'eval_chunk', runId: st.runId, from: 0 });
+  const fin = await (await s.call({ action: 'eval_finish', runId: st.runId })).json();
+  const over = fin.failures.filter((f) => f.why === 'handoff');
+  assert.ok(over.length > 0, JSON.stringify(fin.summary.whyCount));
+  assert.ok(over.every((f) => f.reasons.includes('llm_needs_human')), JSON.stringify(over.slice(0, 2)));
+  assert.equal(fin.summary.handoffReasons.llm_needs_human, over.length);
+  assert.ok(!JSON.stringify(fin.failures.map((f) => f.reasons)).includes('Ажилтан'), 'шалтгаан = код, текст биш');
 });
 
 test('аудит: cron messenger_status-аас зөвхөн eval-ийн баримтыг устгана (main, evals — expireAt-тэй байсан ч хэвээр)', async () => {

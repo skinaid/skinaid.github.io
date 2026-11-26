@@ -272,9 +272,26 @@ export const EVAL_WHY = {
 export const EVAL_REASON = {
   no_source: 'мэдлэгээс иш заагаагүй', unknown_source: 'мэдэгдэхгүй иш', long_reply: 'хэт урт хариу', placeholder: 'хувьсагч',
   lint_block: 'хориотой хэллэг', invented_price: 'мэдлэгт байхгүй үнэ', invented_percent: 'мэдлэгт байхгүй хувь',
-  invented_offer: 'мэдлэгт байхгүй хөнгөлөлт/санал', low_confidence: 'AI итгэл бага', llm_needs_human: 'AI ажилтанд шилжүүлсэн',
+  invented_offer: 'мэдлэгт байхгүй хөнгөлөлт/санал', low_confidence: 'AI итгэл бага', llm_needs_human: 'AI өөрөө ажилтанд даатгасан',
   intent_human: 'эрсдэлтэй сэдэв', signal: 'эрсдэлийн дохио', empty_reply: 'хоосон хариу', refusal: 'AI татгалзсан', invalid_output: 'AI-ийн гаралт буруу',
+  injection: 'AI-д заавар өгөх оролдлого',
 };
+/** Бодлогын шалтгааны кодууд («signal:refund» г.м.) → ойлгомжтой текст (давхардалгүй, «; »-ээр) */
+export function evalReasonsText(reasons) {
+  const seen = new Set();
+  for (const r of Array.isArray(reasons) ? reasons : []) {
+    const base = String(r).split(':')[0];
+    if (base) seen.add(EVAL_REASON[base] || base);
+  }
+  return [...seen].join('; ');
+}
+/** «Шаардлагагүй ажилтанд шилжүүлсэн» кейсүүдийн шалтгааны тоо ({ код: тоо }) → [[текст, тоо]] их нь эхэндээ */
+export function evalHandoffReasons(counts) {
+  return Object.entries(counts && typeof counts === 'object' ? counts : {})
+    .map(([k, n]) => [EVAL_REASON[k] || k, Number(n) || 0])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+}
 export function evalWhyText(code) {
   const c = String(code || '');
   if (EVAL_WHY[c]) return EVAL_WHY[c];

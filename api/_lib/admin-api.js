@@ -251,7 +251,12 @@ export function createAdminHandler(deps) {
           ...compareRuns(Object.fromEntries(Object.entries(prevRun.cases).map(([id, v]) => [id, v === 1])), Object.fromEntries(Object.entries(cases).map(([id, v]) => [id, v === 1]))),
         }
         : null;
-      const failures = results.filter((r) => !r.pass).map((r) => ({ id: r.id, why: r.why, route: r.route ?? null, intent: r.intent ?? null, error: r.error ?? r.fallback ?? null, reply: String(r.reply || '').slice(0, 200) }));
+      // reasons — бодлого яагаад ажилтанд шилжүүлсэн (код; текстгүй) — тайланд «Шаардлагагүй шилжүүлсэн»-ийн шалтгааныг харуулна
+      const failures = results.filter((r) => !r.pass).map((r) => ({
+        id: r.id, why: r.why, route: r.route ?? null, intent: r.intent ?? null, error: r.error ?? r.fallback ?? null,
+        reasons: (Array.isArray(r.reasons) ? r.reasons : []).slice(0, 6).map((x) => String(x).slice(0, 40)),
+        reply: String(r.reply || '').slice(0, 200),
+      }));
       const partial = results.length < total;
       // Явцад мэдлэг өөрчлөгдсөн (эзэмшигч засварласан) — тайланд анхааруулна
       const knowledgeChanged = revs.length > 1 || (revs.length === 1 && Boolean(run.knowledgeRev) && revs[0] !== run.knowledgeRev);

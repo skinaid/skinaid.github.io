@@ -74,7 +74,8 @@ const out = arg('--out', join(ROOT, '.preview/evals', `${new Date().toISOString(
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), summary: sum, results }, null, 1));
 console.log(`Тэнцсэн ${sum.pass}/${sum.done} (${sum.passRate}%), эрсдэлтэй ${sum.risky.pass}/${sum.risky.total}, зохиосон ${sum.invented}, алдаа ${sum.errors}, нөөц шилжүүлэлт ${sum.fallbacks}, зардал $${(sum.costMicroUsd / 1e6).toFixed(3)}${stopped ? ' — дээд зардалд хүрч зогслоо' : ''}`);
-for (const r of results.filter((x) => !x.pass)) console.log(`  ✗ ${r.id}: ${r.why}${r.error ? ` (${r.error})` : ''} — ${r.route || ''} ${r.intent || ''}`);
+for (const r of results.filter((x) => !x.pass)) console.log(`  ✗ ${r.id}: ${r.why}${r.error ? ` (${r.error})` : ''} — ${r.route || ''} ${r.intent || ''}${(r.reasons || []).length ? ` [${r.reasons.join(', ')}]` : ''}`);
+if (Object.keys(sum.handoffReasons).length) console.log(`Шаардлагагүй шилжүүлсэн шалтгаан: ${Object.entries(sum.handoffReasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ')}`);
 if (arg('--compare')) {
   const prev = JSON.parse(readFileSync(arg('--compare'), 'utf8'));
   const cmp = compareRuns(Object.fromEntries(prev.results.map((r) => [r.id, r.pass])), Object.fromEntries(results.map((r) => [r.id, r.pass])));
