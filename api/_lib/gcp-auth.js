@@ -13,6 +13,16 @@ import { gcpConfig } from './config.js';
 
 const SCOPES = ['https://www.googleapis.com/auth/datastore'];
 
+// Vercel-ийн bundler (@vercel/nft) функцийн багцад ЗӨВХӨН тогтмол нэртэй `import('…')`-ийг оруулдаг. Хувьсагчтай
+// `import(name)` бол сан багцад орохгүй → production-д модуль олдохгүй (2026-11-26-нд cron 500-аар илэрсэн).
+// tools/test/messenger-architecture.test.mjs үүнийг шалгана.
+const LIBS = {
+  'google-auth-library': () => import('google-auth-library'),
+  '@vercel/oidc': () => import('@vercel/oidc'),
+};
+/** @param {string} name */
+const defaultImporter = (name) => LIBS[/** @type {keyof typeof LIBS} */ (name)]();
+
 export class AuthNotConfiguredError extends Error {
   constructor() {
     super('GCP_AUTH_NOT_CONFIGURED');
@@ -26,7 +36,7 @@ export class AuthNotConfiguredError extends Error {
  */
 export function createGcpAuth(opts = {}) {
   const cfg = gcpConfig(opts.env ?? process.env);
-  const importer = opts.importer ?? ((name) => import(name));
+  const importer = opts.importer ?? defaultImporter;
   const now = opts.now ?? Date.now;
   let client = null;
   let cached = { token: '', exp: 0 };

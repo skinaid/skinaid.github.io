@@ -67,6 +67,32 @@ test('архитектур: SDK/сангийн import — Anthropic зөвхөн
   }
 });
 
+test('архитектур: import() зөвхөн тогтмол нэрээр — Vercel-ийн bundler (nft) хувьсагчтай import-ийг функцийн багцад оруулдаггүй', () => {
+  // 2026-11-26: gcp-auth.js/claude.js `import(name)` → production-д google-auth-library багцад ороогүй, cron 500
+  for (const [f, s] of Object.entries(src)) {
+    for (const m of s.matchAll(/\bimport\s*\(([^)]*)\)/g)) {
+      assert.match(m[1].trim(), /^(['"])[^'"]+\1$/, `${f}: import(${m[1].trim()}) — тогтмол нэр биш (production-д модуль олдохгүй)`);
+    }
+  }
+  const deps = Object.keys(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).dependencies);
+  const imported = new Set(Object.values(src).flatMap((s) => [...s.matchAll(/(?:from\s+|import\()\s*['"]([^'"]+)['"]/g)].map((m) => m[1])));
+  for (const d of deps) assert.ok(imported.has(d), `${d}: api/**-д тогтмол нэрээр импортлогдоогүй — функцийн багцад орохгүй`);
+});
+
+test('сан: npm install хийсэн бол бодит API манай хэрэглээтэй таарна', {
+  skip: !existsSync(join(ROOT, 'node_modules/google-auth-library')) && 'node_modules алга (npm install хийгээгүй)',
+}, async () => {
+  const gal = await import('google-auth-library');
+  assert.equal(typeof gal.ExternalAccountClient.fromJSON, 'function');
+  assert.equal(typeof gal.JWT, 'function');
+  const oidc = await import('@vercel/oidc');
+  assert.equal(typeof oidc.getVercelOidcToken, 'function');
+  const SDK = (await import('@anthropic-ai/sdk')).default;
+  assert.equal(typeof new SDK({ apiKey: 'test-not-real' }).beta.messages.create, 'function');
+  const fns = await import('@vercel/functions');
+  assert.equal(typeof fns.waitUntil, 'function');
+});
+
 test('архитектур: Claude-д зураг/видео/дуу явахгүй — хүсэлтэд зөвхөн текст (image/document блокгүй)', () => {
   const c = src['api/_lib/claude.js'] + src['api/_lib/social/prompt.js'];
   assert.ok(!/type:\s*['"](?:image|document)['"]/.test(c));

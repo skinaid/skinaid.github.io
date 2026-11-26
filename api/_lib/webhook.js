@@ -18,6 +18,7 @@ import { parseWebhook, psidHash } from './social/meta-events.js';
 import { configStatus } from './config.js';
 import { FirestoreError } from './firestore.js';
 import { WEBHOOK_BUDGET_MS } from './pipeline.js';
+import { describeError } from './errors.js';
 
 export const MAX_BODY_BYTES = 1_000_000;
 const HEARTBEAT_MS = 10 * 60_000;
@@ -113,7 +114,7 @@ export function createWebhookHandlers(deps) {
       }
     } catch (e) {
       const code = e instanceof FirestoreError ? `firestore_${e.status || e.httpStatus}` : 'error';
-      log(`[messenger] webhook: Firestore алдаа ${code}`);
+      log(`[messenger] webhook: Firestore алдаа ${describeError(e)}`);
       if (e instanceof FirestoreError && e.isTransient) return text('Unavailable', 503);
       await rt.store.patchStatus({ lastError: { code: code.slice(0, 40), at: now() } }).catch(() => {});
       return text('OK', 200);
@@ -129,7 +130,7 @@ export function createWebhookHandlers(deps) {
         for (const h of threads) await rt.pipeline.processThread(h, { deadline });
         await rt.pipeline.sweepStale({ maxThreads: 2, deadline });
       } catch (e) {
-        log(`[messenger] webhook дараах боловсруулалт: ${e?.status || e?.name || 'error'}`);
+        log(`[messenger] webhook дараах боловсруулалт: ${describeError(e)}`);
       }
     })());
     return text('OK', 200);

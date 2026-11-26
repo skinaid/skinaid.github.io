@@ -17,6 +17,7 @@ import { buildSocialCatalog } from '../../api/_lib/social/catalog-safe.js';
 import { SOCIAL_OUTPUT_SCHEMA } from '../../api/_lib/social/prompt.js';
 import { MEDIA_REPLY } from '../../api/_lib/social/disclosure.js';
 import { createGcpAuth } from '../../api/_lib/gcp-auth.js';
+import { describeError, safeErrorReason, scrub } from '../../api/_lib/errors.js';
 
 const PAGE = '104729382716453';
 const PSID = '6789012345678901';
@@ -344,6 +345,41 @@ test('cron: CRON_SECRET-гүй = 401; зөв = гацсан event, хадгал�
   assert.ok(!JSON.stringify(st).includes(ENV.ANTHROPIC_API_KEY) && !JSON.stringify(st).includes(SECRET), 'нууцын утга статуст алга');
   const noRt = createCronHandler({ env: ENV, getRuntime: () => null });
   assert.equal((await noRt(new Request('https://x', { headers: { authorization: `Bearer ${ENV.CRON_SECRET}` } }))).status, 503);
+});
+
+test('лог: token авч чадаагүй шалтгаан лог-д (token хасагдсан), Firestore-д зөвхөн код; cron алдааг логлоно', async () => {
+  // google-auth-library (gaxios)-ийн STS алдааны хэлбэр
+  const stsErr = Object.assign(new Error('Error code invalid_grant: The audience in ID Token [https://vercel.com/x] does not match the expected audience. eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2ln'), {
+    name: 'GaxiosError', response: { status: 400 }, config: { url: 'https://sts.googleapis.com/v1/token' },
+  });
+  assert.match(safeErrorReason(stsErr), /^sts_400: Error code invalid_grant: The audience in ID Token/);
+  assert.ok(!safeErrorReason(stsErr).includes('eyJ'), 'JWT хасагдсан');
+  const iamErr = Object.assign(new Error("Permission 'iam.serviceAccounts.getAccessToken' denied on resource"), {
+    name: 'GaxiosError', response: { status: 403 }, config: { url: new URL('https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/x:generateAccessToken') },
+  });
+  assert.match(safeErrorReason(iamErr), /^iam_403: Permission 'iam\.serviceAccounts\.getAccessToken' denied/);
+  assert.match(safeErrorReason(Object.assign(new Error("Cannot find package 'google-auth-library'"), { code: 'ERR_MODULE_NOT_FOUND' })), /^Error_ERR_MODULE_NOT_FOUND: Cannot find package 'google-auth-library'/);
+  assert.equal(safeErrorReason(Object.assign(new Error('x'), { name: 'AuthNotConfiguredError' })), 'not_configured');
+  assert.equal(scrub(`ya29.a0AfH6SM sk-ant-api03-abc 1234567890123456 ${'a'.repeat(40)}`), '<token> <key> <id> <hex>');
+
+  // Firestore AUTH: мессеж тогтмол (Firestore-д хадгалагдаж болзошгүй), шалтгаан reason-д
+  const fs = createFirestore({ projectId: 'skinaid-mn', getAccessToken: async () => { throw stsErr; }, fetchImpl: async () => { throw new Error('unreachable'); } });
+  const err = await fs.get('a/b').catch((e) => e);
+  assert.ok(err instanceof FirestoreError);
+  assert.equal(err.message, 'FIRESTORE_AUTH: token failed');
+  assert.match(describeError(err), /^firestore_AUTH: sts_400: Error code invalid_grant/);
+
+  // cron: алдааг логлоно (нууцгүй), статуст зөвхөн код
+  const s = setup();
+  const logs = [];
+  const broken = { store: s.rt.store, pipeline: { sweepStale: async () => { throw err; } } };
+  const cron = createCronHandler({ env: ENV, getRuntime: () => broken, now: s.clock, log: (m) => logs.push(m) });
+  const res = await cron(new Request('https://x/api/cron/daily', { headers: { authorization: `Bearer ${ENV.CRON_SECRET}` } }));
+  assert.equal(res.status, 500);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /^\[messenger\] cron алдаа: firestore_AUTH: sts_400: Error code invalid_grant/);
+  assert.ok(!logs[0].includes(ENV.CRON_SECRET));
+  assert.equal(s.fake.read('messenger_status/main').lastError.code, 'cron_AUTH');
 });
 
 test('cron: ярианы 180 хоногоос хуучин мессеж устгагдана, oldestExpireAt шинэчлэгдэнэ', async () => {

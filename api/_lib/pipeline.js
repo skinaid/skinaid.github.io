@@ -11,6 +11,7 @@
  * Хэрэглэгч рүү ЮУ Ч илгээхгүй.
  */
 import { FirestoreError } from './firestore.js';
+import { describeError } from './errors.js';
 import { AUTOMATION_TEMPLATE_MIN_CONVERSATIONS, echoFingerprint, planBatch } from './social/conversation-logic.js';
 
 export const ROUNDS_MAX = 6;
@@ -131,7 +132,7 @@ export function createPipeline(deps) {
       } catch (e) {
         // Event-үүдийг дахин оролдох (MAX_ATTEMPTS хүрвэл failed) — алдааны мессеж/текстийг логлохгүй
         const code = errorCode(e);
-        log(`[messenger] яриа боловсруулахад алдаа: ${code}`);
+        log(`[messenger] яриа боловсруулахад алдаа: ${describeError(e)}`);
         if (events.length) await store.failEvents(events, code).catch(() => {});
         await store.patchStatus({ lastError: { code, at: now() } }).catch(() => {});
         release = {};

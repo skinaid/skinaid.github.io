@@ -67,7 +67,8 @@ export function createClaudeCaller(opts = {}) {
   const model = opts.model ?? MESSENGER_MODEL;
   let client = opts.client ?? null;
   let SDK = null;
-  const importer = opts.importer ?? ((name) => import(name));
+  // Тогтмол нэртэй import — Vercel-ийн bundler (nft) SDK-г функцийн багцад оруулна (gcp-auth.js-ийн тайлбарыг үз)
+  const importer = opts.importer ?? (() => import('@anthropic-ai/sdk'));
 
   return async function callClaude(req) {
     try {
