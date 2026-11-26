@@ -57,6 +57,19 @@ function loadBrowserScript(rel, key) {
 const catalog = loadBrowserScript('assets/js/catalog-defaults.js', 'SKINAID_DEFAULTS');
 const R = loadBrowserScript('assets/js/catalog-render.js', 'SKINAID_RENDER');
 const H = loadBrowserScript('assets/js/home-render.js', 'SKINAID_HOME_RENDER');
+// Firebase SDK: бүх gstatic import нэг хувилбартай (firebase-config.js SDK_VERSION) — өөр хувилбар холилдвол admin эвдэрнэ
+const sdkErrors = (() => {
+  const want = (readFileSync(join(ROOT, 'assets/js/firebase-config.js'), 'utf8').match(/SDK_VERSION = '([0-9.]+)'/) || [])[1];
+  const out = [];
+  for (const dir of ['assets/js', 'admin']) {
+    for (const n of readdirSync(join(ROOT, dir)).filter((f) => /\.m?js$/.test(f))) {
+      for (const m of readFileSync(join(ROOT, dir, n), 'utf8').matchAll(/firebasejs\/([0-9.]+)\//g)) {
+        if (m[1] !== want) out.push(`${dir}/${n}: Firebase SDK ${m[1]} — firebase-config.js SDK_VERSION ${want}-тэй ижил байх ёстой`);
+      }
+    }
+  }
+  return out;
+})();
 
 /** git-д бүртгэлтэй файлууд (яг бичлэгээр). Vercel case-sensitive — локал macOS биш. */
 function gitTracked() {
@@ -76,7 +89,7 @@ const bookingOptions = (() => {
   const sel = (readFileSync(join(ROOT, 'index.html'), 'utf8').match(/<select id="f-service"[\s\S]*?<\/select>/) || [''])[0];
   return [...sel.matchAll(/<option(?![^>]*value="")[^>]*>([^<]+)<\/option>/g)].map((m) => m[1].trim());
 })();
-const contentErrors = [], contentWarnings = [];
+const contentErrors = [...sdkErrors], contentWarnings = [];
 { // content/pipeline.mjs: үйлчилгээ бүр нэг л хуудсанд, catalog-д байх ёстой
   const owner = new Map(), ids = new Set(catalog.treatments.map((t) => t.id));
   for (const p of content.pipeline) {

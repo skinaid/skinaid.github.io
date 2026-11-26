@@ -21,7 +21,10 @@ assets/js/backend.js          — Firestore-lite: захиалга бичих, s
                                 эхэнд БҮҮ ачаал: PageSpeed FCP 6+ с болдог)
 assets/js/booking.js          — Онлайн цаг захиалга: UB Beauty вэб сувгийн API (сул цаг → захиалга); доорх «Онлайн цаг захиалга»
 assets/js/ubbeauty-config.js  — UB Beauty API хаяг + НИЙТИЙН түлхүүр (pk_live_…). Нууц sk_ түлхүүр хэзээ ч энд биш
-admin/                        — Удирдлагын хэсэг (index.html, admin.js, admin.css): Google нэвтрэлт, 5 модуль
+admin/                        — Удирдлагын хэсэг: index.html, admin.css, admin.js (эхлэл: нэвтрэлт, #/hash routing),
+                                core.js (Firebase, туслах), ui.js (dialog, snackbar+«Буцаах», хадгалаагүй өөрчлөлтийн мөр,
+                                алдааны хураангуй, тоолуур), lib.js (цэвэр функц — tools/test/admin-lib.test.mjs),
+                                m-bookings|m-settings|m-home|m-catalog|m-pages.js (5 цэс)
 admin/pages-status.js         — «Эмчилгээний хуудас» цэсийн өгөгдөл (build үүсгэнэ)
 admin/home-data.js            — «Нүүр хуудас» цэсийн анхны утга + сайтын зургийн жагсаалт (build үүсгэнэ, эх: content/home.json)
 admin/claims.js               — tools/lib/claims.mjs-ийн хуулбар: admin хориотой үгийг анхааруулна (build үүсгэнэ)
@@ -282,7 +285,7 @@ metrics дээр Verified 100% ойролцоо. Token-гүй хүсэлт та�
   Спам ирвэл admin-д тухайн төлөвөөр («Шинэ») шүүгээд «... төлөвтэй N-ийг устгах» товчоор багцаар цэвэрлэнэ (жинхэнэ захиалгаа эхлээд «Холбогдсон» болгоно).
 - Firebase web config (`apiKey` гэх мэт) нууц биш, нийтэд ил байх зориулалттай. Аюулгүй байдал нь дүрэм + allowlist.
 - Захиалгын өгөгдөл хувийн мэдээлэл тул admin хуудсыг зөвхөн итгэлтэй төхөөрөмжөөс нээж, ажлаа дуусаад "Гарах" дарна.
-- SDK хувилбар (`12.16.0`) `backend.js`, `admin/admin.js`, `app-check.js`, `firebase-config.js` дөрвүүлээ ижил байна; шинэчлэхдээ дөрвүүлэнг нь солино.
+- SDK хувилбар (`12.16.0`) `firebase-config.js`-ийн `SDK_VERSION` болон `assets/js/*.js`, `admin/*.js` доторх бүх gstatic import URL-д ижил байна; шинэчлэхдээ бүгдийг нь солино (`node tools/build.mjs --check` зөрүүг илрүүлнэ).
 
 ## Messenger AI (Facebook Messenger-ийн AI туслах)
 

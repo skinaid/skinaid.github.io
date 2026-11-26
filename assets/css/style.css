@@ -855,3 +855,6 @@ article.post:not(.post--link):hover .post__media img { transform: none; }
   .ub__receipt { grid-template-columns: 1fr; gap: 2px; }
   .ub__receipt dd { margin-bottom: 6px; }
 }
+
+/* Нүүрний hero товч: admin-аас урт текст (≤30 тэмдэгт) өгөхөд утсан дээр хальж тасрахгүй */
+@media (max-width: 640px) { .hero__actions .btn { white-space: normal; text-align: center; } }

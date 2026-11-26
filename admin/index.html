@@ -2,22 +2,30 @@
 <html lang="mn">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SkinAid — Удирдлага</title>
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#654186">
+  <meta name="theme-color" content="#2b1b3d">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/style.css?v=9ef6c77d">
-  <link rel="stylesheet" href="/admin/admin.css?v=9a2c0e31">
+  <link rel="stylesheet" href="/assets/css/style.css?v=624f1c7f">
+  <link rel="stylesheet" href="/admin/admin.css?v=129d1af1">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
+  <a class="skip" href="#main">Үндсэн агуулга руу шилжих</a>
+
+  <!-- ===== 0. Нэвтрэлт шалгаж буй (нэвтэрсэн хүнд нэвтрэх хуудас анивчихгүй) ===== -->
+  <div class="splash" id="splash" role="status">
+    <img src="/assets/img/logo.png?v=8f412ce0" alt="" width="480" height="121">
+    <span class="spinner" aria-hidden="true"></span>
+    <span>Нэвтрэлтийг шалгаж байна…</span>
+  </div>
 
   <!-- ===== 1. Нэвтрэх хаалга ===== -->
-  <div class="gate" id="gate">
+  <div class="gate" id="gate" hidden>
     <div class="gate__card">
       <img src="/assets/img/logo.png?v=8f412ce0" alt="SkinAid" width="480" height="121">
       <h1>Удирдлагын хэсэг</h1>
@@ -28,80 +36,96 @@
       </button>
       <div class="gate__err" id="gateErr" hidden role="alert"></div>
       <p class="gate__who" id="gateHint">Эрхтэй бүртгэл: hello@skinaid.mn, info@skinaid.mn</p>
-      <p class="gate__who"><a href="/" style="color:var(--purple);font-weight:700">← Сайт руу буцах</a></p>
+      <p class="gate__who"><a class="gate__back" href="/">← Сайт руу буцах</a></p>
       <p class="gate__who gate__recaptcha">Энэ хуудас reCAPTCHA-аар хамгаалагдсан бөгөөд Google-ийн <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Нууцлалын бодлого</a> ба <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Үйлчилгээний нөхцөл</a> үйлчилнэ.</p>
     </div>
   </div>
 
   <!-- ===== 2. Апп ===== -->
   <div class="shell" id="shell" hidden>
+    <!-- Утсан дээр: нимгэн дээд мөр (цэс нь доод navigation bar) -->
+    <header class="topbar">
+      <a class="topbar__logo" href="/" aria-label="SkinAid сайт руу"><img src="/assets/img/logo-white.png?v=0caecd65" alt="" width="480" height="121"></a>
+      <span class="topbar__title" id="topTitle" aria-hidden="true"></span>
+      <button class="topbar__out" type="button" data-logout aria-label="Гарах"><span data-icon="logout"></span></button>
+    </header>
+
     <aside class="side">
-      <a class="side__logo" href="/" aria-label="SkinAid сайт"><img src="/assets/img/logo-white.png?v=0caecd65" alt="SkinAid" width="480" height="121"></a>
-      <div class="side__title">Модулиуд</div>
-      <nav class="menu" aria-label="Модулиуд">
-        <button type="button" data-view="bookings" aria-current="page"><span>Захиалга</span><span class="count" id="newCount"><span class="sr-only">шинэ: </span><span data-n>0</span></span></button>
-        <button type="button" data-view="settings"><span>Тохиргоо</span></button>
-        <button type="button" data-view="home"><span>Нүүр хуудас</span></button>
-        <button type="button" data-view="catalog"><span>Үйлчилгээ / Багц</span></button>
-        <button type="button" data-view="pages"><span>Эмчилгээний хуудас</span></button>
+      <a class="side__logo" href="/" aria-label="SkinAid сайт руу"><img src="/assets/img/logo-white.png?v=0caecd65" alt="" width="480" height="121"></a>
+      <nav class="menu" aria-label="Үндсэн цэс">
+        <a href="#/bookings" data-nav="bookings"><span class="nav__ic" data-icon="bookings"></span><span class="nav__label">Захиалга</span><span class="nav__short" aria-hidden="true">Захиалга</span><span class="count" id="newCount"><span class="sr-only">, шинэ: </span><span data-n>0</span></span><span class="nav__dirty sr-only"></span></a>
+        <a href="#/settings" data-nav="settings"><span class="nav__ic" data-icon="settings"></span><span class="nav__label">Тохиргоо</span><span class="nav__short" aria-hidden="true">Тохиргоо</span><span class="nav__dirty sr-only"></span></a>
+        <a href="#/home" data-nav="home"><span class="nav__ic" data-icon="home"></span><span class="nav__label">Нүүр хуудас</span><span class="nav__short" aria-hidden="true">Нүүр</span><span class="nav__dirty sr-only"></span></a>
+        <a href="#/catalog" data-nav="catalog"><span class="nav__ic" data-icon="catalog"></span><span class="nav__label">Үйлчилгээ / Багц</span><span class="nav__short" aria-hidden="true">Үйлчилгээ</span><span class="nav__dirty sr-only"></span></a>
+        <a href="#/pages" data-nav="pages"><span class="nav__ic" data-icon="pages"></span><span class="nav__label">Эмчилгээний хуудас</span><span class="nav__short" aria-hidden="true">Хуудас</span><span class="nav__dirty sr-only"></span></a>
       </nav>
       <div class="side__foot">
-        <span>Нэвтэрсэн:<br><strong id="whoEmail"></strong></span>
-        <button class="btn btn--outline btn--sm" id="btnLogout" type="button">Гарах</button>
+        <span class="side__who">Нэвтэрсэн<br><strong id="whoEmail"></strong></span>
+        <button class="btn btn--outline btn--sm" type="button" data-logout><span data-icon="logout"></span> Гарах</button>
       </div>
     </aside>
 
-    <main class="main">
+    <main class="main" id="main" tabindex="-1">
       <!-- Модуль: Захиалга -->
       <section class="view" id="view-bookings" aria-labelledby="h-bookings">
         <div class="main__head">
-          <div><h1 id="h-bookings">Захиалга</h1><p>Сайтын маягтаар ирсэн хүсэлтүүд. Жагсаалт бодит цагт шинэчлэгдэнэ.</p></div>
-          <button class="btn btn--outline btn--sm" id="btnNotify" type="button" hidden>Шинэ захиалгын мэдэгдэл асаах</button>
+          <div><h1 id="h-bookings">Захиалга</h1><p>Сайтын маягтаар ирсэн хүсэлтүүд — бодит цагт шинэчлэгдэнэ. Мөрийг дарж дэлгэрэнгүйг нээнэ.</p></div>
+          <button class="btn btn--outline btn--sm" id="btnNotify" type="button" hidden><span data-icon="bell"></span> Шинэ захиалгын мэдэгдэл асаах</button>
         </div>
         <div class="toolbar">
+          <div class="search">
+            <span class="search__ic" data-icon="search"></span>
+            <input type="search" id="bkSearch" placeholder="Нэр, утас, үйлчилгээгээр хайх" aria-label="Захиалга хайх (нэр, утас, үйлчилгээ, тэмдэглэл)" autocomplete="off" enterkeyhint="search">
+          </div>
           <div class="chips" id="bkChips" role="group" aria-label="Статусаар шүүх"></div>
+        </div>
+        <div class="toolbar toolbar--meta">
           <span class="toolbar__meta" id="bkMeta" role="status"></span>
           <button class="btn btn--ghost btn--sm" type="button" id="bkBulk" hidden>Шүүсэн бүгдийг устгах</button>
         </div>
-        <div class="cards" id="bkList"></div>
-        <div class="actions" style="justify-content:center;margin-top:14px">
+        <div class="bk-list" id="bkList" aria-busy="true"></div>
+        <div class="actions actions--center">
           <button class="btn btn--outline btn--sm" type="button" id="bkMore" hidden>Цааш ачаалах (хуучин захиалгууд)</button>
         </div>
       </section>
 
       <!-- Модуль: Тохиргоо -->
       <section class="view" id="view-settings" aria-labelledby="h-settings" hidden>
-        <div class="main__head"><div><h1 id="h-settings">Тохиргоо</h1><p>Сайтын холбоо барих мэдээлэл, ажлын цаг, модулиудын асаалт. Хадгалмагц сайт дээр шинэчлэгдэнэ.</p></div></div>
+        <div class="main__head"><div><h1 id="h-settings">Тохиргоо</h1><p>Сайтын холбоо барих мэдээлэл, ажлын цаг, хэсгүүдийн асаалт. Хадгалмагц сайт дээр дараагийн ачааллаас шинэчлэгдэнэ.</p></div></div>
+        <div class="hm-load" id="siteLoad" role="alert" hidden><span id="siteLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnSiteRetry">Дахин оролдох</button></div>
         <form id="siteForm" novalidate>
+          <div class="err-summary" id="siteErr" hidden></div>
           <div class="panel">
             <h2>Ажлын цаг, холбоо барих</h2>
-            <p>Хоосон үлдээвэл сайт HTML дахь анхны текстээ харуулна.</p>
             <div class="form__grid">
               <div class="field field--full">
-                <label for="s-hours">Ажлын цаг (сайтын «Ажлын цаг» мөрөнд харагдана)</label>
-                <textarea id="s-hours" name="hours" maxlength="300" placeholder="Жишээ: Даваа–Баасан 10:00–19:00, Бямба 10:00–16:00, Ням амарна"></textarea>
+                <label for="s-hours">Ажлын цаг</label>
+                <p class="hint" id="s-hours-hint">Сайтын «Ажлын цаг» мөрөнд харагдана. Жишээ: Даваа–Баасан 10:00–19:00, Бямба 10:00–16:00, Ням амарна. Хоосон бол: «Цагийн хуваарийг утсаар лавлана уу».</p>
+                <textarea id="s-hours" name="hours" maxlength="300" data-count-chars aria-describedby="s-hours-hint"></textarea>
               </div>
               <div class="field">
-                <label for="s-phone">Утас (толгой, холбоо барих, footer, маягт)</label>
-                <input id="s-phone" name="phone" type="text" maxlength="30" placeholder="7600-0505">
+                <label for="s-phone">Утас <small>(сайтын бүх хэсэгт)</small></label>
+                <p class="hint" id="s-phone-hint">Нэг дугаар. Хоосон бол: 7600-0505.</p>
+                <input id="s-phone" name="phone" type="tel" inputmode="tel" maxlength="30" autocomplete="off" aria-describedby="s-phone-hint">
               </div>
               <div class="field">
                 <label for="s-email">И-мэйл</label>
-                <input id="s-email" name="email" type="email" maxlength="80" placeholder="info@skinaid.mn">
+                <p class="hint" id="s-email-hint">Хоосон бол: info@skinaid.mn.</p>
+                <input id="s-email" name="email" type="email" maxlength="80" autocomplete="off" aria-describedby="s-email-hint">
               </div>
             </div>
           </div>
           <div class="panel">
-            <h2>Модулиуд</h2>
-            <p>Сайтын хэсгүүдийг асааж/унтраана. Унтраасан модуль сайтаас нуугдана, өгөгдөл устахгүй.</p>
-            <div class="form__grid">
-              <label class="toggle"><span><strong>Онлайн захиалга</strong><small>Унтраавал маягт хүсэлтийг бүртгэхгүй, зөвхөн Messenger / и-мэйл / утас сувгуудыг санал болгоно.</small></span><input type="checkbox" id="s-booking" name="bookingEnabled" checked></label>
-              <label class="toggle"><span><strong>Урамшууллын хэсэг</strong><small>Шинэ жилийн багцын хэсэг болон цэсний «Урамшуулал» холбоосууд.</small></span><input type="checkbox" id="s-promo" name="promoEnabled" checked></label>
+            <h2>Сайтын хэсгүүд</h2>
+            <p>Унтраасан хэсэг сайтаас нуугдана; өгөгдөл устахгүй.</p>
+            <div class="switches">
+              <label class="switch"><input type="checkbox" role="switch" id="s-booking" name="bookingEnabled" checked><span class="switch__track" aria-hidden="true"></span><span><strong>Онлайн захиалга</strong><small id="s-booking-d">Унтраавал маягт хүсэлтийг бүртгэхгүй, зөвхөн Messenger / и-мэйл / утас сувгуудыг санал болгоно.</small></span></label>
+              <label class="switch"><input type="checkbox" role="switch" id="s-promo" name="promoEnabled" checked><span class="switch__track" aria-hidden="true"></span><span><strong>Урамшууллын хэсэг</strong><small id="s-promo-d">Шинэ жилийн багцын хэсэг болон цэсний «Урамшуулал» холбоосууд.</small></span></label>
             </div>
           </div>
-          <div class="actions">
+          <div class="actions" id="siteActions">
             <button class="btn btn--primary" type="submit" id="btnSaveSite">Хадгалах</button>
-            <span class="status" id="siteStatus" role="status"></span>
+            <span class="status" id="siteStatus"></span>
           </div>
         </form>
       </section>
@@ -110,77 +134,83 @@
       <section class="view" id="view-home" aria-labelledby="h-home" hidden>
         <div class="main__head">
           <div><h1 id="h-home">Нүүр хуудас</h1><p>Нүүрний эхний хэсэг (hero) болон «Зөвлөгөө» картууд. Хадгалмагц зочдод дараагийн ачааллаас харагдана.</p></div>
-          <div class="actions">
+          <div class="actions actions--head">
             <button class="btn btn--outline btn--sm" type="button" id="btnHomeReload">Дахин ачаалах</button>
             <button class="btn btn--outline btn--sm" type="button" id="btnHomeDefaults">Анхны утгаар дүүргэх</button>
           </div>
         </div>
         <div class="hm-load" id="hmLoad" role="alert" hidden><span id="hmLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnHmRetry">Дахин оролдох</button></div>
-        <div class="panel hm-note">
-          <p><strong>Google хайлт.</strong> Энд хадгалсан өөрчлөлт зочдод шууд (дараагийн ачааллаас) харагдана. Харин Google сайтын үндсэн хувилбарыг уншдаг тул өөрчлөлтийг тэнд хүргэхийн тулд «Хөгжүүлэгчид илгээх JSON хуулах» дарж хөгжүүлэгчид илгээнэ (дараа нь автомат болно). Тэр хүртэл нүүр ачаалахад хуучин текст хормын төдий харагдаж болно.</p>
-          <div class="hm-note__diff" id="hmDiff" hidden><span id="hmDiffMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnHmLoadSaved" hidden>Хадгалсан хувилбараа ачаалах</button></div>
-        </div>
-        <form id="homeForm" novalidate>
-          <div class="panel">
-            <h2>Hero — нүүрний эхний хэсэг</h2>
-            <p>Товчны текст хоосон бол анхны текст («Цаг захиалах», «Үйлчилгээ үзэх») харагдана; товчны холбоос тогтмол. Тэмдэг, тайлбар хоосон бол сайтаас алга болно.</p>
-            <div class="form__grid">
-              <div class="field field--full">
-                <label for="hm-badge">Тэмдэг (гарчгийн дээрх жижиг шошго)</label>
-                <input id="hm-badge" data-h="badge" type="text" maxlength="80" placeholder="жишээ: 2007 оноос хойш · Улаанбаатар хот">
-              </div>
-              <fieldset class="field field--full hm-title">
-                <legend>Гарчиг (h1) — гурван хэсгээс бүрдэнэ; дундах хэсэг нил ягаанаар тодорно</legend>
-                <div class="hm-title__row">
-                  <div class="field"><label for="hm-titlePre">Эхлэл</label><input id="hm-titlePre" data-h="titlePre" type="text" maxlength="80"></div>
-                  <div class="field"><label for="hm-titleEm">Тодруулах хэсэг</label><input id="hm-titleEm" data-h="titleEm" type="text" maxlength="60"></div>
-                  <div class="field"><label for="hm-titlePost">Төгсгөл</label><input id="hm-titlePost" data-h="titlePost" type="text" maxlength="80"></div>
+        <details class="note">
+          <summary>Google хайлтад хэзээ харагдах вэ?</summary>
+          <p>Энд хадгалсан өөрчлөлт зочдод шууд (дараагийн ачааллаас) харагдана. Харин Google сайтын үндсэн хувилбарыг уншдаг тул өөрчлөлтийг тэнд хүргэхийн тулд «Хөгжүүлэгчид илгээх JSON хуулах» дарж хөгжүүлэгчид илгээнэ (дараа нь автомат болно). Тэр хүртэл нүүр ачаалахад хуучин текст хормын төдий харагдаж болно.</p>
+        </details>
+        <div class="hm-note__diff" id="hmDiff" hidden><span id="hmDiffMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnHmLoadSaved" hidden>Хадгалсан хувилбараа ачаалах</button></div>
+        <div class="hm-layout">
+          <form id="homeForm" novalidate>
+            <div class="err-summary" id="homeErr" hidden></div>
+            <div class="panel">
+              <h2>Hero — нүүрний эхний хэсэг</h2>
+              <p>Товчны текст хоосон бол анхны текст («Цаг захиалах», «Үйлчилгээ үзэх») харагдана; товчны холбоос тогтмол. Тэмдэг, тайлбар хоосон бол сайтаас алга болно.</p>
+              <div class="form__grid">
+                <div class="field field--full">
+                  <label for="hm-badge">Тэмдэг <small>(гарчгийн дээрх жижиг шошго)</small></label>
+                  <input id="hm-badge" data-h="badge" type="text" maxlength="80" data-count-chars placeholder="жишээ: 2007 оноос хойш · Улаанбаатар хот">
                 </div>
-              </fieldset>
-              <div class="field field--full">
-                <label for="hm-text">Тайлбар текст <small>(нэг догол мөр — мөр шилжилт хадгалагдахгүй)</small></label>
-                <textarea id="hm-text" data-h="text" maxlength="400"></textarea>
+                <fieldset class="field field--full hm-title">
+                  <legend>Гарчиг (h1) — дундах хэсэг нил ягаанаар тодорно</legend>
+                  <div class="hm-title__row">
+                    <div class="field"><label for="hm-titlePre">Эхлэл</label><input id="hm-titlePre" data-h="titlePre" type="text" maxlength="80" data-count-chars></div>
+                    <div class="field"><label for="hm-titleEm">Тодруулах хэсэг</label><input id="hm-titleEm" data-h="titleEm" type="text" maxlength="60" data-count-chars></div>
+                    <div class="field"><label for="hm-titlePost">Төгсгөл</label><input id="hm-titlePost" data-h="titlePost" type="text" maxlength="80" data-count-chars></div>
+                  </div>
+                </fieldset>
+                <div class="field field--full">
+                  <label for="hm-text">Тайлбар текст <small>(нэг догол мөр — мөр шилжилт хадгалагдахгүй)</small></label>
+                  <textarea id="hm-text" data-h="text" maxlength="400" data-count-chars></textarea>
+                </div>
+                <div class="field">
+                  <label for="hm-btnPrimary">Үндсэн товч <small>(→ цаг захиалах)</small></label>
+                  <input id="hm-btnPrimary" data-h="btnPrimary" type="text" maxlength="30" data-count-chars placeholder="Цаг захиалах">
+                </div>
+                <div class="field">
+                  <label for="hm-btnSecondary">Хоёр дахь товч <small>(→ үйлчилгээ)</small></label>
+                  <input id="hm-btnSecondary" data-h="btnSecondary" type="text" maxlength="30" data-count-chars placeholder="Үйлчилгээ үзэх">
+                </div>
               </div>
-              <div class="field">
-                <label for="hm-btnPrimary">Үндсэн товч (→ цаг захиалах)</label>
-                <input id="hm-btnPrimary" data-h="btnPrimary" type="text" maxlength="30" placeholder="Цаг захиалах">
+              <h3 class="hm-sub">Статистик</h3>
+              <p class="hint">Тоо — бүхэл тоо (жишээ: 58, 1200; мянгатын таслалыг сайт өөрөө тавина, 4.9 гэх мэт бутархай болохгүй). Дагавар нь тооны ард (+, K+, %). Тоо хоосон мөр сайтад харагдахгүй.</p>
+              <div class="hm-stats" id="hmStats"></div>
+            </div>
+            <div class="panel">
+              <div class="panel__head">
+                <h2>«Зөвлөгөө» картууд <span class="badge" id="hmCount">0</span></h2>
+                <button class="btn btn--outline btn--sm" type="button" id="btnHmAdd">+ Карт нэмэх</button>
               </div>
-              <div class="field">
-                <label for="hm-btnSecondary">Хоёр дахь товч (→ үйлчилгээ)</label>
-                <input id="hm-btnSecondary" data-h="btnSecondary" type="text" maxlength="30" placeholder="Үйлчилгээ үзэх">
+              <p>Сайтад энэ дарааллаар (зүүнээс баруун, дээрээс доош) харагдана — ↑ ↓-ээр солино. Картыг дарж засна. «Нуух» сонгосон карт сайтад гарахгүй, устахгүй.</p>
+              <div class="hm-posts" id="hmPosts"></div>
+            </div>
+            <div class="actions" id="homeActions">
+              <button class="btn btn--primary" type="submit" id="btnSaveHome">Хадгалах</button>
+              <button class="btn btn--ghost btn--sm" type="button" id="btnHmJson">Хөгжүүлэгчид илгээх JSON хуулах</button>
+              <span class="status" id="homeStatus"></span>
+            </div>
+            <textarea class="hm-json" id="hmJson" readonly hidden aria-label="content/home.json-д тавих JSON"></textarea>
+          </form>
+          <aside class="hm-side" aria-labelledby="hmPrevTitle">
+            <ul class="warn-list" id="hmWarn"></ul>
+            <div class="panel hm-prevpanel">
+              <div class="panel__head">
+                <h2 id="hmPrevTitle">Урьдчилан харах</h2>
+                <button class="btn btn--ghost btn--sm hm-prevtoggle" type="button" id="btnHmPrev" aria-expanded="false" aria-controls="hmPreview">Харах</button>
+              </div>
+              <div class="hm-preview" id="hmPreview" inert>
+                <p class="hm-preview__cap">Сайтын загвараар, хадгалаагүй өөрчлөлттэй хамт.</p>
+                <div class="hm-preview__hero" id="hmPrevHero"></div>
+                <div class="posts hm-preview__posts" id="hmPrevPosts"></div>
               </div>
             </div>
-            <h3 class="hm-sub">Статистик</h3>
-            <p class="hm-hint">Тоо — бүхэл тоо (жишээ: 58, 1200; мянгатын таслалыг сайт өөрөө тавина, 4.9 гэх мэт бутархай болохгүй). Дагавар нь тооны ард (+, K+, %). Тоо хоосон мөр сайтад харагдахгүй.</p>
-            <div class="tbl-wrap">
-              <table class="tbl hm-stats" id="hmStats">
-                <thead><tr><th>№</th><th>Тоо</th><th>Дагавар</th><th>Тайлбар</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="panel">
-            <h2>«Зөвлөгөө» картууд <span class="badge" id="hmCount">0</span></h2>
-            <p>Сайтад энэ дарааллаар (зүүнээс баруун, дээрээс доош) харагдана — ↑ ↓-ээр солино. «Нуух» сонгосон карт сайтад гарахгүй, устахгүй. Холбоос оруулбал карт бүхэлдээ дарагддаг болно (жишээ: Facebook пост).</p>
-            <div class="hm-posts" id="hmPosts"></div>
-            <div class="actions"><button class="btn btn--ghost btn--sm" type="button" id="btnHmAdd">+ Карт нэмэх</button></div>
-          </div>
-          <div class="panel">
-            <h2>Урьдчилан харах</h2>
-            <p>Сайтын загвараар (хадгалаагүй өөрчлөлттэй хамт).</p>
-            <ul class="pg-warn" id="hmWarn" aria-live="polite"></ul>
-            <div class="hm-preview" inert>
-              <div class="hm-preview__hero" id="hmPrevHero"></div>
-              <div class="posts hm-preview__posts" id="hmPrevPosts"></div>
-            </div>
-          </div>
-          <div class="actions">
-            <button class="btn btn--primary" type="submit" id="btnSaveHome">Хадгалах</button>
-            <button class="btn btn--ghost btn--sm" type="button" id="btnHmJson">Хөгжүүлэгчид илгээх JSON хуулах</button>
-            <span class="status" id="homeStatus" role="status"></span>
-          </div>
-          <textarea class="hm-json" id="hmJson" readonly hidden aria-label="content/home.json-д тавих JSON"></textarea>
-        </form>
+          </aside>
+        </div>
       </section>
 
       <!-- Модуль: Үйлчилгээ / Багц -->
@@ -189,31 +219,45 @@
           <div><h1 id="h-catalog">Үйлчилгээ / Багц</h1><p>Сайтын «Онцлох эмчилгээ» жагсаалт болон Шинэ жилийн багцын нэр, үнэ. «Нуух» сонговол сайтаас харагдахгүй.</p></div>
           <button class="btn btn--outline btn--sm" type="button" id="btnCatDefaults">Анхны утгаар дүүргэх</button>
         </div>
+        <div class="hm-load" id="catLoad" role="alert" hidden><span id="catLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnCatRetry">Дахин оролдох</button></div>
         <form id="catForm" novalidate>
+          <div class="err-summary" id="catErr" hidden></div>
           <div class="panel">
-            <h2>Үйлчилгээ <span class="badge" id="svcCount">0</span></h2>
+            <div class="panel__head">
+              <h2>Үйлчилгээ <span class="badge" id="svcCount">0</span></h2>
+              <button class="btn btn--outline btn--sm" type="button" id="btnSvcAdd">+ Үйлчилгээ нэмэх</button>
+            </div>
             <p>Үнэ, хугацааг зөвхөн баталгаатай үед бичнэ (хоосон үлдээж болно). Жишээ: ₮50,000 · 1 цаг</p>
-            <div class="tbl-wrap">
+            <div class="toolbar">
+              <div class="search">
+                <span class="search__ic" data-icon="search"></span>
+                <input type="search" id="svcSearch" placeholder="Нэр, тайлбараар хайх" aria-label="Үйлчилгээ хайх" autocomplete="off" enterkeyhint="search">
+              </div>
+              <label class="select-inline"><span>Ангилал</span><select id="svcCat"><option value="">Бүгд</option></select></label>
+              <span class="toolbar__meta" id="svcMeta" role="status"></span>
+            </div>
+            <div class="tbl-wrap tbl-wrap--scroll">
               <table class="tbl" id="svcTable">
-                <thead><tr><th>Ангилал</th><th>Нэр</th><th>Тайлбар</th><th>Хугацаа</th><th>Үнэ</th><th>Нуух</th><th></th></tr></thead>
+                <caption class="sr-only">Үйлчилгээний жагсаалт — мөр бүрийг засна</caption>
+                <thead><tr><th scope="col">Ангилал</th><th scope="col">Нэр</th><th scope="col">Тайлбар</th><th scope="col">Хугацаа</th><th scope="col">Үнэ</th><th scope="col">Нуух</th><th scope="col"><span class="sr-only">Устгах</span></th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
-            <div class="actions"><button class="btn btn--ghost btn--sm" type="button" id="btnSvcAdd">+ Үйлчилгээ нэмэх</button></div>
           </div>
           <div class="panel">
             <h2>Шинэ жилийн багцууд</h2>
             <p>Багцын агуулга (жагсаалт) HTML-д; энд нэр, үнэ, нуух эсэхийг засна.</p>
             <div class="tbl-wrap">
               <table class="tbl" id="pkgTable">
-                <thead><tr><th>№</th><th>Нэр</th><th>Үнэ</th><th>Нуух</th></tr></thead>
+                <caption class="sr-only">Шинэ жилийн багцууд</caption>
+                <thead><tr><th scope="col">№</th><th scope="col">Нэр</th><th scope="col">Үнэ</th><th scope="col">Нуух</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
           </div>
-          <div class="actions">
+          <div class="actions" id="catActions">
             <button class="btn btn--primary" type="submit" id="btnSaveCat">Хадгалах</button>
-            <span class="status" id="catStatus" role="status"></span>
+            <span class="status" id="catStatus"></span>
           </div>
         </form>
       </section>
@@ -221,19 +265,20 @@
       <!-- Модуль: Эмчилгээний хуудас (зөвхөн харах — нийтлэх нь repo-оос, эмч баталсны дараа) -->
       <section class="view" id="view-pages" aria-labelledby="h-pages" hidden>
         <div class="main__head">
-          <div><h1 id="h-pages">Эмчилгээний хуудас</h1><p>Сайтын эмчилгээ тус бүрийн хуудас (/emchilgee/…): төлөв, хянагч эмч, хуваарь. Хуудас эмч Google Doc-оор баталсны дараа нийтлэгдэнэ — энд зөвхөн харна.</p></div>
+          <div><h1 id="h-pages">Эмчилгээний хуудас</h1><p>Сайтын эмчилгээ тус бүрийн хуудас (/emchilgee/…): төлөв, хянагч эмч, хуваарь. Хуудас эмч баталсны дараа нийтлэгдэнэ — энд зөвхөн харна.</p></div>
         </div>
         <div class="panel">
           <h2>Товч</h2>
           <div class="pg-stats" id="pgStats"></div>
-          <ul class="pg-warn" id="pgWarn" aria-live="polite"></ul>
+          <ul class="warn-list" id="pgWarn" aria-live="polite"></ul>
         </div>
         <div class="panel">
           <h2>Хуудсууд</h2>
-          <p>Долоо хоног бүр 2 хуудас. Үнэ нь сайтын хуудсанд харагдах (repo-ийн catalog-defaults.js) үнэ.</p>
+          <p>Долоо хоног бүр 2 хуудас. Үнэ нь сайтын хуудсанд харагдах үнэ.</p>
           <div class="tbl-wrap">
             <table class="tbl tbl--ro" id="pgTable">
-              <thead><tr><th>Хуудас</th><th>Долоо хоног</th><th>Төлөв</th><th>Хянагч эмч</th><th>Хянасан</th><th>Үнэ (сайт)</th><th>Үйлчилгээ</th></tr></thead>
+              <caption class="sr-only">Эмчилгээний хуудсууд</caption>
+              <thead><tr><th scope="col">Хуудас</th><th scope="col">Долоо хоног</th><th scope="col">Төлөв</th><th scope="col">Хянагч эмч</th><th scope="col">Хянасан</th><th scope="col">Үнэ (сайт)</th><th scope="col">Үйлчилгээ</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -242,12 +287,10 @@
     </main>
   </div>
 
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
   <script src="/assets/js/catalog-defaults.js?v=cf4cf057"></script>
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=695218e6"></script>
-  <script type="module" src="/admin/admin.js?v=32f3bb6f"></script>
+  <script type="module" src="/admin/admin.js?v=9d039841"></script>
 </body>
 </html>
