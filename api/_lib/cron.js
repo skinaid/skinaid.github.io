@@ -12,15 +12,18 @@ import { safeEqual } from './social/meta-signature.js';
 import { createMetaClient } from './social/meta-client.js';
 import { metaConfig } from './social/meta-config.js';
 import { COL } from './store.js';
+import { describeError } from './errors.js';
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
 /**
- * @param {{ env?: Record<string, string|undefined>, getRuntime: () => any, fetchImpl?: typeof fetch, now?: () => Date, budgetMs?: number }} deps
+ * @param {{ env?: Record<string, string|undefined>, getRuntime: () => any, fetchImpl?: typeof fetch, now?: () => Date, budgetMs?: number,
+ *   log?: (m: string) => void }} deps
  */
 export function createCronHandler(deps) {
   const env = deps.env ?? process.env;
   const now = deps.now ?? (() => new Date());
+  const log = deps.log ?? ((m) => console.error(m));
   return async function GET(request) {
     const secret = cronSecret(env);
     const auth = request.headers.get('authorization') ?? '';
@@ -62,6 +65,7 @@ export function createCronHandler(deps) {
       }
       await rt.store.patchStatus({ lastCronAt: now(), config: configStatus(env), metaToken: out.metaToken });
     } catch (e) {
+      log(`[messenger] cron алдаа: ${describeError(e)}`);
       await rt.store.patchStatus({ lastError: { code: `cron_${e?.status || e?.name || 'error'}`.slice(0, 40), at: now() } }).catch(() => {});
       return json({ ...out, ok: false }, 500);
     }

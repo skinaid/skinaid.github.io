@@ -10,6 +10,7 @@
  * Утгын хөрвүүлэлт: null, boolean, тоо (бүхэл → integerValue, бутархай → doubleValue), string, Date →
  * timestampValue, массив, объект (map). `undefined` талбарыг алгасна.
  */
+import { safeErrorReason } from './errors.js';
 
 export class FirestoreError extends Error {
   /** @param {number} httpStatus @param {string} status @param {string} message */
@@ -18,6 +19,9 @@ export class FirestoreError extends Error {
     this.name = 'FirestoreError';
     this.httpStatus = httpStatus;
     this.status = status;
+    /** AUTH үед token авч чадаагүй шалтгаан (token-ийг хассан) — зөвхөн лог-д, Firestore-д хадгалахгүй */
+    /** @type {string|undefined} */
+    this.reason = undefined;
   }
   /** exists=false (ALREADY_EXISTS) эсвэл updateTime (FAILED_PRECONDITION) таараагүй */
   get isPrecondition() {
@@ -148,8 +152,11 @@ export function createFirestore(opts) {
     try {
       token = await opts.getAccessToken();
     } catch (e) {
-      // WIF/IAM-ийн тохиргоо буруу, OIDC token алга г.м. — нууцыг агуулж болзошгүй мессежийг хадгалахгүй
-      throw new FirestoreError(0, 'AUTH', e && e.name === 'AuthNotConfiguredError' ? 'not configured' : 'token failed');
+      // WIF/IAM-ийн тохиргоо буруу, OIDC token алга г.м. Мессеж = тогтмол (Firestore-д хадгалагдаж болзошгүй);
+      // шалтгаан нь `reason`-д, token-ийг хассан хэлбэрээр — зөвхөн лог-д (errors.js describeError)
+      const err = new FirestoreError(0, 'AUTH', e && e.name === 'AuthNotConfiguredError' ? 'not configured' : 'token failed');
+      err.reason = safeErrorReason(e);
+      throw err;
     }
     let res;
     try {
