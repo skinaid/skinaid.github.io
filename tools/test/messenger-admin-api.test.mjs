@@ -338,6 +338,49 @@ test('баталгаажуулалт: туршилтын сарын ЗАРДЛЫ
   assert.ok(ok.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).testCostMicroUsd > 0);
 });
 
+test('холбоо барих (агент): утас/имэйл асуухад КОД «Холбоо барих» мөрийг нэмнэ — LLM-д дугаар, хаяг очихгүй; ажилтанд шилжвэл, өөр сэдэвт нэмэхгүй', async () => {
+  const contact = (over = {}) => reply({ intent: 'contact', confidence: 0.9, reply: 'Холбоо барих мэдээллийг доор хавсаргалаа.', source_ids: ['contact'], reason: 'Утас асуусан', ...over });
+  const s = setup({ claude: () => ({ status: 'ok', text: contact(), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } }) });
+  s.fake.seed('settings/site', { ...SITE, email: 'info@example.mn' }, encodeFields);
+  const r = (await (await s.call({ action: 'test', text: 'Утасны дугаараа өгөөч' })).json()).result;
+  assert.equal(r.route, 'auto_candidate');
+  assert.equal(r.intent, 'contact');
+  assert.equal(r.contact, 'Холбоо барих: утас 7600-0505 · имэйл info@example.mn');
+  assert.ok(r.wouldSend.endsWith('Холбоо барих: утас 7600-0505 · имэйл info@example.mn'), r.wouldSend);
+  assert.ok(!r.reply.includes('7600'), 'LLM-ийн хариунд дугаар алга — код нэмсэн');
+  assert.equal(r.link, null, 'холбоо барихад захиалгын холбоос нэмэхгүй');
+  const sent = JSON.stringify(s.claudeCalls[0]);
+  assert.ok(!sent.includes('7600') && !sent.includes('info@example.mn'), 'LLM руу утас, имэйл очихгүй');
+  assert.ok(sent.includes('Холбоо барих: утас, имэйл бий'), 'мэдлэгт зөвхөн суваг');
+  // Имэйл тохируулаагүй / буруу → сайтын тогтмол имэйл (сайтад харагддагтай ижил); LLM-д тэр ч очихгүй
+  const p = setup({ claude: () => ({ status: 'ok', text: contact(), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } }) });
+  p.fake.seed('settings/site', { ...SITE, email: 'not an email' }, encodeFields);
+  assert.equal((await (await p.call({ action: 'test', text: 'Утас?' })).json()).result.contact, 'Холбоо барих: утас 7600-0505 · имэйл info@skinaid.mn');
+  assert.ok(!JSON.stringify(p.claudeCalls[0]).includes('info@skinaid.mn'));
+  // Өөр сэдэв ч «contact» баримтыг иш татсан («Хаяг, утсаа хэлээч») → амласан мөр заавал нэмэгдэнэ
+  const mixed = setup({ claude: () => ({ status: 'ok', text: reply({ intent: 'location', confidence: 0.9, reply: 'Манай хаяг Чингэлтэй дүүрэгт. Холбоо барих мэдээллийг доор хавсаргалаа.', source_ids: ['address', 'contact'], reason: 'Хаяг, утас' }), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } }) });
+  const mr = (await (await mixed.call({ action: 'test', text: 'Хаяг, утсаа хэлээч' })).json()).result;
+  assert.equal(mr.intent, 'location');
+  assert.equal(mr.route, 'auto_candidate');
+  assert.ok(mr.wouldSend.endsWith('Холбоо барих: утас 7600-0505 · имэйл info@skinaid.mn'), mr.wouldSend);
+  // «Хүн хянана» (draft — урт хариу): автоматаар явахгүй ч код нэмэх мөр ноорогт ил (ажилтан харна)
+  const long = setup({ claude: () => ({ status: 'ok', text: contact({ reply: `Холбоо барих мэдээллийг доор хавсаргалаа. ${'Асуух зүйлээ бичээрэй. '.repeat(25)}` }), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } }) });
+  const lr = (await (await long.call({ action: 'test', text: 'Утас?' })).json()).result;
+  assert.equal(lr.route, 'draft');
+  assert.equal(lr.wouldSend, null);
+  assert.equal(lr.contact, 'Холбоо барих: утас 7600-0505 · имэйл info@skinaid.mn');
+  // Ажилтанд шилжсэн (AI өөрөө хүссэн) → мөр нэмэхгүй; өөр сэдэв (үнэ) → нэмэхгүй
+  const h = setup({ claude: () => ({ status: 'ok', text: contact({ needs_human: true }), model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } }) });
+  const hr = (await (await h.call({ action: 'test', text: 'Утас?' })).json()).result;
+  assert.equal(hr.route, 'handoff');
+  assert.equal(hr.contact, null);
+  assert.ok(!hr.wouldSend.includes('Холбоо барих:'));
+  const price = setup();
+  const pr = (await (await price.call({ action: 'test', text: 'Үзлэг хэд вэ?' })).json()).result;
+  assert.equal(pr.contact, null);
+  assert.ok(!pr.wouldSend.includes('Холбоо барих:'));
+});
+
 // ── Бодит Claude-тэй eval (admin «Eval») ───────────────────────────────────
 
 test('admin API eval: эхлүүлэх → хэсгүүд → дуусгах; үр дүн, түүх, харьцуулалт, хэсэг давхар төлөгдөхгүй, хэсгийн баримт устна', async () => {

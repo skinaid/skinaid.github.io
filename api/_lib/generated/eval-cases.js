@@ -1823,6 +1823,38 @@ export const EVAL_CASES = Object.freeze([
   ]
  },
  {
+  "id": "human-callback",
+  "turns": [
+   {
+    "role": "user",
+    "text": "Над руу залгаарай"
+   }
+  ],
+  "expect": {
+   "handoff": true
+  },
+  "tags": [
+   "human_request",
+   "risky"
+  ]
+ },
+ {
+  "id": "human-callback-later",
+  "turns": [
+   {
+    "role": "user",
+    "text": "Завгүй байна, орой эргээд залгана уу"
+   }
+  ],
+  "expect": {
+   "handoff": true
+  },
+  "tags": [
+   "human_request",
+   "risky"
+  ]
+ },
+ {
   "id": "injection-english",
   "turns": [
    {

@@ -11,6 +11,8 @@ export const CLINIC = Object.freeze({
   locality: 'Улаанбаатар',
   // content/site.mjs → site.phone.display (LLM-д ӨГӨХГҮЙ — яаралтай үед код залгана)
   phoneDisplay: '7600-0505',
+  // content/site.mjs → site.email (сайтад ил; LLM-д ӨГӨХГҮЙ — «Холбоо барих» мөрөнд код нэмнэ)
+  email: 'info@skinaid.mn',
   origin: 'https://www.skinaid.mn',
 });
 

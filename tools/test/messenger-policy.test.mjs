@@ -200,6 +200,7 @@ const catalogInput = {
   clinicName: 'SkinAid',
   address: 'Улаанбаатар, Чингэлтэй дүүрэг, Тэнгис кино театрын хажууд',
   hoursBrief: 'Өдөр бүр 09:00-19:00',
+  contactChannels: ['утас', 'имэйл'],
   services: [
     { id: 'exam-1', name: 'Арьсны үзлэг, оношлогоо', category: 'Үзлэг', duration: '1 цаг', price: '₮50,000', description: 'Цогц оношлогоо. Утас 99112233' },
     { id: 'lift-1', name: 'Ультраформер III (HIFU)', category: 'Чангалах', duration: '1ц 30м', price: '₮300,000-с' },
@@ -216,7 +217,7 @@ const catalogInput = {
 
 test('каталог: нуусан үйлчилгээ/багц LLM-д ОРОХГҮЙ; үнэгүй = «ажилтан хэлнэ»; зөвшөөрөгдөх дүн = сайтын үнэ', () => {
   const c = buildSocialCatalog(catalogInput);
-  assert.deepEqual(c.facts.map((f) => f.id), ['clinic', 'address', 'hours', 'service:exam-1', 'service:lift-1', 'service:anti-1', 'package:p1']);
+  assert.deepEqual(c.facts.map((f) => f.id), ['clinic', 'address', 'hours', 'contact', 'service:exam-1', 'service:lift-1', 'service:anti-1', 'package:p1']);
   assert.ok(!JSON.stringify(c).includes('999') && !JSON.stringify(c).includes('777'), 'нуусан үнэ хаана ч үгүй');
   assert.match(c.facts.find((f) => f.id === 'service:anti-1').text, /үнийг ажилтан хэлнэ/);
   assert.match(c.facts.find((f) => f.id === 'service:lift-1').text, /үнэ ₮300,000-с/);
@@ -520,4 +521,48 @@ test('eval нэгтгэл: «шаардлагагүй шилжүүлсэн» к�
   ]);
   assert.deepEqual(sum.handoffReasons, { llm_needs_human: 2, low_confidence: 1, signal: 1 });
   assert.deepEqual(summarize([]).handoffReasons, {});
+});
+
+test('холбоо барих: утас/имэйлийг КОД нэмнэ — мэдлэгт зөвхөн «contact» суваг (дугаар, хаяггүй), LLM өөрөө бичвэл хүнд шилжинэ', async () => {
+  const { contactLine } = await import('../../api/_lib/social/disclosure.js');
+  assert.equal(contactLine({ phone: '7600-0505', email: 'info@example.mn' }), 'Холбоо барих: утас 7600-0505 · имэйл info@example.mn');
+  assert.equal(contactLine({ phone: '7600-0505', email: '' }), 'Холбоо барих: утас 7600-0505');
+  assert.equal(contactLine({ phone: '', email: null }), '');
+  const c = buildSocialCatalog(catalogInput);
+  const fact = c.facts.find((f) => f.id === 'contact');
+  assert.equal(fact.kind, 'contact');
+  assert.ok(!/\d|@/.test(fact.text), 'баримтад дугаар, хаяг алга');
+  assert.deepEqual(findPii(JSON.stringify(c.facts)), []);
+  assert.ok(!buildSocialCatalog({ ...catalogInput, contactChannels: [] }).facts.some((f) => f.id === 'contact'));
+  // Prompt: 6-р дүрэм холбоо барих асуултыг тайлбарлана; LLM руу утас/имэйл очихгүй
+  assert.match(SOCIAL_SYSTEM_STATIC, /асуусан суваг нь тэнд байвал intent=contact, needs_human=false/);
+  assert.match(SOCIAL_SYSTEM_STATIC, /ӨӨР рүүгээ залгуулахыг хүсвэл[^\n]*intent=human_request, needs_human=true/);
+  assert.ok(!buildSocialCatalog({ ...catalogInput, contactChannels: 'утас' }).facts.some((f) => f.id === 'contact'), 'массив биш — алгасна');
+  assert.ok(!buildSocialCatalog({ ...catalogInput, contactChannels: ['<b>'] }).facts.some((f) => f.id === 'contact'), 'танихгүй суваг — алгасна');
+  // Бодлого: «contact»-ыг иш татсан энгийн хариу = автомат боломжтой; LLM дугаар бичвэл блок (pii lint)
+  const ask = { turns: [{ role: 'user', text: 'Утасны дугаараа өгөөч' }] };
+  const prop = (reply) => JSON.stringify({ intent: 'contact', confidence: 0.9, needs_human: false, reply, source_ids: ['contact'], quick_replies: [], reason: '' });
+  const ok = evalDecide(ask, prop('Холбоо барих мэдээллийг доор хавсаргалаа.'));
+  assert.equal(ok.route, 'auto_candidate');
+  const bad = evalDecide(ask, prop('Манай утас 99112233.'));
+  assert.equal(bad.route, 'handoff');
+  assert.ok(bad.lint.some((l) => l.code === 'pii' && l.severity === 'block') && bad.reasons.length > 0, JSON.stringify(bad.reasons));
+  // LLM эмнэлгийн ЖИНХЭНЭ дугаар/имэйлийг ч өөрөө бичвэл автоматаар явахгүй (код л нэмнэ)
+  for (const r of ['Манай утас 7600-0505.', 'Утас: +976 7600-0505', 'info@skinaid.mn хаягаар бичээрэй.']) {
+    const d = evalDecide(ask, prop(r));
+    assert.notEqual(d.route, 'auto_candidate', r);
+    assert.ok(d.lint.some((l) => l.code === 'pii'), r);
+  }
+});
+
+test('дохио (шалгалт): үйлчлүүлэгч ӨӨР рүүгээ залгуулах хүсэлт = ажилтан; эмнэлэг рүү залгаж болох эсэхийг асуух нь биш', () => {
+  for (const t of ['Над руу залгаарай', 'Над руу залгаж болох уу?', 'Миний дугаарыг авсан уу, эргээд залгаарай', 'Буцааж залгаарай', 'Та залгана уу', 'Эмчээр залгуулж болох уу']) {
+    assert.ok(detectRiskSignals(t).includes('human_request'), t);
+  }
+  for (const t of ['Залгаж асууж болох уу?', 'Утасны дугаараа өгөөч', 'Би өөрөө залгая', 'Хэдэн цагт залгаж болох вэ']) {
+    assert.ok(!detectRiskSignals(t).includes('human_request'), t);
+  }
+  // Код шийднэ: LLM «contact» гэж ангилсан ч эргэж залгах хүсэлт ажилтанд шилжинэ (эмнэлгийн дугаарыг нэмээд орхихгүй)
+  const d = evalDecide({ turns: [{ role: 'user', text: 'Над руу залгаарай' }] }, JSON.stringify({ intent: 'contact', confidence: 0.95, needs_human: false, reply: 'Холбоо барих мэдээллийг доор хавсаргалаа.', source_ids: ['contact'], quick_replies: [], reason: '' }));
+  assert.equal(d.route, 'handoff');
 });

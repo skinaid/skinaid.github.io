@@ -301,3 +301,13 @@ test('eval (admin): унасан кейсийн шилжүүлсэн шалтг�
   assert.match(train, /hr\.map\(\(\[t, n\]\) => `\$\{esc\(t\)\} \$\{Number\(n\)\}`\)/);
   assert.ok(!/\$\{f\.reasons/.test(train) && !/\$\{evalReasonsText\(/.test(train), 'шалтгааны текст шууд биш, esc()-ээр');
 });
+
+test('холбоо барих (admin): «contact» ишийн нэр; код нэмэх мөр «Хүн хянана» ноорогт ил, esc()-ээр', () => {
+  const src = (f) => readFileSync(new URL(`../../admin/${f}`, import.meta.url), 'utf8');
+  const train = src('m-messenger-train.js');
+  assert.match(train, /if \(id === 'contact'\) return 'Холбоо барих';/);
+  assert.match(train, /r\.wouldSend \? '' : block\('Систем хариуны доор нэмэх мөр[^']*', r\.contact\)/);
+  const msg = src('m-messenger.js');
+  assert.match(msg, /!d\.wouldSend && d\.contact \?[^\n]*\$\{esc\(d\.contact\)\}/);
+  assert.ok(!/\$\{d\.contact\}|\$\{r\.contact\}/.test(msg + train), 'мөр esc()-ээр');
+});

@@ -54,6 +54,19 @@ export const MEDIA_REPLY =
 /** Хүнд шилжүүлэхэд (3-р үе шатнаас илгээнэ) */
 export const HANDOFF_REPLY = 'Таны асуултыг манай ажилтанд дамжууллаа. Ажлын цагаар удахгүй хариулна. Түр хүлээнэ үү.';
 
+/**
+ * «Холбоо барих» мөр — утас/имэйл асуусан хариуны доор КОД нэмнэ (LLM-д дугаар, хаяг очдоггүй, LLM бичдэггүй).
+ * Анхны бодит eval (2026-11-26): утас/имэйлийн асуулт бүр ажилтанд шилждэг байв — prompt «систем нэмнэ» гэдэг ч код нэмдэггүй байсан.
+ * @param {{ phone?: string|null, email?: string|null }} c
+ * @returns {string} хоосон = нэмэх зүйл алга
+ */
+export function contactLine(c) {
+  const phone = String(c?.phone ?? '').trim();
+  const email = String(c?.email ?? '').trim();
+  const parts = [phone ? `утас ${phone}` : '', email ? `имэйл ${email}` : ''].filter(Boolean);
+  return parts.length ? `Холбоо барих: ${parts.join(' · ')}` : '';
+}
+
 /** Яаралтай (гаж нөлөө) — утсыг код залгана */
 export function urgentReply(clinicPhone) {
   const phone = String(clinicPhone ?? '').trim();
