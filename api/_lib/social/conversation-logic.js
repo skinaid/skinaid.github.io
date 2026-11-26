@@ -14,7 +14,8 @@
  *     2026-11-27: ангилал бүр ШАЛТГААНТАЙ (`classifyEchoWhy` → own_app | known_app | template | no_user | fast_gap | default) —
  *     мессеж ба өдрийн тоологчид хадгалж бодит echo-гоор тохируулна. `echoPolicy: 'strict'` — «Автомат» горимын АМЬД ярианд
  *     (бот шууд хариулдаг; pipeline.js): тодорхойгүй echo (no_user, 8 с-ээс удаан) = АЖИЛТАН (бот ажилтны яриаг таслахгүй);
- *     зөвхөн манай апп, ≥ 3 ярианд давтагдсан загвар, ≤ 8 с-ийн хариу автомат. Сүүдэр ярианд анхдагч 'shadow'.
+ *     зөвхөн манай апп ба ≤ 8 с-ийн хариу автомат (давтагдсан загварын дүрэм ҮЙЛЧЛЭХГҮЙ — ажилтны хадгалсан хариу).
+ *     Сүүдэр ярианд анхдагч 'shadow'.
  *   · Манай ботын ӨӨРИЙН илгээсэн мессеж (outbound.js): илгээсэн даруйд thread-д `own` мөрөөр бичигддэг (id = echo-гийн
  *     event id). Echo ирэхэд `knownEchoes` түүнийг таньж, бодит ирсэн цагаар БИШ «логик байрлал»-аар (хариулсан хэрэглэгчийн
  *     мессежийн яг дараа) эрэмбэлнэ — хэрэглэгч AI бодож байх хооронд дараагийн мессежээ бичсэн бол тэр мессеж «хариулсан»
@@ -50,7 +51,7 @@ export const AUTOMATION_TEMPLATE_MIN_CONVERSATIONS = 3;
  *   payload: import('./meta-events.js').SocialEventPayload }} StoredEvent
  * @typedef {{ eventId: string, role: MessageRole, textHash: string|null, kind: MessageKind, text: string,
  *   attachments: string[], mid: string|null, sentAt: Date, echoWhy?: string }} PlannedMessage
- * @typedef {{ type: 'none', reason: 'mode_off'|'human_active'|'no_user_message'|'already_answered' }
+ * @typedef {{ type: 'none', reason: 'mode_off'|'human_active'|'no_user_message'|'already_answered'|'paused' }
  *   | { type: 'agent', replyToEventId: string, standby?: true }
  *   | { type: 'media_template', replyToEventId: string, standby?: true, stickerOnly?: true }} BatchAction
  *   standby / stickerOnly — зөвхөн үнэн үед талбар байна
@@ -82,9 +83,11 @@ export function classifyEchoWhy(echo, ctx) {
   const app = echo.payload.app_id ?? null;
   if (ctx.ownAppId && app === ctx.ownAppId) return { source: 'own_bot', why: 'own_app' };
   if (app && KNOWN_AUTOMATION_APP_IDS.includes(app)) return { source: 'automation', why: 'known_app' };
-  const fp = echoFingerprint(echo.payload.text);
-  if (fp && ctx.automationHashes?.has(fp)) return { source: 'automation', why: 'template' };
   const strict = ctx.policy === 'strict';
+  // Давтагдсан текст = Meta-ийн загвар — ЗӨВХӨН сүүдэрт. Амьд ярианд (strict) хэрэглэхгүй: ажилтны «хадгалсан хариу» (Page
+  // Inbox saved reply) ч ≥ 3 ярианд давтагддаг тул автомат гэж андуурвал бот ажилтны дээгүүр хариулна (аудит 2026-11-26).
+  const fp = strict ? null : echoFingerprint(echo.payload.text);
+  if (fp && ctx.automationHashes?.has(fp)) return { source: 'automation', why: 'template' };
   // Хэрэглэгч бичсэн ч echo-оос өмнөх мөч тодорхойгүй (echo хоцорч, дараалал алдагдаж ирсэн) — «бичээгүй» гэж бүү андуур:
   // зөрүүг хэмжих боломжгүй тул ажилтан гэж үзнэ (баталгаажуулах аудит; өмнөх зан төлөв)
   if (!ctx.lastUserAt && ctx.userWrote) return { source: 'staff', why: 'default' };
@@ -143,8 +146,9 @@ function withLogicalTime(events, known) {
  * @param {ConversationSnapshot} conv
  * @param {readonly StoredEvent[]} events
  * @param {{ mode: 'off'|'shadow', ownAppId: string|null, now: Date, automationHashes?: ReadonlySet<string>, echoPolicy?: 'shadow'|'strict',
- *   knownEchoes?: ReadonlyMap<string, { role: string, echoWhy?: string|null, at?: Date|null }> }} opts  knownEchoes — өмнө
- *   хадгалсан echo мессеж (event id → ангилал; `at` = манай ботын өөрийн илгээсэн мессежийн логик байрлал)
+ *   knownEchoes?: ReadonlyMap<string, { role: string, echoWhy?: string|null, at?: Date|null }>, stateOnly?: boolean }} opts
+ *   knownEchoes — өмнө хадгалсан echo мессеж (event id → ангилал; `at` = манай ботын өөрийн илгээсэн мессежийн логик байрлал);
+ *   stateOnly — яаралтай зогсоолтын үе: төлвийг (ажилтан хариулсан эсэх) шинэчилнэ, ямар ч үйлдэл хийхгүй (reason 'paused')
  */
 export function planBatch(conv, events, opts) {
   const sorted = [...withLogicalTime(events, opts.knownEchoes)].sort((a, b) => a.eventTime.getTime() - b.eventTime.getTime());
@@ -201,8 +205,11 @@ export function planBatch(conv, events, opts) {
           // Манай ботын өөрийн илгээсэн мөр — тэмдгийг хадгална (дахин боловсруулахад логик байрлал алдагдахгүй)
           ...(stored?.own ? { own: true } : {}),
         });
-        // Meta-ийн автомат хариу асуултад хариулаагүй гэж үзнэ — сүүдэр ноорог бичигдсээр (үнэлгээнд хэрэгтэй)
-        if (lastUser && source !== 'automation') answeredAfterUser = true;
+        // Зөвхөн АЖИЛТНЫ хариу хэрэглэгчийн мессежийг «хариулсан» болгоно. Meta-ийн автомат хариу асуултад хариулаагүй
+        // (сүүдэр ноорог бичигдсээр). Манай ботын ӨӨРИЙН echo ч үгүй: бот хариугаа тухайн багцын event-үүд `done` болсны
+        // ДАРАА л илгээдэг тул pending үлдсэн хэрэглэгчийн мессежийг өмнөх ботын хариу хэзээ ч хамраагүй (аудит: хоцорч /
+        // дараалал алдагдаж ирсэн мессеж «хариулсан» болж алга болдог байв).
+        if (lastUser && source === 'staff') answeredAfterUser = true;
         break;
       }
       case 'handover': {
@@ -244,7 +251,8 @@ export function planBatch(conv, events, opts) {
 
   /** @type {BatchAction} */
   let action;
-  if (!lastUser) action = { type: 'none', reason: 'no_user_message' };
+  if (opts.stateOnly) action = { type: 'none', reason: 'paused' };
+  else if (!lastUser) action = { type: 'none', reason: 'no_user_message' };
   else if (answeredAfterUser) action = { type: 'none', reason: 'already_answered' };
   else if (state !== 'bot') action = { type: 'none', reason: 'human_active' };
   // standby (Page Inbox яриаг эзэмшиж байна): ноорог бичсээр — action.standby-аар outbound.js илгээхгүй
@@ -273,14 +281,14 @@ export function planBatch(conv, events, opts) {
   };
 }
 
-/** Сүүлийн хүн/ботын хариуны мөч (echo; Meta-ийн автомат хариуг тоолохгүй) — түүнээс хойшхи = хариулаагүй хэсэг */
+/** Сүүлийн АЖИЛТНЫ хариуны мөч (echo; Meta-ийн автомат, манай ботын өөрийн echo-г тоолохгүй) — түүнээс хойшхи = хариулаагүй хэсэг */
 function lastAnswerAt(sorted, ownAppId, lastUserBefore, automationHashes, policy, known) {
   let at = null;
   let lastUser = null;
   for (const e of sorted) {
     if (e.kind === 'echo') {
       const source = knownEcho(known, e)?.source ?? classifyEcho(e, { ownAppId, ...userBefore(e.eventTime, lastUser, lastUserBefore), automationHashes, policy });
-      if (source !== 'automation') at = e.eventTime;
+      if (source === 'staff') at = e.eventTime;
     } else if (e.kind === 'message' || e.kind === 'attachment' || e.kind === 'postback') {
       lastUser = e.eventTime;
     }

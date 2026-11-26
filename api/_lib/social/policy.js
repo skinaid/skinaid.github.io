@@ -7,6 +7,7 @@
  * LLM-ийн гаралт = САНАЛ. Илгээх, ноорог үлдээх, хүнд шилжүүлэх эсэхийг ЭНД код шийднэ:
  *   1. Ажилтан ярианд хариулж байвал (state human/paused) бот чимээгүй.
  *   2. Сэдэв (LLM эсвэл кодын дохио) эрсдэлтэй → хүнд. Кодын дохио LLM-ийн ангиллыг ДАРНА.
+ *   2а. «Автомат» горимд кирилл биш бичвэр (латин галиг г.м.) → хүнд: кодын дохио (2) зөвхөн кирилл үг таньдаг.
  *   3. AI итгэл бага, хариу хоосон, мэдлэгт байхгүй ₮/% дүн, валютгүй дүн («25,000-аар», «50 мянгаар»), мэдлэгт
  *      байхгүй хөнгөлөлт/үнэгүй/бэлэг/хувь → хүнд (үнэ, санал ЗӨВХӨН мэдлэгээс; SkinAid аудит 2026-11-25).
  *      `facts` өгвөл (агент үргэлж өгнө): дүн, хувь, хөнгөлөлтийн үг ЗӨВХӨН ИШ ТАТСАН (source_ids) баримтаас; үгүйсгэсэн
@@ -21,7 +22,7 @@
  * Энэ нь зөвхөн БОДЛОГЫН зөвшөөрөл — жинхэнэ илгээлтийг ../outbound.js sendGuarded л шийднэ (үзэгчид, зогсоолт, 24 цаг…).
  */
 import { hasBlocking, lintDraft, moneyMentions, numberMentions, offerMentions, percentMentions } from '../guardrails.js';
-import { detectRiskSignals, intentDef, isIntent, SIGNAL_INTENT } from './intents.js';
+import { detectRiskSignals, intentDef, isForeignScript, isIntent, SIGNAL_INTENT } from './intents.js';
 
 /** Үүнээс доош итгэлтэй саналыг хүнд шилжүүлнэ */
 export const CONFIDENCE_MIN = 0.7;
@@ -103,6 +104,9 @@ export function decideReply(input) {
   if (intentDef(intent).risk === 'human') human.push(`intent_human:${intent}`);
   else if (isIntent(p.intent) && llmDef.risk === 'human') human.push(`intent_human:${llmDef.key}`);
   for (const s of signals) if (s !== 'injection') human.push(`signal:${s}`);
+  // «Автомат» горим: кирилл биш (латин галиг, англи…) мессежид кодын эрсдэлийн дохио ажилладаггүй — AI-ийн ангилалд дан
+  // найдаж шууд хариулахгүй, ажилтанд (аудит 2026-11-26). Сүүдэрт ноорог хэвээр (үнэлгээ, eval өөрчлөгдөхгүй).
+  if (input.mode === 'auto' && isForeignScript(input.userText)) human.push('foreign_script');
   if (p.needs_human) human.push('llm_needs_human');
   if (!(Number(p.confidence) >= CONFIDENCE_MIN)) human.push('low_confidence');
   if (!reply) human.push('empty_reply');

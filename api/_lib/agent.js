@@ -76,10 +76,18 @@ export function createAgent(deps) {
   /** Нийтлэгдсэн эмчилгээний хуудас (захиалгын холбоосын ?svc=) — тест тарьна */
   const pages = deps.pages ?? PAGES;
 
-  /** Нийтлэг ноорогийн талбар. mode: 'auto' = амьд яриа (илгээх оролдлоготой), 'shadow' = ноорог л */
-  function baseDraft(psidHash, replyToEventId, turns, live = false) {
+  /**
+   * Нийтлэг ноорогийн талбар. mode: 'auto' = амьд яриа (илгээх оролдлоготой), 'shadow' = ноорог л.
+   * `batchText` — ЭНЭ багцын хэрэглэгчийн мессежүүд (pipeline өгнө): ярианы түүхийн сүүл (unansweredUserText) дээр НЭМЖ
+   * эрсдэлийн дохионы оролт болгоно. Дараалал алдагдаж / хоцорч ирсэн мессеж түүхэнд ботын хариуны ӨМНӨ байрлаж сүүлд
+   * орохгүй байж болно — түүнийг шалгалгүй (хоосон текстээр) хариулж болохгүй (аудит 2026-11-26).
+   */
+  function baseDraft(psidHash, replyToEventId, turns, live = false, batchText = []) {
     const ctx = turns.slice(-CONTEXT_TURNS).map((t) => ({ role: t.role, text: String(t.text || '').slice(0, 1000), attachments: t.attachments || [] }));
-    return { threadId: psidHash, replyToEventId, userText: unansweredUserText(turns), context: ctx, mode: live ? 'auto' : 'shadow' };
+    const tail = unansweredUserText(turns);
+    const extra = (Array.isArray(batchText) ? batchText : []).filter((x) => typeof x === 'string' && x && !tail.includes(x));
+    const userText = [...extra, tail].filter(Boolean).join('\n').slice(0, 2000);
+    return { threadId: psidHash, replyToEventId, userText, context: ctx, mode: live ? 'auto' : 'shadow' };
   }
 
   const dateOf = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : null);
@@ -91,8 +99,10 @@ export function createAgent(deps) {
   /** Загвар (handoff, яаралтай, зураг) текст: амьд ярианд ботын анхны мессеж бол «Би … AI туслах» гэж танилцуулна */
   const templateText = (tpl, thread, live) => (live ? handoffMessage(tpl, { clinicName: CLINIC.name, withDisclosure: disclose(thread, true) }) : tpl);
   /** Илгээх санал (зөвхөн амьд ярианд, зөвхөн илгээж болох чиглэлд) — pipeline → outbound.js */
-  const sendFor = (live, route, text, kind = route === 'handoff' ? 'handoff' : 'reply') => {
+  const sendFor = (live, route, text, kind = route === 'handoff' ? 'handoff' : 'reply', userText = '') => {
     if (!live || !text || (route !== 'auto_candidate' && route !== 'handoff')) return null;
+    // AI-ийн хариуг эрсдэлийн шалгалт хийгдээгүй (хоосон) хэрэглэгчийн текст дээр хэзээ ч илгээхгүй
+    if (kind === 'reply' && !String(userText).trim()) return null;
     return { kind, text, quickReplies: kind === 'reply' ? [{ ...HUMAN_QUICK_REPLY }] : [] };
   };
 
@@ -220,9 +230,10 @@ export function createAgent(deps) {
      * Түр зуурын Claude алдаа (timeout, 429, 5xx) → { retry: true } — pipeline event-ийг дахин оролдоно.
      * `live` (амьд яриа) үед буцаах `send` = илгээх санал (auto_candidate → AI-ийн хариу; handoff → загвар текст; бусад → null).
      * Ноорог энэ дуудлагаар ШИНЭЭР үүсээгүй бол `send` = null (хадгалсан ноорогоос өөр текст явахгүй).
-     * @param {{ psidHash: string, replyToEventId: string, thread: Record<string, any>, eventStatus?: Record<string, string>, live?: boolean }} input
+     * @param {{ psidHash: string, replyToEventId: string, thread: Record<string, any>, eventStatus?: Record<string, string>,
+     *   live?: boolean, batchText?: string[] }} input   batchText — энэ багцын хэрэглэгчийн мессежүүд (эрсдэлийн шалгалтад)
      */
-    async replyDraft({ psidHash, replyToEventId, thread, eventStatus, live = false }) {
+    async replyDraft({ psidHash, replyToEventId, thread, eventStatus, live = false, batchText = [] }) {
       const settings = await store.readSettings();
       if (!settings.active) return { skipped: 'inactive', finalized: false };
       const t0 = Date.now();
@@ -239,7 +250,7 @@ export function createAgent(deps) {
         knowledge.load(),
         store.readUsage(month),
       ]);
-      const base = baseDraft(psidHash, replyToEventId, turns, live);
+      const base = baseDraft(psidHash, replyToEventId, turns, live, batchText);
       const signals = detectRiskSignals(base.userText);
 
       // Сарын хязгаар: LLM-гүй, ажилтанд
@@ -269,9 +280,37 @@ export function createAgent(deps) {
       }
       const saved = await store.saveDraftEx({ draft: withLabels({ ...base, ...g.fields }), run: g.run, month, replyToEventId, eventStatus });
       await afterRun(g.run);
-      const send = saved.created ? sendFor(live, g.fields.route, g.fields.wouldSend) : null;
+      const send = saved.created ? sendFor(live, g.fields.route, g.fields.wouldSend, undefined, base.userText) : null;
       if (g.status === 'fallback') return { route: 'handoff', reason: g.fields.reasons[0], finalized: true, draftId: saved.draftId, send };
       return { route: g.fields.route, simulatedBot: g.fields.route === 'auto_candidate', finalized: true, draftId: saved.draftId, send };
+    },
+
+    /**
+     * LLM-гүй «ажилтанд шилжүүлэх» ноорог — АМЬД ярианд AI хариулж чадаагүй үед (Claude-ийн алдаа, ярианы өдрийн хязгаар):
+     * үйлчлүүлэгч чимээгүй орхигдохгүй, «ажилтанд дамжууллаа» мэдэгдэл авна (pipeline → sendGuarded), яриа хүнд шилжинэ.
+     * Мэдлэг (яаралтай утас) уншиж чадаагүй бол ерөнхий загвар. Ноорог аль хэдийн байсан бол `send` = null.
+     * @param {{ psidHash: string, replyToEventId: string, eventStatus?: Record<string, string>, thread?: Record<string, any>|null,
+     *   live?: boolean, reason: 'ai_error'|'thread_cap', batchText?: string[] }} input
+     */
+    async fallbackDraft({ psidHash, replyToEventId, eventStatus, thread = null, live = false, reason, batchText = [] }) {
+      const turns = await store.recentTurns(psidHash, CONTEXT_TURNS);
+      const base = baseDraft(psidHash, replyToEventId, turns, live, batchText);
+      const signals = detectRiskSignals(base.userText);
+      let phone = '';
+      try {
+        phone = (await knowledge.load()).phone;
+      } catch {
+        phone = '';
+      }
+      const tpl = templateFor('other', signals, phone);
+      const wouldSend = templateText(tpl, thread, live);
+      const saved = await store.saveDraftEx({
+        draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend, link: null, contact: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION }),
+        run: null,
+        replyToEventId,
+        eventStatus,
+      });
+      return { route: 'handoff', reason, finalized: true, draftId: saved.draftId, send: saved.created ? sendFor(live, 'handoff', wouldSend) : null };
     },
 
     /**

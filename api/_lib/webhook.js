@@ -4,7 +4,8 @@
  * GET  — subscribe verify: hub.verify_token = META_VERIFY_TOKEN (timing-safe) → hub.challenge, эс бөгөөс 403.
  * POST — 1) ТҮҮХИЙ body байт дээр X-Hub-Signature-256 (META_APP_SECRET; байхгүй = 503, буруу = 401) — JSON.parse-аас ӨМНӨ.
  *        2) parseWebhook: текстийг нууцлах, PSID-г hash (PSID_SALT), хавсралтын төрөл л. META_PAGE_ID-ээс бусдыг хаяна.
- *        3) Тохиргоо off / kill switch → юу ч хадгалахгүй, 200.
+ *        3) Тохиргоо off → юу ч хадгалахгүй, 200. Яаралтай зогсоолт (kill switch; горим off биш) → үйлчлүүлэгчийн мессежийг
+ *           хадгалахгүй, зөвхөн пэйжийн echo / handover-ыг ТЕКСТГҮЙ бүртгэж ярианы төлвийг шинэчилнэ (AI ажиллахгүй).
  *        4) `messenger_events/{id}` create (exists=false) — Meta-ийн давтан илгээлт нэг л мөр.
  *        5) 200 шууд (Meta 20 секундэд хариу хүлээдэг) → waitUntil: шинэ event-тэй яриа + гацсан event (≤ 2 яриа).
  *           Шинэ event-тэй ярианы PSID-г (хариу илгээх хүлээн авагч) pipeline-д САНАХ ОЙГООР дамжуулна — «Автомат» горимд
@@ -109,12 +110,24 @@ export function createWebhookHandlers(deps) {
     const threads = new Map();
     try {
       const settings = await rt.store.readSettings();
-      if (!settings.active) return text('OK', 200);
+      // Яаралтай зогсоолт (горим унтраагаагүй): үйлчлүүлэгчийн мессежийг ХАДГАЛАХГҮЙ; зөвхөн пэйжийн хариу (echo) ба яриа
+      // шилжүүлэлтийг (handover) ТЕКСТГҮЙГЭЭР бүртгэнэ — «ажилтан энэ ярианд хариулсан» гэдгийг мэдэхийн тулд (дахин асаахад
+      // бот ажилтны яриа руу орж ирэхгүй). AI ажиллахгүй, юу ч илгээхгүй.
+      const paused = !settings.active && settings.mode !== 'off';
+      if (!settings.active && !paused) return text('OK', 200);
       for (const ev of ours) {
         const h = psidHash(ev.pageId, ev.psid, cfg.psidKey);
+        if (paused) {
+          if (ev.kind !== 'echo' && ev.kind !== 'handover') continue;
+          const p = ev.payload || {};
+          await rt.store.createEvent({ ...ev, payload: { ...(p.app_id ? { app_id: p.app_id } : {}), ...(p.handover ? { handover: p.handover } : {}), ...(p.standby ? { standby: true } : {}) } }, h);
+          threads.set(h, null);
+          continue;
+        }
         await rt.store.createEvent(ev, h);
         threads.set(h, ev.psid);
       }
+      if (!threads.size) return text('OK', 200);
     } catch (e) {
       const code = e instanceof FirestoreError ? `firestore_${e.status || e.httpStatus}` : 'error';
       log(`[messenger] webhook: Firestore алдаа ${describeError(e)}`);
@@ -131,7 +144,8 @@ export function createWebhookHandlers(deps) {
         const deadline = started + WEBHOOK_BUDGET_MS;
         if (heartbeat) await rt.store.patchStatus({ lastWebhookAt: now(), config: configStatus(env) });
         for (const [h, recipient] of threads) await rt.pipeline.processThread(h, { deadline, recipient });
-        await rt.pipeline.sweepStale({ maxThreads: 2, deadline });
+        // Гацсан яриа энэ webhook-ийн өөрийнх нь байвал (түгжээ завгүй байсан) хүлээн авагчтай нь нөхнө
+        await rt.pipeline.sweepStale({ maxThreads: 2, deadline, recipients: new Map([...threads].filter(([, p]) => p)) });
       } catch (e) {
         log(`[messenger] webhook дараах боловсруулалт: ${describeError(e)}`);
       }

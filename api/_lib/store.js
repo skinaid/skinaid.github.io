@@ -730,7 +730,7 @@ export function createStore(fs, opt = {}) {
         await fs.commit([
           setWrite(`${COL.outbound}/${id}`, {
             status: 'sending', kind, threadId: psidHash, draftId, replyToEventId: eventId, text: String(text).slice(0, 2000),
-            mid: null, error: null, createdAt: t, sentAt: null, expireAt: new Date(t.getTime() + RETENTION_DAYS.outbound * DAY),
+            messageDocId: null, error: null, createdAt: t, sentAt: null, expireAt: new Date(t.getTime() + RETENTION_DAYS.outbound * DAY),
           }, { exists: false }),
           this.dayStatsWrite(t, [['sendClaims', 1]]),
         ]);
@@ -742,19 +742,23 @@ export function createStore(fs, opt = {}) {
     },
 
     /**
-     * Илгээлтийн үр дүн — НЭГ commit: бүртгэл (sent/failed), ноорогийн төлөв, өдрийн нэгтгэл; амжилттай бол ботын мөрийг
-     * thread-д шууд (`botMessage`: id = тухайн mid-ийн echo event-ийн id → echo ирэхэд давхардахгүй, `own` + логик байрлал);
-     * алдаа бол messenger_status/main.lastSendError (ангилал + тоон код л — token, текстгүй).
-     * @param {{ id: string, draftId: string, psidHash: string, kind: string, ok: boolean, mid?: string|null,
+     * Илгээлтийн үр дүн — НЭГ commit: бүртгэл (sent/failed), ноорогийн төлөв, өдрийн нэгтгэл, ярианы төлөв (`threadFields`:
+     * сүүлд илгээсэн мөч, өдрийн тоо, ажилтанд шилжүүлсэн бол `human` — түгжээ тайлах бичилт унасан ч алдагдахгүй); амжилттай
+     * бол ботын мөрийг thread-д шууд (`botMessage`: id = тухайн mid-ийн echo event-ийн id → echo ирэхэд давхардахгүй, `own` +
+     * логик байрлал); алдаа бол messenger_status/main.lastSendError (ангилал + тоон код л — token, текстгүй).
+     * Meta-ийн мессежийн id-г (mid) ТҮҮХИЙГЭЭР ХАДГАЛАХГҮЙ — зөвхөн ботын мөрийн id (hash): mid + пэйжийн token-оор Graph-аас
+     * хүлээн авагчийн PSID-г гаргаж болох тул ярианы hash-тай зэрэгцүүлж хадгалбал «буцаан тайлах боломжгүй» амлалт зөрчигдөнө.
+     * Дуудагч амжилтгүй бол давтаж дуудаж болно (бичилтүүд тогтмол утгатай; өдрийн тоо давхардаж болзошгүй — зөвхөн статистик).
+     * @param {{ id: string, draftId: string, psidHash: string, kind: string, ok: boolean,
      *   error?: { kind: string, code?: number|null, subcode?: number|null } | null,
-     *   botMessage?: { id: string, text: string, textHash: string|null, at: Date } | null }} p
+     *   botMessage?: { id: string, text: string, textHash: string|null, at: Date } | null, threadFields?: Record<string, any> }} p
      */
-    async finishOutbound({ id, draftId, psidHash, kind, ok, mid = null, error = null, botMessage = null }) {
+    async finishOutbound({ id, draftId, psidHash, kind, ok, error = null, botMessage = null, threadFields = {} }) {
       const t = now();
       const err = ok ? null : { kind: statKey(error?.kind), code: Number.isFinite(error?.code) ? error.code : null, subcode: Number.isFinite(error?.subcode) ? error.subcode : null };
       const writes = [
-        setWrite(`${COL.outbound}/${id}`, { status: ok ? 'sent' : 'failed', mid: ok ? mid : null, error: err, sentAt: ok ? t : null },
-          { mask: ['status', 'mid', 'error', 'sentAt'], exists: true }),
+        setWrite(`${COL.outbound}/${id}`, { status: ok ? 'sent' : 'failed', messageDocId: ok && botMessage ? botMessage.id : null, error: err, sentAt: ok ? t : null },
+          { mask: ['status', 'messageDocId', 'error', 'sentAt'], exists: true }),
         setWrite(`${COL.drafts}/${draftId}`, { sendStatus: ok ? 'sent' : 'failed', sendReason: ok ? null : err.kind, sentAt: ok ? t : null },
           { mask: ['sendStatus', 'sendReason', 'sentAt'], exists: true }),
         this.dayStatsWrite(t, [[ok ? `sent.${statKey(kind)}` : `sendFail.${err.kind}`, 1]]),
@@ -766,6 +770,9 @@ export function createStore(fs, opt = {}) {
         }));
       }
       if (!ok) writes.push(setWrite(`${COL.status}/main`, { lastSendError: { ...err, at: t } }, { mask: ['lastSendError'] }));
+      const tf = Object.keys(threadFields || {});
+      // Ярианы төлөв (түгжээг хөндөхгүй — mask-д lockUntil алга); thread баримт байгаа үед л
+      if (tf.length) writes.push(setWrite(threadPath(psidHash), { ...threadFields, updatedAt: t }, { mask: [...tf, 'updatedAt'], exists: true }));
       await fs.commit(writes);
     },
 

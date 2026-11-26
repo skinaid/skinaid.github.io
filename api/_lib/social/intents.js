@@ -119,6 +119,27 @@ const PATTERNS = [
 /** «14 настай», «16 настай охин» — 18-аас доош нас дурдсан бол sensitive_group */
 const AGE_RE = /(?<!\d)(\d{1,2})\s*(?:нас|настай|наст)/giu;
 
+/** Аюулгүй, богино гадаад үг — «ok», «hi» гэхэд ажилтанд шилжүүлэхгүй */
+const HARMLESS_FOREIGN = new Set(['ok', 'okay', 'okey', 'hi', 'hello', 'hey', 'thanks', 'thank', 'you', 'thx', 'tnx', 'ty', 'bye', 'yes', 'no', 'pls']);
+
+/**
+ * Мессеж КИРИЛЛ БИШ үсгээр (латин галиг, англи, бусад бичиг) голлон бичигдсэн эсэх. Дээрх эрсдэлийн дохионы бүх загвар
+ * кирилл монгол үгээр бичигдсэн тул «nuur havdaad bn», «mungu butsaaj avmaar bn» зэргийг КОД барьж чадахгүй (аудит
+ * 2026-11-26) — «Автомат» горимд ийм мессежид AI шууд хариулахгүй, ажилтанд шилжүүлнэ (policy.js).
+ * Дүрэм: кирилл биш үг (≥ 2 үсэг; «ok», «hi» г.м.-ийг тоолохгүй) ≥ 3, эсвэл ≥ 1 бөгөөд кирилл үг огт байхгүй.
+ * Кирилл өгүүлбэр доторх 1–2 брэндийн нэр («Botox хэд вэ», «Glutathione дусал») үүнд ОРОХГҮЙ.
+ */
+export function isForeignScript(text) {
+  const words = String(text ?? '').match(/\p{L}{2,}/gu) || [];
+  let cyr = 0;
+  let foreign = 0;
+  for (const w of words) {
+    if (/\p{Script=Cyrillic}/u.test(w)) cyr++;
+    else if (!HARMLESS_FOREIGN.has(w.toLowerCase())) foreign++;
+  }
+  return foreign >= 3 || (foreign >= 1 && cyr === 0);
+}
+
 /** Нууцалсан текст дэх эрсдэлийн дохио (давхардалгүй, тогтмол дараалал) @returns {RiskSignal[]} */
 export function detectRiskSignals(text) {
   const s = String(text ?? '');
