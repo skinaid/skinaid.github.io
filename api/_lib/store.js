@@ -41,6 +41,23 @@ export const EVAL_LIMITS = Object.freeze({ runsPerDay: 3, chunk: 6, maxMicroUsd:
 const evalRunPath = (id) => `${COL.status}/eval_${id}`;
 const evalChunkPath = (id, from) => `${COL.status}/evalc_${id}_${String(from).padStart(4, '0')}`;
 const EVAL_INDEX = `${COL.status}/evals`;
+/** Функц тасарч үлдсэн хэсгийн түгжээг ийм хугацааны дараа дахин эзэмшиж болно (maxDuration 60 с + нөөц) */
+export const EVAL_CLAIM_STALE_MS = 90_000;
+const evalCost = (runs) => runs.reduce((n, r) => n + Math.max(0, Math.round(r?.costMicroUsd || 0)), 0);
+/** Eval-ийн Claude дуудлагууд: ai_runs (текстгүй) + сарын тоо/зардал + admin-ий дэд хязгаар (testCostMicroUsd) */
+function evalUsageWrites(runs, month, t) {
+  const list = runs.filter(Boolean);
+  const billable = list.filter((r) => r.billable);
+  const cost = evalCost(list);
+  const writes = list.map((r) => setWrite(`${COL.runs}/${newId('r')}`, { ...r, draftId: null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY) }, { exists: false }));
+  if (billable.length) {
+    writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
+      mask: ['month', 'updatedAt'],
+      transforms: [transforms.increment('runs', billable.length), transforms.increment('costMicroUsd', cost), transforms.increment('testCostMicroUsd', cost)],
+    }));
+  }
+  return writes;
+}
 
 /** Хадгалах хугацаа (хоног) — README «Messenger AI»-тай ижил */
 export const RETENTION_DAYS = Object.freeze({ events: 30, messages: 180, drafts: 180, runs: 400, echo: 90 });
@@ -333,7 +350,8 @@ export function createStore(fs, opt = {}) {
 
     async readUsage(month) {
       const d = await fs.get(`${COL.usage}/${month}`);
-      return { runs: Number(d?.data?.runs) || 0, costMicroUsd: Number(d?.data?.costMicroUsd) || 0 };
+      // testCostMicroUsd — admin-ий (туршилт + eval) зардал, дэд хязгаарт (adminTestCostPerMonth)
+      return { runs: Number(d?.data?.runs) || 0, costMicroUsd: Number(d?.data?.costMicroUsd) || 0, testCostMicroUsd: Number(d?.data?.testCostMicroUsd) || 0 };
     },
 
     /**
@@ -389,39 +407,63 @@ export function createStore(fs, opt = {}) {
     async readEvalRun(runId) {
       return (await fs.get(evalRunPath(runId)))?.data ?? null;
     },
-    async readEvalChunk(runId, from) {
-      return (await fs.get(evalChunkPath(runId, from)))?.data ?? null;
+    /**
+     * Хэсгийг Claude-ийг дуудахаас ӨМНӨ эзэмшинэ (аудит: давхар/зэрэг хүсэлт хоёр удаа төлж, зардал бүртгэгдэхгүй байв).
+     * `pending` баримтыг exists=false-аар үүсгэнэ; байвал — дууссан бол хадгалсан үр дүн, явж байгаа бол `busy`; функц тасарч
+     * үлдсэн (EVAL_CLAIM_STALE_MS-ээс хуучин) `pending`-ийг updateTime precondition-оор дахин эзэмшинэ.
+     * @returns {Promise<{ state: 'claimed' } | { state: 'done', results: object[] } | { state: 'busy' }>}
+     */
+    async claimEvalChunk(runId, from) {
+      const path = evalChunkPath(runId, from);
+      const t = now();
+      const data = { runId, from, status: 'pending', claimedAt: t, expireAt: new Date(t.getTime() + 7 * DAY) };
+      try {
+        await fs.commit([setWrite(path, data, { exists: false })]);
+        return { state: 'claimed' };
+      } catch (e) {
+        if (!(e instanceof FirestoreError && e.isPrecondition)) throw e;
+      }
+      const cur = await fs.get(path);
+      if (!cur) return { state: 'busy' };
+      if (cur.data.status !== 'pending' && Array.isArray(cur.data.results)) return { state: 'done', results: cur.data.results };
+      const at = cur.data.claimedAt instanceof Date ? cur.data.claimedAt.getTime() : 0;
+      if (t.getTime() - at < EVAL_CLAIM_STALE_MS) return { state: 'busy' };
+      try {
+        await fs.commit([setWrite(path, data, { updateTime: cur.updateTime })]);
+        return { state: 'claimed' };
+      } catch (e) {
+        if (e instanceof FirestoreError && e.isPrecondition) return { state: 'busy' };
+        throw e;
+      }
     },
     async readEvalIndex() {
       return (await fs.get(EVAL_INDEX))?.data ?? { runs: [] };
     },
     /**
-     * Нэг хэсгийн үр дүн + ai_runs (текстгүй) + сарын тоологч + ажиллагааны зардал — НЭГ commit. Хэсэг давхар бичигдэхгүй
-     * (exists=false — дахин илгээсэн хүсэлт).
+     * Нэг хэсгийн үр дүн (эзэмшсэн `pending`-ийг дарна) + ai_runs (текстгүй) + сарын тоологч + ажиллагааны зардал — НЭГ commit.
+     * Eval-ийн зардал admin-ий сарын дэд хязгаарт (testCostMicroUsd = туршилт + eval, сарын хязгаарын 20%) — үйлдвэрлэлийн
+     * ноорогт 80% үлдэнэ (аудит).
      */
-    async saveEvalChunk({ runId, from, results, runs, month }) {
+    async saveEvalChunk({ runId, from, results, runs, month, knowledgeRev = null }) {
       const t = now();
-      const billable = runs.filter((r) => r.billable);
-      const cost = runs.reduce((n, r) => n + Math.max(0, Math.round(r.costMicroUsd || 0)), 0);
       const writes = [
-        setWrite(evalChunkPath(runId, from), { runId, from, results, at: t, expireAt: new Date(t.getTime() + 7 * DAY) }, { exists: false }),
-        setWrite(evalRunPath(runId), { updatedAt: t }, { mask: ['updatedAt'], transforms: [transforms.increment('done', results.length), transforms.increment('costMicroUsd', cost)] }),
-        ...runs.map((r) => setWrite(`${COL.runs}/${newId('r')}`, { ...r, draftId: null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY) }, { exists: false })),
+        setWrite(evalChunkPath(runId, from), { runId, from, status: 'done', results, knowledgeRev, at: t, expireAt: new Date(t.getTime() + 7 * DAY) }),
+        setWrite(evalRunPath(runId), { updatedAt: t }, { mask: ['updatedAt'], transforms: [transforms.increment('done', results.length), transforms.increment('costMicroUsd', evalCost(runs))] }),
+        ...evalUsageWrites(runs, month, t),
       ];
-      if (billable.length) {
-        writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
-          mask: ['month', 'updatedAt'],
-          transforms: [transforms.increment('runs', billable.length), transforms.increment('costMicroUsd', cost)],
-        }));
-      }
       await fs.commit(writes);
     },
-    /** Бүх хэсгийн үр дүн (дарааллаар) */
+    /** saveEvalChunk бүтэлгүйтвэл (Claude аль хэдийн төлбөртэй) — зөвхөн ai_runs + сарын зардлыг дахин бичнэ */
+    async recordEvalCost({ runs, month }) {
+      await fs.commit(evalUsageWrites(runs, month, now()));
+    },
+    /** Бүх ДУУССАН хэсгийн үр дүн (дарааллаар) ба хэсэг бүрийн мэдлэгийн тэмдэг */
     async readEvalResults(runId, total, chunk) {
       const paths = [];
       for (let f = 0; f < total; f += chunk) paths.push(evalChunkPath(runId, f));
       const m = await fs.batchGet(paths);
-      return paths.flatMap((p) => m.get(p)?.data?.results ?? []);
+      const docs = paths.map((p) => m.get(p)?.data).filter((d) => d && d.status !== 'pending' && Array.isArray(d.results));
+      return { results: docs.flatMap((d) => d.results), revs: [...new Set(docs.map((d) => d.knowledgeRev).filter(Boolean))] };
     },
     /**
      * Ажиллагааг дуусгана: run баримтад тайлан + кейс бүрийн тэнцсэн эсэх + унасан кейсүүд, түүх (≤ history), энэ ажиллагааны
@@ -439,6 +481,12 @@ export function createStore(fs, opt = {}) {
       ];
       for (let f = 0; f < total; f += chunk) writes.push(deleteWrite(evalChunkPath(runId, f)));
       for (const old of runs.slice(EVAL_LIMITS.history)) if (/^ev[a-z0-9]+$/.test(String(old.runId))) writes.push(deleteWrite(evalRunPath(old.runId)));
+      await fs.commit(writes);
+    },
+    /** Нэг ч кейс дуусаагүй ажиллагаа — түүхэд оруулахгүй (харьцуулалтыг хоосон болгохгүй), баримтуудыг устгана (аудит) */
+    async discardEval({ runId, total, chunk }) {
+      const writes = [deleteWrite(evalRunPath(runId))];
+      for (let f = 0; f < total; f += chunk) writes.push(deleteWrite(evalChunkPath(runId, f)));
       await fs.commit(writes);
     },
 
@@ -507,7 +555,9 @@ export function createStore(fs, opt = {}) {
     /** Хадгалах хугацаа дууссан баримтуудыг устгана (нэг collection, ≤ limit) */
     async purgeExpired(collection, limit = 200) {
       const docs = await fs.query({ collection, where: [['expireAt', '<=', now()]], orderBy: [['expireAt', 'asc']], limit });
-      if (docs.length) await fs.commit(docs.map((d) => deleteWrite(d.path)));
+      // messenger_status: зөвхөн eval-ийн баримт (main, evals-ийг хэзээ ч устгахгүй — хамгаалалт)
+      const del = collection === COL.status ? docs.filter((d) => /\/evalc?_[^/]+$/.test(d.path)) : docs;
+      if (del.length) await fs.commit(del.map((d) => deleteWrite(d.path)));
       return docs.length;
     },
 

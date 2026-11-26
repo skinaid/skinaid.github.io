@@ -389,7 +389,9 @@ test('admin API eval: эхлүүлэх → хэсгүүд → дуусгах; ү
   const st2 = await (await s.call({ action: 'eval_start' })).json();
   for (let from = 0; from < st2.total; from += st2.chunk) await s.call({ action: 'eval_chunk', runId: st2.runId, from });
   const fin2 = await (await s.call({ action: 'eval_finish', runId: st2.runId })).json();
-  assert.deepEqual(fin2.compare, { runId: st.runId, newlyFailing: [], newlyPassing: [] });
+  assert.deepEqual(fin2.compare, { runId: st.runId, at: new Date(NOW).toISOString(), done: EVAL_CASES.length, newlyFailing: [], newlyPassing: [] });
+  // Eval-ийн зардал admin-ий дэд хязгаарт (туршилт + eval = сарын зардлын 20%) тоологдоно
+  assert.ok(s.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).testCostMicroUsd > 0);
   assert.equal(s.fake.read('messenger_status/evals').runs.length, 2);
 });
 
@@ -411,4 +413,89 @@ test('admin API eval: өдөрт ≤ 3, ажиллагааны $5 хязгаар
   const capped = setup({ settings: { mode: 'shadow', killSwitch: false, monthlyRunCap: 1, monthlyCostCapUsd: 50 } });
   capped.fake.seed(`messenger_usage/${ubMonth(new Date(NOW))}`, { runs: 1 }, encodeFields);
   assert.deepEqual(await code(await capped.call({ action: 'eval_start' })), [429, 'month_cap']);
+});
+
+test('аудит (eval): зэрэг/давхар хэсэг Claude-ийг НЭГ л удаа дуудна; тасарсан түгжээг 90 с-ийн дараа дахин эзэмшинэ; commit унавал зардал бүртгэгдэнэ', async () => {
+  const { EVAL_CLAIM_STALE_MS } = await import('../../api/_lib/store.js');
+  const code = async (res) => [res.status, (await res.json()).error];
+  const s = setup();
+  const st = await (await s.call({ action: 'eval_start' })).json();
+  const res = await Promise.all([0, 1, 2].map(() => s.call({ action: 'eval_chunk', runId: st.runId, from: 0 })));
+  const bodies = await Promise.all(res.map((r) => r.json()));
+  assert.equal(s.claudeCalls.length, st.chunk, 'зэрэг 3 хүсэлт — Claude 6 л удаа');
+  assert.equal(bodies.filter((b) => b.ok && !b.repeated).length, 1);
+  assert.ok(bodies.every((b) => b.ok || b.error === 'busy'), JSON.stringify(bodies.map((b) => b.error)));
+  const month = `messenger_usage/${ubMonth(new Date(NOW))}`;
+  assert.equal(s.fake.read(month).runs, st.chunk);
+  // Функц тасарч үлдсэн «pending» түгжээ: шинэ бол busy, 90 с-ээс хуучин бол дахин эзэмшинэ
+  const path = `messenger_status/evalc_${st.runId}_${String(st.chunk).padStart(4, '0')}`;
+  s.fake.seed(path, { runId: st.runId, from: st.chunk, status: 'pending', claimedAt: new Date(NOW - 10_000) }, encodeFields);
+  assert.deepEqual(await code(await s.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk })), [409, 'busy']);
+  s.fake.seed(path, { runId: st.runId, from: st.chunk, status: 'pending', claimedAt: new Date(NOW - EVAL_CLAIM_STALE_MS - 1) }, encodeFields);
+  const taken = await (await s.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk })).json();
+  assert.equal(taken.ok, true);
+  assert.equal(taken.results.length, st.chunk);
+  // Хэсгийн commit унасан (Claude төлбөртэй) → зардал + ai_runs тусад нь бичигдэнэ, 500
+  const runsBefore = s.fake.read(month).runs;
+  s.fake.failNext.push({ match: (u, init) => u.endsWith(':commit') && String(init.body).includes(`evalc_${st.runId}_0012`) && String(init.body).includes('"done"'), status: 503, body: { error: { code: 503, status: 'UNAVAILABLE', message: 'x' } } });
+  assert.deepEqual(await code(await s.call({ action: 'eval_chunk', runId: st.runId, from: 2 * st.chunk })), [500, 'server_error']);
+  assert.equal(s.fake.read(month).runs, runsBefore + st.chunk, 'зардал алдагдаагүй');
+  assert.ok(s.logs.some((m) => /хэсэг бичигдсэнгүй/.test(m)));
+});
+
+test('аудит (eval): admin-ий дэд хязгаар (20%) — бүтэн ажиллагаанд хүрэлцэхгүй бол эхлэхгүй, хэтэрвэл хэсэг зогсоно; хоосон ажиллагаа түүхэд орохгүй; хагас ажиллагаа харьцуулалтын суурь болохгүй', async () => {
+  const code = async (res) => [res.status, (await res.json()).error];
+  const month = `messenger_usage/${ubMonth(new Date(NOW))}`;
+  // $50 → admin $10; бүтэн eval ≈ 124 × $0.02 = $2.48 → $8 зарцуулсан бол эхлэхгүй
+  const s = setup();
+  s.fake.seed(month, { runs: 0, testCostMicroUsd: 8_000_000 }, encodeFields);
+  assert.deepEqual(await code(await s.call({ action: 'eval_start' })), [429, 'month_tests']);
+  const s2 = setup();
+  const st = await (await s2.call({ action: 'eval_start' })).json();
+  s2.fake.seed(month, { runs: 0, testCostMicroUsd: 10_000_000 }, encodeFields);
+  assert.deepEqual(await code(await s2.call({ action: 'eval_chunk', runId: st.runId, from: 0 })), [429, 'month_tests']);
+  assert.equal(s2.claudeCalls.length, 0);
+  // Нэг ч кейс дуусаагүй → түүхэд орохгүй, баримт устна
+  const fin0 = await (await s2.call({ action: 'eval_finish', runId: st.runId })).json();
+  assert.equal(fin0.discarded, true);
+  assert.equal(s2.fake.read(`messenger_status/eval_${st.runId}`), null);
+  assert.deepEqual(s2.fake.read('messenger_status/evals')?.runs ?? [], []);
+  // Хагас ажиллагаа (1 хэсэг) → дараагийн ажиллагаа түүнтэй биш, өмнөх БҮТЭН ажиллагаатай харьцуулна
+  const s3 = setup();
+  const full = await (await s3.call({ action: 'eval_start' })).json();
+  for (let from = 0; from < full.total; from += full.chunk) await s3.call({ action: 'eval_chunk', runId: full.runId, from });
+  await s3.call({ action: 'eval_finish', runId: full.runId });
+  const half = await (await s3.call({ action: 'eval_start' })).json();
+  await s3.call({ action: 'eval_chunk', runId: half.runId, from: 0 });
+  assert.equal((await (await s3.call({ action: 'eval_finish', runId: half.runId })).json()).compare.runId, full.runId);
+  const third = await (await s3.call({ action: 'eval_start' })).json();
+  for (let from = 0; from < third.total; from += third.chunk) await s3.call({ action: 'eval_chunk', runId: third.runId, from });
+  const fin3 = await (await s3.call({ action: 'eval_finish', runId: third.runId })).json();
+  assert.equal(fin3.compare.runId, full.runId, 'хагас ажиллагааг алгасна');
+  assert.equal(fin3.compare.done, full.total);
+});
+
+test('аудит (eval): AI-ийн гаралт буруу (нөөц шилжүүлэлт) тэнцсэнд тоологдохгүй; явцад мэдлэг өөрчлөгдвөл тайланд тэмдэглэнэ', async () => {
+  const s = setup({ claude: () => ({ status: 'ok', text: 'JSON биш', model: MESSENGER_MODEL, usage: { input_tokens: 10, output_tokens: 10 } }) });
+  const st = await (await s.call({ action: 'eval_start' })).json();
+  const r = await (await s.call({ action: 'eval_chunk', runId: st.runId, from: 0 })).json();
+  assert.ok(r.results.every((x) => !x.pass && x.why === 'fallback' && x.fallback === 'invalid_output'));
+  kb(s.fake, 'k_new', { title: 'Шинэ', body: 'Шинэ мэдлэг.', status: 'published' });
+  s.fake.seed('messenger_kb/_rev', { title: 'x', body: 'y', status: 'draft', updatedBy: 'hello@skinaid.mn' }, encodeFields);
+  await s.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk });
+  const fin = await (await s.call({ action: 'eval_finish', runId: st.runId })).json();
+  assert.equal(fin.summary.fallbacks, 2 * st.chunk);
+  assert.equal(fin.summary.pass, 0);
+  assert.equal(fin.knowledgeChanged, true);
+});
+
+test('аудит: cron messenger_status-аас зөвхөн eval-ийн баримтыг устгана (main, evals — expireAt-тэй байсан ч хэвээр)', async () => {
+  const s = setup();
+  const old = new Date(NOW - 86_400_000);
+  s.fake.seed('messenger_status/main', { expireAt: old }, encodeFields);
+  s.fake.seed('messenger_status/evals', { runs: [], expireAt: old }, encodeFields);
+  s.fake.seed('messenger_status/eval_evabcdefgh1', { status: 'running', expireAt: old }, encodeFields);
+  s.fake.seed('messenger_status/evalc_evabcdefgh1_0000', { status: 'pending', expireAt: old }, encodeFields);
+  await s.store.purgeExpired('messenger_status', 200);
+  assert.deepEqual(s.fake.list('messenger_status/').sort(), ['messenger_status/evals', 'messenger_status/main']);
 });

@@ -205,4 +205,24 @@ test('eval (admin): унасан шалтгааны текст — сервер�
   assert.equal(A.evalWhyText('reason:xyz'), 'Бодлого: xyz');
   const train = readFileSync(new URL('../../admin/m-messenger-train.js', import.meta.url), 'utf8');
   assert.ok(!/\$\{f\.(id|reply|why|error)\}/.test(train) && !/\$\{r\.(by|promptVersion|runId)\}/.test(train), 'eval-ийн текст esc()-тэй');
+  assert.ok(A.EVAL_WHY.fallback && evalSrc.includes("'fallback'"), 'нөөц шилжүүлэлт');
+});
+
+test('eval (admin, аудит): төлбөртэй ажиллагааны баталгаажуулалт «Болих» дээр; явж байхад гарах/ачаалах/хаахад анхааруулна; түр алдаанд дахин оролдоно; fetch хугацаатай', () => {
+  const src = (f) => readFileSync(new URL(`../../admin/${f}`, import.meta.url), 'utf8');
+  const train = src('m-messenger-train.js');
+  assert.match(train, /title: 'Бодит AI-тай eval ажиллуулах уу\?'[^\n]*safe: true/, 'Enter давхар дарахад эхлэхгүй');
+  assert.match(train, /export const busyText/);
+  assert.match(train, /export async function abandonEval/);
+  assert.match(train, /new AbortController\(\)/);
+  assert.match(train, /RETRY_CODES = new Set\(\[[^\]]*'network'[^\]]*'busy'/);
+  assert.match(train, /Алдаагаар тасарсан ажиллагааны тайлан/);
+  const msg = src('m-messenger.js');
+  assert.match(msg, /busy: \(\) => training\.busyText\(\)/);
+  assert.match(msg, /training\.abandonEval\(\)/);
+  const admin = src('admin.js');
+  assert.match(admin, /beforeunload[^\n]*busyText\(\)/);
+  assert.match(admin, /leaveBusy\(\)/);
+  assert.ok(A.API_ERRORS.client_timeout);
+  assert.ok(!src('index.html').includes('ОДООГИЙН мэдлэгтэй'), 'eval нь нийтэлсэн мэдлэгтэй');
 });

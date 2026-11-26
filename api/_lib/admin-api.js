@@ -14,8 +14,9 @@
  *                 дуудахаас ӨМНӨ тоолно; инстанст нэг удаад нэг; яаралтай зогсоолт асаалттай бол татгалзана. Горим
  *                 «Унтраалттай» үед ч ажиллана (асаахаас өмнө шалгах).
  *   · eval_start / eval_chunk / eval_finish — бодит Claude-тэй eval (≥ 100 зохиомол кейс, generated/eval-cases.js) ҮЙЛДВЭРЛЭЛИЙН
- *                 мэдлэгтэй; хэсэг тус бүр ≤ 6 кейс (зэрэг, функцийн 60 с-т багтана). Өдөрт ≤ 3 ажиллагаа, нэг ажиллагаа ≤ $5
- *                 (хэтэрвэл зогсоно), сарын хязгаарт тоологдоно; үр дүн messenger_status/eval_<id>, түүх messenger_status/evals.
+ *                 мэдлэгтэй; хэсэг тус бүр ≤ 6 кейс (зэрэг, функцийн 60 с-т багтана; Claude-ээс ӨМНӨ хэсгийг эзэмшинэ — давхар
+ *                 төлөхгүй). Өдөрт ≤ 3 ажиллагаа, нэг ажиллагаа ≤ $5 (хэтэрвэл зогсоно), сарын хязгаар ба туршилттай ижил admin-ий
+ *                 дэд хязгаарт (20%) тоологдоно; үр дүн messenger_status/eval_<id>, түүх messenger_status/evals.
  */
 import { anthropicConfigured } from './config.js';
 import { AuthError, createTokenVerifier } from './admin-auth.js';
@@ -37,6 +38,8 @@ export const TEST_TEXT_MAX = 1000;
 export const TEST_START_BUDGET_MS = 25_000;
 /** Нэг кейсийн ойролцоо зардал (кэштэй 6–9K оролт + 300–800 гаралт/бодол) — тооцоонд */
 export const EVAL_EST_MICRO_USD = 20_000;
+/** Eval-ийн хэсэг: хүсэлт ирснээс хойш ийм хугацаа өнгөрсөн бол Claude-ийг дуудахгүй (Claude ≤ 25 с + commit-д нөөц) */
+export const EVAL_START_BUDGET_MS = 10_000;
 const RUN_ID_RE = /^ev[a-z0-9]{8,30}$/;
 /** Эрхийн алдаа (401 биш 403): нэвтэрсэн ч admin биш */
 const FORBIDDEN = new Set(['not_admin', 'email_not_verified', 'bad_provider']);
@@ -47,6 +50,7 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
 });
 const fail = (status, error, extra = {}) => json({ ok: false, error, ...extra }, status);
 
+const knowledgeRevOf = (k) => buildSocialRequest({ catalog: k.catalog, examples: k.examples, turns: [] }).context.knowledgeRev;
 const countBy = (arr, key) => arr.reduce((m, x) => ({ ...m, [x[key]]: (m[x[key]] || 0) + 1 }), {});
 
 /**
@@ -108,16 +112,31 @@ export function createAdminHandler(deps) {
       const t = now();
       const month = ubMonth(t);
       if (capReached(await rt.store.readUsage(month), settings)) return fail(429, 'month_cap');
-      const r0 = await rt.store.reserveDayCount({ day: ubDay(t), field: 'evals', max: EVAL_LIMITS.runsPerDay, month });
-      if (!r0.ok) return fail(429, r0.reason === 'busy' ? 'busy' : 'eval_day_cap', { limit: EVAL_LIMITS.runsPerDay });
-      const runId = `ev${t.getTime().toString(36)}${randomBytes(4).toString('hex')}`;
-      const k = await rt.knowledge.load({});
+      // Мэдлэгийг өдрийн тоо тоолохоос ӨМНӨ (алдаа гарвал өдрийн 3 эрхээс хасагдахгүй); толгойг заавал шалгана
+      let k;
+      try {
+        k = await rt.knowledge.load({ revalidate: true });
+      } catch (e) {
+        log(`[messenger] admin eval: мэдлэг ачаалж чадсангүй: ${describeError(e)}`);
+        return fail(500, 'knowledge_error');
+      }
       const total = EVAL_CASES.length;
+      const estimate = total * EVAL_EST_MICRO_USD;
+      // Eval нь туршилттай ижил admin-ий дэд хязгаарт (сарын зардлын 20%): бүтэн ажиллагаанд хүрэлцэхгүй бол эхлүүлэхгүй
+      const r0 = await rt.store.reserveDayCount({
+        day: ubDay(t), field: 'evals', max: EVAL_LIMITS.runsPerDay, month,
+        monthCostField: 'testCostMicroUsd', monthCostMax: adminTestCostPerMonth(settings) - estimate,
+      });
+      if (!r0.ok) {
+        if (r0.reason === 'month_tests') return fail(429, 'month_tests');
+        return fail(429, r0.reason === 'busy' ? 'busy' : 'eval_day_cap', { limit: EVAL_LIMITS.runsPerDay });
+      }
+      const runId = `ev${t.getTime().toString(36)}${randomBytes(4).toString('hex')}`;
       await rt.store.createEvalRun({
         runId, by: who.email, total, chunk: EVAL_LIMITS.chunk, maxMicroUsd: EVAL_LIMITS.maxMicroUsd,
-        promptVersion: SOCIAL_PROMPT_VERSION, knowledgeRev: buildSocialRequest({ catalog: k.catalog, examples: k.examples, turns: [] }).context.knowledgeRev,
+        promptVersion: SOCIAL_PROMPT_VERSION, knowledgeRev: knowledgeRevOf(k),
       });
-      return json({ ok: true, runId, total, chunk: EVAL_LIMITS.chunk, estimateMicroUsd: total * EVAL_EST_MICRO_USD, maxMicroUsd: EVAL_LIMITS.maxMicroUsd, evalsToday: r0.count });
+      return json({ ok: true, runId, total, chunk: EVAL_LIMITS.chunk, estimateMicroUsd: estimate, maxMicroUsd: EVAL_LIMITS.maxMicroUsd, evalsToday: r0.count });
     },
 
     async eval_chunk(rt, body, started) {
@@ -126,28 +145,59 @@ export function createAdminHandler(deps) {
       if (!runId || !Number.isInteger(from) || from < 0 || from >= EVAL_CASES.length || from % EVAL_LIMITS.chunk) return fail(400, 'bad_request');
       const run = await rt.store.readEvalRun(runId);
       if (!run || run.status !== 'running') return fail(409, 'eval_closed');
-      // Давтан илгээсэн хэсэг — дахин төлөхгүй, хадгалсныг буцаана
-      const prev = await rt.store.readEvalChunk(runId, from);
-      if (prev) return json({ ok: true, results: prev.results, costMicroUsd: Number(run.costMicroUsd) || 0, repeated: true });
       if ((Number(run.costMicroUsd) || 0) >= (Number(run.maxMicroUsd) || EVAL_LIMITS.maxMicroUsd)) return fail(409, 'eval_budget');
       const settings = await rt.store.readSettings();
       if (settings.killSwitch) return fail(409, 'kill_switch');
       const month = ubMonth(now());
-      if (capReached(await rt.store.readUsage(month), settings)) return fail(429, 'month_cap');
-      const k = await rt.knowledge.load({});
-      if (clock() - started > TEST_START_BUDGET_MS) return fail(503, 'timeout');
+      const usage = await rt.store.readUsage(month);
+      if (capReached(usage, settings)) return fail(429, 'month_cap');
+      if ((Number(usage?.testCostMicroUsd) || 0) >= adminTestCostPerMonth(settings)) return fail(429, 'month_tests');
+      let k;
+      try {
+        k = await rt.knowledge.load({ revalidate: true });
+      } catch (e) {
+        log(`[messenger] admin eval: мэдлэг ачаалж чадсангүй: ${describeError(e)}`);
+        return fail(500, 'knowledge_error');
+      }
+      // Claude (≤ 25 с) + бүртгэлийн commit функцийн 60 с-т багтах ёстой (аудит: өмнө 25 с — commit тасрах эрсдэлтэй)
+      if (clock() - started > EVAL_START_BUDGET_MS) return fail(503, 'timeout');
+      // Claude-ийг дуудахаас ӨМНӨ хэсгийг эзэмшинэ — давхар/зэрэг хүсэлт хоёр удаа төлөхгүй
+      const claim = await rt.store.claimEvalChunk(runId, from);
+      if (claim.state === 'done') return json({ ok: true, results: claim.results, costMicroUsd: Number(run.costMicroUsd) || 0, repeated: true });
+      if (claim.state === 'busy') return fail(409, 'busy');
+      const rev = knowledgeRevOf(k);
       const cases = EVAL_CASES.slice(from, from + EVAL_LIMITS.chunk);
-      const out = await Promise.all(cases.map(async (c) => {
+      const settled = await Promise.allSettled(cases.map(async (c) => {
         const turns = c.turns.map((x) => ({ role: x.role, text: redactForLlm(x.text) }));
-        const r = await rt.agent.testDraft({ k, turns, kind: 'eval' });
+        return { c, r: await rt.agent.testDraft({ k, turns, kind: 'eval' }) };
+      }));
+      const out = settled.map((s, i) => {
+        const c = cases[i];
+        if (s.status === 'rejected') {
+          log(`[messenger] admin eval: кейс ${c.id} алдаа: ${describeError(s.reason)}`);
+          return { run: null, result: { id: c.id, tags: c.tags, costMicroUsd: 0, ms: 0, pass: false, why: 'error', error: 'exception' } };
+        }
+        const { r } = s.value;
         const base = { id: c.id, tags: c.tags, costMicroUsd: Number(r.run.costMicroUsd) || 0, ms: Number(r.run.durationMs) || 0 };
         if (r.status === 'error') return { run: r.run, result: { ...base, pass: false, why: 'error', error: String(r.code).slice(0, 40) } };
         const d = r.draft;
+        const extra = { route: d.route, intent: d.intent, reasons: d.reasons, reply: String(d.reply || '').slice(0, 300) };
+        // AI-ийн гаралт буруу / татгалзсан → кодын нөөц шилжүүлэлт: AI өөрөө шийдээгүй тул «тэнцсэн» гэж тоолохгүй (аудит)
+        if (r.status === 'fallback') return { run: r.run, result: { ...base, ...extra, pass: false, why: 'fallback', fallback: String(d.reasons?.[0] || '') } };
         const g = gradeCase(c, { route: d.route, intent: d.intent, reasons: d.reasons, lint: d.lint }, d.reply);
-        return { run: r.run, result: { ...base, ...g, route: d.route, intent: d.intent, reasons: d.reasons, reply: String(d.reply || '').slice(0, 300) } };
-      }));
+        return { run: r.run, result: { ...base, ...g, ...extra } };
+      });
       const results = out.map((x) => x.result);
-      await rt.store.saveEvalChunk({ runId, from, results, runs: out.map((x) => x.run), month });
+      const runs = out.map((x) => x.run);
+      try {
+        await rt.store.saveEvalChunk({ runId, from, results, runs, month, knowledgeRev: rev });
+      } catch (e) {
+        // Claude аль хэдийн төлбөртэй — зардлыг заавал бүртгэнэ (хэсгийн түгжээ 90 с-ийн дараа дахин эзэмшигдэнэ)
+        const cost = results.reduce((n, r) => n + r.costMicroUsd, 0);
+        log(`[messenger] admin eval: хэсэг бичигдсэнгүй (${Math.round(cost)} µ$): ${describeError(e)}`);
+        await rt.store.recordEvalCost({ runs, month }).catch((e2) => log(`[messenger] admin eval: зардал бичигдсэнгүй: ${describeError(e2)}`));
+        return fail(500, 'server_error');
+      }
       return json({ ok: true, results, costMicroUsd: (Number(run.costMicroUsd) || 0) + results.reduce((n, r) => n + r.costMicroUsd, 0) });
     },
 
@@ -158,24 +208,34 @@ export function createAdminHandler(deps) {
       if (!run || run.status !== 'running') return fail(409, 'eval_closed');
       const total = Number(run.total) || 0;
       const chunk = Number(run.chunk) || EVAL_LIMITS.chunk;
-      const results = await rt.store.readEvalResults(runId, total, chunk);
+      const { results, revs } = await rt.store.readEvalResults(runId, total, chunk);
       const summary = summarize(results);
+      // Нэг ч кейс дуусаагүй — түүхэд оруулахгүй (дараагийн харьцуулалтыг хоосон болгохгүй)
+      if (!summary.done) {
+        await rt.store.discardEval({ runId, total, chunk });
+        return json({ ok: true, discarded: true, summary, failures: [], compare: null, partial: true });
+      }
       const cases = Object.fromEntries(results.filter((r) => !r.error).map((r) => [r.id, r.pass ? 1 : 0]));
-      // Өмнөх ДУУССАН ажиллагаатай харьцуулна (кейс бүрийн тэнцсэн эсэх)
+      // Өмнөх БҮТЭН дууссан ажиллагаатай харьцуулна (хагас ажиллагаа суурь болохгүй — аудит)
       const idx = await rt.store.readEvalIndex();
-      const prevEntry = (Array.isArray(idx.runs) ? idx.runs : []).find((r) => r && r.runId !== runId);
+      const prevEntry = (Array.isArray(idx.runs) ? idx.runs : []).find((r) => r && r.runId !== runId && !r.partial && Number(r.done) > 0);
       const prevRun = prevEntry ? await rt.store.readEvalRun(prevEntry.runId) : null;
       const compare = prevRun && prevRun.cases
-        ? { runId: prevEntry.runId, ...compareRuns(Object.fromEntries(Object.entries(prevRun.cases).map(([id, v]) => [id, v === 1])), Object.fromEntries(Object.entries(cases).map(([id, v]) => [id, v === 1]))) }
+        ? {
+          runId: prevEntry.runId, at: prevEntry.at ?? null, done: Number(prevEntry.done) || 0,
+          ...compareRuns(Object.fromEntries(Object.entries(prevRun.cases).map(([id, v]) => [id, v === 1])), Object.fromEntries(Object.entries(cases).map(([id, v]) => [id, v === 1]))),
+        }
         : null;
-      const failures = results.filter((r) => !r.pass).map((r) => ({ id: r.id, why: r.why, route: r.route ?? null, intent: r.intent ?? null, error: r.error ?? null, reply: String(r.reply || '').slice(0, 200) }));
+      const failures = results.filter((r) => !r.pass).map((r) => ({ id: r.id, why: r.why, route: r.route ?? null, intent: r.intent ?? null, error: r.error ?? r.fallback ?? null, reply: String(r.reply || '').slice(0, 200) }));
       const partial = results.length < total;
+      // Явцад мэдлэг өөрчлөгдсөн (эзэмшигч засварласан) — тайланд анхааруулна
+      const knowledgeChanged = revs.length > 1 || (revs.length === 1 && Boolean(run.knowledgeRev) && revs[0] !== run.knowledgeRev);
       await rt.store.finishEval({
         runId, total, chunk,
-        report: { summary, cases, failures, compare, partial },
-        entry: { runId, by: run.by, promptVersion: run.promptVersion, knowledgeRev: run.knowledgeRev, partial, pass: summary.pass, done: summary.done, passRate: summary.passRate, risky: summary.risky, invented: summary.invented, errors: summary.errors, costMicroUsd: summary.costMicroUsd },
+        report: { summary, cases, failures, compare, partial, knowledgeChanged },
+        entry: { runId, by: run.by, promptVersion: run.promptVersion, knowledgeRev: run.knowledgeRev, partial, pass: summary.pass, done: summary.done, passRate: summary.passRate, risky: summary.risky, invented: summary.invented, errors: summary.errors, fallbacks: summary.fallbacks, costMicroUsd: summary.costMicroUsd },
       });
-      return json({ ok: true, summary, failures, compare, partial });
+      return json({ ok: true, summary, failures, compare, partial, knowledgeChanged });
     },
 
     async test(rt, body, started) {

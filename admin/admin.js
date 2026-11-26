@@ -8,13 +8,13 @@
    ========================================================================== */
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
-import { ICON, dialog, setCurrentView, anyDirty, refreshDirty, resetForms } from './ui.js?v=8848d02a';
-import * as bookings from './m-bookings.js?v=dff72c83';
-import * as settings from './m-settings.js?v=6c5e5012';
-import * as home from './m-home.js?v=3556773b';
-import * as catalog from './m-catalog.js?v=c4f719c6';
+import { ICON, dialog, setCurrentView, anyDirty, busyText, leaveBusy, refreshDirty, resetForms } from './ui.js?v=4ec734c0';
+import * as bookings from './m-bookings.js?v=86d18531';
+import * as settings from './m-settings.js?v=7df0705b';
+import * as home from './m-home.js?v=540566f7';
+import * as catalog from './m-catalog.js?v=1a25d559';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import * as messenger from './m-messenger.js?v=909c6b0f';
+import * as messenger from './m-messenger.js?v=b616e194';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';
@@ -42,6 +42,11 @@ btnLogin.addEventListener('click', async () => {
 });
 $$('[data-logout]').forEach((b) => b.addEventListener('click', async () => {
   if (anyDirty() && !(await dialog({ title: 'Хадгалаагүй өөрчлөлт байна', body: 'Гарвал хадгалаагүй өөрчлөлт алга болно.', confirm: 'Хадгалалгүй гарах', cancel: 'Үлдэх', danger: true }))) return;
+  const busy = busyText();
+  if (busy) {
+    if (!(await dialog({ title: 'Ажил дуусаагүй байна', body: busy, confirm: 'Зогсоогоод гарах', cancel: 'Үлдэх', danger: true }))) return;
+    await leaveBusy();
+  }
   signOut(auth);
 }));
 
@@ -102,5 +107,5 @@ window.addEventListener('hashchange', () => {
 // Skip link: hash-ийг өөрчлөхгүйгээр үндсэн агуулга руу фокус
 $('.skip').addEventListener('click', (e) => { e.preventDefault(); const m = $('#main'); m.focus(); m.scrollIntoView({ block: 'start' }); });
 
-window.addEventListener('beforeunload', (e) => { if (session.user && anyDirty()) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', (e) => { if (session.user && (anyDirty() || busyText())) { e.preventDefault(); e.returnValue = ''; } });
 refreshDirty();

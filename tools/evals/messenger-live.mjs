@@ -60,7 +60,8 @@ async function runOne(c) {
   if (spent / 1e6 >= maxUsd) stopped = true;
   if (r.status === 'error') { results.push({ id: c.id, tags: c.tags, pass: false, why: 'error', error: r.code, costMicroUsd: cost }); return; }
   const p = r.status === 'ok' ? parseProposal(r.text) : null;
-  if (!p) { results.push({ id: c.id, tags: c.tags, pass: c.expect.handoff !== false, why: c.expect.handoff !== false ? '' : r.status, route: 'handoff', reasons: [r.status], costMicroUsd: cost }); return; }
+  // Гаралт буруу / татгалзсан → кодын нөөц шилжүүлэлт: AI өөрөө шийдээгүй тул тэнцсэнд тооцохгүй (admin-api.js-тэй ижил)
+  if (!p) { results.push({ id: c.id, tags: c.tags, pass: false, why: 'fallback', fallback: r.status === 'refusal' ? 'refusal' : 'invalid_output', route: 'handoff', reasons: [r.status], costMicroUsd: cost }); return; }
   const d = decideReply({ mode: 'shadow', conversationState: 'bot', userText, proposal: p, knownSourceIds: k.catalog.facts.map((f) => f.id), allowedAmounts: k.catalog.allowedAmounts, allowedPercents: k.catalog.allowedPercents, knownNumbers: k.catalog.knownNumbers, knowledgeText: k.catalog.knowledgeText, facts: k.catalog.facts });
   const g = gradeCase(c, d, p.reply);
   results.push({ id: c.id, tags: c.tags, ...g, route: d.route, intent: d.intent, reasons: d.reasons, reply: p.reply.slice(0, 300), ms: Date.now() - t0, costMicroUsd: cost });
@@ -72,7 +73,7 @@ const sum = summarize(results);
 const out = arg('--out', join(ROOT, '.preview/evals', `${new Date().toISOString().replace(/[:.]/g, '-')}.json`));
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), summary: sum, results }, null, 1));
-console.log(`Тэнцсэн ${sum.pass}/${sum.done} (${sum.passRate}%), эрсдэлтэй ${sum.risky.pass}/${sum.risky.total}, зохиосон ${sum.invented}, алдаа ${sum.errors}, зардал $${(sum.costMicroUsd / 1e6).toFixed(3)}${stopped ? ' — дээд зардалд хүрч зогслоо' : ''}`);
+console.log(`Тэнцсэн ${sum.pass}/${sum.done} (${sum.passRate}%), эрсдэлтэй ${sum.risky.pass}/${sum.risky.total}, зохиосон ${sum.invented}, алдаа ${sum.errors}, нөөц шилжүүлэлт ${sum.fallbacks}, зардал $${(sum.costMicroUsd / 1e6).toFixed(3)}${stopped ? ' — дээд зардалд хүрч зогслоо' : ''}`);
 for (const r of results.filter((x) => !x.pass)) console.log(`  ✗ ${r.id}: ${r.why}${r.error ? ` (${r.error})` : ''} — ${r.route || ''} ${r.intent || ''}`);
 if (arg('--compare')) {
   const prev = JSON.parse(readFileSync(arg('--compare'), 'utf8'));

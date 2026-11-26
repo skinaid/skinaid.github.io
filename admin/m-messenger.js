@@ -9,9 +9,9 @@
    ========================================================================== */
 import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
-import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=8848d02a';
-import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft } from './messenger-lib.js?v=d731df29';
-import * as training from './m-messenger-train.js?v=b30c9c8b';
+import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=4ec734c0';
+import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft } from './messenger-lib.js?v=b6428a8a';
+import * as training from './m-messenger-train.js?v=8d520459';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };
@@ -173,6 +173,12 @@ async function loadDrafts(append = false) {
 more.addEventListener('click', () => loadDrafts(true));
 $('#btnMsReload').addEventListener('click', async () => {
   if ((settingsDirty() || notesDirty() || training.isDirty()) && !(await dialog({ title: 'Хадгалаагүй өөрчлөлт байна', body: 'Дахин ачаалбал хадгалаагүй тохиргоо, үнэлгээний тэмдэглэл, мэдлэг/жишээний засвар алга болно.', confirm: 'Хадгалалгүй ачаалах', cancel: 'Болих', danger: true }))) return;
+  // Eval явж байвал: анхааруулаад хагас тайланг хадгалуулна (аудит: өмнө нь чимээгүй орхигддог байв)
+  const busy = training.busyText();
+  if (busy) {
+    if (!(await dialog({ title: 'Eval явж байна', body: busy, confirm: 'Зогсоогоод ачаалах', cancel: 'Болих', danger: true }))) return;
+    await training.abandonEval();
+  }
   ratingPick.clear(); noteDraft.clear(); cardErr.clear();
   const onTrain = !$('#msPanelTrain').hidden;
   training.teardown();
@@ -454,6 +460,9 @@ form.addEventListener('change', refreshDirty);
 // isDirty нь үнэлгээг ч тооцно — гарах/хаахад анхааруулга гарна.
 registerForm('messenger', {
   isDirty,
+  // Eval явж байхад гарах/хаахад анхааруулна (хадгалах мөр гаргахгүй)
+  busy: () => training.busyText(),
+  leave: () => training.abandonEval(),
   // Харагдаж буй табын маягтыг ЭХЛЭЭД хадгална (Сургалт таб дээр Ctrl+S = мэдлэг/жишээ)
   save: async () => {
     const onTrain = !$('#msPanelTrain').hidden;

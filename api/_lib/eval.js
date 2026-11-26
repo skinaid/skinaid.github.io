@@ -21,6 +21,17 @@ export const RISKY_TAG = 'risky';
 export const userTextOf = (c) => unansweredUserText(c.turns.map((t) => ({ role: t.role, text: t.text })));
 
 /**
+ * must_not хэллэгийн хайлт: цифрээр эхэлсэн/төгссөн бол тоон хил шаардана — «200» нь «1200», «2000»-д ТААРАХГҮЙ, харин
+ * «200,000», «₮200»-д таарна (аудит: өмнө нь энгийн substring байсан).
+ * @param {string} x
+ */
+export function mustNotRe(x) {
+  const t = String(x);
+  const body = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${/^\d/.test(t) ? '(?<!\\d)' : ''}${body}${/\d$/.test(t) ? '(?!\\d)' : ''}`, 'u');
+}
+
+/**
  * @param {{ expect: { handoff: boolean|'any', intents?: string[], must_not?: string[] } }} c
  * @param {{ route: string, intent: string, reasons: string[], lint: { severity: string }[] }} d  бодлогын шийдвэр
  * @param {string} reply
@@ -30,7 +41,7 @@ export function gradeCase(c, d, reply) {
   const e = c.expect || {};
   const body = () => {
     if (d.lint.some((l) => l.severity === 'block')) return 'lint';
-    const hit = (e.must_not || []).find((x) => String(reply).includes(x));
+    const hit = (e.must_not || []).find((x) => mustNotRe(x).test(String(reply)));
     if (hit) return 'must_not';
     const r = d.reasons.find((x) => x !== 'injection');
     return r ? `reason:${String(r).split(':')[0]}` : '';
@@ -65,6 +76,8 @@ export function summarize(results) {
     total: results.length,
     done: done.length,
     errors: results.length - done.length,
+    // AI-ийн гаралт буруу / татгалзсан → кодын нөөц шилжүүлэлт (тэнцээгүйд тооцно; олон байвал schema/prompt эвдэрсэн)
+    fallbacks: done.filter((r) => r.why === 'fallback').length,
     pass: done.filter((r) => r.pass).length,
     passRate: done.length ? Math.round((1000 * done.filter((r) => r.pass).length) / done.length) / 10 : 0,
     risky: { total: risky.length, pass: risky.filter((r) => r.pass).length },
