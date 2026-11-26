@@ -17,9 +17,9 @@ import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters
 import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
   exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, EXCLUDE_TEXT, usd3,
-  kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText,
-} from './messenger-lib.js?v=06a76b56';
-import { api, apiMsg } from './messenger-api.js?v=590a9ff9';
+  kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText, evalReasonsText, evalHandoffReasons,
+} from './messenger-lib.js?v=2244b555';
+import { api, apiMsg } from './messenger-api.js?v=29db812d';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');
@@ -650,6 +650,12 @@ function evalReportHtml(r, heading, reason = '') {
   const cmp = r.compare;
   const fails = Array.isArray(r.failures) ? r.failures : [];
   const fb = Number(s.fallbacks) || 0;
+  // «Шаардлагагүй ажилтанд шилжүүлсэн» кейсүүд яагаад шилжсэн (хуучин тайланд байхгүй — хоосон)
+  const hr = evalHandoffReasons(s.handoffReasons);
+  const why = (f) => {
+    const extra = evalReasonsText(f.reasons);
+    return `${esc(evalWhyText(f.why))}${extra ? `: ${esc(extra)}` : ''}${f.error ? ` (${esc(f.error)})` : ''}`;
+  };
   return `<h3 class="ms-sub" tabindex="-1" id="msEvalRepH">${esc(heading)}</h3>
     ${r.partial ? `<p class="ms-banner">Хагас дууссан ажиллагаа${reason ? `: ${esc(reason.replace(/\.\s*$/, ''))}` : ' (зогсоосон эсвэл хязгаарт хүрсэн)'}.</p>` : ''}
     ${r.knowledgeChanged ? '<p class="ms-banner">Ажиллагааны явцад мэдлэг/жишээ өөрчлөгдсөн — зарим кейс хуучин, зарим нь шинэ мэдлэгтэй шалгагдсан.</p>' : ''}
@@ -662,7 +668,8 @@ function evalReportHtml(r, heading, reason = '') {
       <div><dt>Зардал</dt><dd>${esc(usd(s.costMicroUsd))}</dd></div>
     </dl>
     ${cmp ? `<p class="ms-small">Өмнөх бүтэн ажиллагаатай (${cmp.at ? `${esc(fmtDate(typeof cmp.at === 'string' ? new Date(cmp.at) : cmp.at))}, ` : ''}${Number(cmp.done) || 0} кейс) харьцуулбал: шинээр унасан ${cmp.newlyFailing.length ? `<span class="ms-bad">${cmp.newlyFailing.map(esc).join(', ')}</span>` : 'алга'}; шинээр тэнцсэн ${cmp.newlyPassing.length ? `<span class="ms-good">${cmp.newlyPassing.map(esc).join(', ')}</span>` : 'алга'}.</p>` : '<p class="ms-small muted">Харьцуулах өмнөх бүтэн ажиллагаа алга.</p>'}
-    ${fails.length ? `<details class="ms-ctx"><summary>Унасан кейсүүд (${fails.length})</summary><div class="ms-tbl-wrap" tabindex="0" role="region" aria-label="Унасан кейсүүд"><table class="ms-tbl"><thead><tr><th scope="col">Кейс</th><th scope="col">Шалтгаан</th><th scope="col">AI-ийн хариу</th></tr></thead><tbody>${fails.map((f) => `<tr><td>${esc(f.id)}</td><td>${esc(evalWhyText(f.why))}${f.error ? ` (${esc(f.error)})` : ''}</td><td>${esc(f.reply || '')}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
+    ${hr.length ? `<p class="ms-small"><strong>Шаардлагагүй шилжүүлсэн шалтгаан:</strong> ${hr.map(([t, n]) => `${esc(t)} ${Number(n)}`).join(' · ')} (нэг кейс хэд хэдэн шалтгаантай байж болно). «AI өөрөө ажилтанд даатгасан», «AI итгэл бага» нь ихэвчлэн мэдлэг дутуу гэсэн үг — «Мэдлэг»-т нэмээд (эсвэл «Тохиргоо»-д ажлын цагаа бөглөөд) дахин ажиллуулна.</p>` : ''}
+    ${fails.length ? `<details class="ms-ctx"><summary>Унасан кейсүүд (${fails.length})</summary><div class="ms-tbl-wrap" tabindex="0" role="region" aria-label="Унасан кейсүүд"><table class="ms-tbl"><thead><tr><th scope="col">Кейс</th><th scope="col">Шалтгаан</th><th scope="col">AI-ийн хариу</th></tr></thead><tbody>${fails.map((f) => `<tr><td>${esc(f.id)}</td><td>${why(f)}</td><td>${esc(f.reply || '')}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
 }
 async function loadEvalHistory() {
   const g = gen;

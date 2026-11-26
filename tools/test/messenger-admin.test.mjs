@@ -288,3 +288,16 @@ test('тохиргоо/тойм (аудит, PR В): хуучин маягт а�
   assert.match(src('index.html'), /id="msPanelOverview"[^>]*>\s*<h2 class="sr-only">/);
   for (const k of ['ok', 'error', 'refusal', 'cap']) assert.ok(A.RUN_STATUS_TEXT[k], k);
 });
+
+test('eval (admin): унасан кейсийн шилжүүлсэн шалтгаан — код → текст (давхардалгүй), тоогоор эрэмбэлсэн; тайланд esc()-ээр', () => {
+  assert.equal(A.evalReasonsText(['llm_needs_human', 'low_confidence']), 'AI өөрөө ажилтанд даатгасан; AI итгэл бага');
+  assert.equal(A.evalReasonsText(['signal:refund', 'signal:discount', 'invented_price']), 'эрсдэлийн дохио; мэдлэгт байхгүй үнэ');
+  assert.equal(A.evalReasonsText(['xyz']), 'xyz');
+  assert.equal(A.evalReasonsText(undefined), '', 'хуучин тайлан — шалтгаангүй');
+  assert.deepEqual(A.evalHandoffReasons({ low_confidence: 3, llm_needs_human: 9, zzz: 0 }), [['AI өөрөө ажилтанд даатгасан', 9], ['AI итгэл бага', 3]]);
+  assert.deepEqual(A.evalHandoffReasons(undefined), []);
+  const train = readFileSync(new URL('../../admin/m-messenger-train.js', import.meta.url), 'utf8');
+  assert.match(train, /esc\(extra\)/);
+  assert.match(train, /hr\.map\(\(\[t, n\]\) => `\$\{esc\(t\)\} \$\{Number\(n\)\}`\)/);
+  assert.ok(!/\$\{f\.reasons/.test(train) && !/\$\{evalReasonsText\(/.test(train), 'шалтгааны текст шууд биш, esc()-ээр');
+});
