@@ -10,6 +10,24 @@
  *   · Нууц: ANTHROPIC_API_KEY-г SDK env-ээс уншина; лог, алдааны кодонд хэзээ ч гаргахгүй.
  */
 import { SOCIAL_OUTPUT_SCHEMA } from './social/prompt.js';
+import { scrub } from './errors.js';
+
+const CYRILLIC_RUN = /[Ѐ-ӿ][Ѐ-ӿ\s.,!?'"«»-]*/g;
+
+/**
+ * Anthropic API-ийн алдааны тайлбар — ЗӨВХӨН Vercel-ийн лог-д (Firestore-д код л). SDK-ийн APIError-ийн бүтэцлэгдсэн
+ * биеэс (`error.error.type`, `error.error.message`) авна; `e.message`-ийг ашиглахгүй. Кирилл текстийг (үйлчлүүлэгчийн
+ * мессеж байж болзошгүй) «…» болгож, token/урт тоог scrub хасна, ≤160 тэмдэгт. 2026-11-26: анхны бодит дуудлага
+ * `api_400` буцаасан ч шалтгаан нь хаана ч харагдаагүй.
+ * @param {unknown} e
+ */
+export function apiErrorDetail(e) {
+  const err = /** @type {any} */ (e);
+  const body = err?.error?.error ?? err?.error ?? null;
+  const type = typeof body?.type === 'string' && body.type !== 'error' ? body.type.replace(/[^\w]/g, '').slice(0, 40) : '';
+  const msg = typeof body?.message === 'string' ? scrub(body.message.replace(CYRILLIC_RUN, '…')).slice(0, 160) : '';
+  return [type, msg].filter(Boolean).join(': ') || 'no_detail';
+}
 
 export const MESSENGER_MODEL = 'claude-opus-5-5';
 export const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
@@ -60,11 +78,12 @@ export function buildParams(req, model = MESSENGER_MODEL) {
  */
 
 /**
- * @param {{ client?: any, importer?: (name: string) => Promise<any>, model?: string }} [opts]
+ * @param {{ client?: any, importer?: (name: string) => Promise<any>, model?: string, log?: (m: string) => void }} [opts]
  * @returns {(req: { system: any[], user: string }) => Promise<ClaudeResult>}
  */
 export function createClaudeCaller(opts = {}) {
   const model = opts.model ?? MESSENGER_MODEL;
+  const log = opts.log ?? ((m) => console.warn(m));
   let client = opts.client ?? null;
   let SDK = null;
   // Тогтмол нэртэй import — Vercel-ийн bundler (nft) SDK-г функцийн багцад оруулна (gcp-auth.js-ийн тайлбарыг үз)
@@ -86,9 +105,10 @@ export function createClaudeCaller(opts = {}) {
       const text = (res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
       return { status: 'ok', text, model: used, usage };
     } catch (e) {
-      // Алдааны мессежийг хадгалахгүй (хүсэлтийн агуулга орж болзошгүй) — зөвхөн төрөл/код
+      // Firestore-д (ai_runs) зөвхөн код; шалтгаан нь лог-д л, үйлчлүүлэгчийн текстгүй (apiErrorDetail)
       const status = Number(e?.status);
       const code = Number.isFinite(status) && status > 0 ? `api_${status}` : e?.name === 'APIConnectionTimeoutError' ? 'timeout' : 'network';
+      log(`[messenger] Claude алдаа ${code}: ${apiErrorDetail(e)}`);
       return { status: 'error', code, model, usage: null };
     }
   };

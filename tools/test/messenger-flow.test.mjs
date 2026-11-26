@@ -408,12 +408,28 @@ test('Claude: claude-opus-5-5, effort low, json_schema гаралт, fallbacks "
   assert.deepEqual(p.messages, [{ role: 'user', content: req.user }]);
   assert.ok(!('thinking' in p) && !('temperature' in p));
   // Хуурамч клиент: refusal, max_tokens, алдаа
-  const mk = (res) => createClaudeCaller({ client: { beta: { messages: { create: async () => { if (res instanceof Error) throw res; return res; } } } } });
+  const clogs = [];
+  const mk = (res) => createClaudeCaller({ client: { beta: { messages: { create: async () => { if (res instanceof Error) throw res; return res; } } } }, log: (m) => clogs.push(m) });
   assert.equal((await mk({ stop_reason: 'end_turn', model: 'claude-opus-5-5', usage: {}, content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: '{"a":1}' }] })(req)).text, '{"a":1}');
   assert.deepEqual(await mk({ stop_reason: 'refusal', stop_details: { category: 'cyber' }, model: 'claude-opus-4-8', usage: {} })(req), { status: 'refusal', category: 'cyber', model: 'claude-opus-4-8', usage: {} });
   assert.equal((await mk({ stop_reason: 'max_tokens', model: 'm', usage: {}, content: [] })(req)).code, 'max_tokens');
   const e = Object.assign(new Error('secret prompt text'), { status: 529 });
   assert.deepEqual(await mk(e)(req), { status: 'error', code: 'api_529', model: 'claude-opus-5-5', usage: null });
+  assert.equal(clogs.at(-1), '[messenger] Claude алдаа api_529: no_detail', 'e.message (хүсэлтийн текст байж болзошгүй) логт орохгүй');
+  // SDK-ийн APIError хэлбэр: 400 — шалтгаан лог-д, кирилл (үйлчлүүлэгчийн текст) ба token/урт тоо хасагдана
+  const bad = Object.assign(new Error('400 Сайн уу secret'), {
+    status: 400,
+    error: { type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low. Echo: Ботокс хэд вэ? 99112233445566778 sk-ant-api03-xyz' } },
+  });
+  const r400 = await mk(bad)(req);
+  assert.equal(r400.code, 'api_400');
+  assert.ok(!('detail' in r400), 'Firestore руу шалтгаан явахгүй');
+  const line = clogs.at(-1);
+  assert.match(line, /^\[messenger\] Claude алдаа api_400: invalid_request_error: Your credit balance is too low\. Echo: …/);
+  const body = line.slice('[messenger] Claude алдаа'.length);
+  assert.ok(!/[Ѐ-ӿ]/.test(body), 'кирилл текст логт алга');
+  assert.ok(!body.includes('99112233445566778') && !body.includes('sk-ant-api03'), 'PSID хэлбэрийн тоо, түлхүүр хасагдсан');
+  assert.ok(!body.includes('secret'), 'e.message ашиглахгүй');
 });
 
 test('Claude: зардал (микро-доллар) — Opus 5.5 үнэ, мэдэгдэхгүй модель = хамгийн өндөр үнэ', () => {
