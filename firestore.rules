@@ -18,44 +18,23 @@ service cloud.firestore {
       return v is string && v.size() >= min && v.size() <= max;
     }
     function incoming() { return request.resource.data; }
-    // Нүүрний статистик (settings/home.hero.stats[i]) — хязгаар assets/js/home-render.js LIMITS-тэй ижил
-    function validStat(s) {
-      return s is map
-        && s.keys().hasOnly(['num', 'suffix', 'label'])
-        && isStr(s.get('num', ''), 0, 7) && s.get('num', '').matches('^[0-9]*$')
-        && isStr(s.get('suffix', ''), 0, 4)
-        && isStr(s.get('label', ''), 0, 40);
-    }
+    // settings/home (admin «Нүүр хуудас»). АНХААР: Firestore дүрэм нэг хүсэлтэд ≤ 1000 илэрхийлэл үнэлнэ. Талбар бүрийн
+    // урт/төрлийг шалгадаг байсан хувилбар 3 карт + 3 статистиктай үед ч хязгаараас хэтэрч, хадгалалт бүр «Эрх хүрэхгүй»
+    // (permission-denied) болж байсан (2026-11-26). Иймд энд зөвхөн бүтэц + зураг/холбоосын схем (XSS-ийн 2-р давхарга);
+    // урт, төрөл, escape — assets/js/home-render.js norm() (сайт, admin, build бүгд Firestore-ийн утгыг norm()-оор дамжуулна).
+    // Шинэ шалгалт нэмэхдээ 12 карттай хамгийн муу тохиолдлыг бод (карт бүрийн функц 12 удаа үнэлэгдэнэ).
     function validHero(h) {
       return h is map
         && h.keys().hasOnly(['badge', 'titlePre', 'titleEm', 'titlePost', 'text', 'btnPrimary', 'btnSecondary', 'stats'])
-        && isStr(h.get('badge', ''), 0, 80)
-        && isStr(h.get('titlePre', ''), 0, 80)
-        && isStr(h.get('titleEm', ''), 0, 60)
-        && isStr(h.get('titlePost', ''), 0, 80)
-        && isStr(h.get('text', ''), 0, 400)
-        && isStr(h.get('btnPrimary', ''), 0, 30)
-        && isStr(h.get('btnSecondary', ''), 0, 30)
-        && h.get('stats', []) is list && h.get('stats', []).size() <= 3
-        && (h.get('stats', []).size() < 1 || validStat(h.stats[0]))
-        && (h.get('stats', []).size() < 2 || validStat(h.stats[1]))
-        && (h.get('stats', []).size() < 3 || validStat(h.stats[2]));
+        && h.get('stats', []) is list && h.get('stats', []).size() <= 3;
     }
     // «Зөвлөгөө» карт (settings/home.posts[i]). Зураг: сайтын assets/img/photos/… эсвэл https://; холбоос: https:// эсвэл
-    // сайтын /зам (//host, зай/tab биш). Нарийн шүүлт (\\, ' г.м., escape, хост) home-render.js norm()-д — энд хамгаалалтын 2-р давхарга.
+    // сайтын /зам (//host, зай/tab биш). Нарийн шүүлт (\\, ' г.м., escape, хост, урт) home-render.js norm()-д.
     function validPost(p) {
       return p is map
         && p.keys().hasOnly(['id', 'cat', 'title', 'text', 'by', 'img', 'url', 'hidden'])
-        && isStr(p.get('id', ''), 0, 40)
-        && isStr(p.get('cat', ''), 0, 30)
-        && isStr(p.get('title', ''), 0, 120)
-        && isStr(p.get('text', ''), 0, 300)
-        && isStr(p.get('by', ''), 0, 60)
-        && isStr(p.get('img', ''), 0, 500)
         && p.get('img', '').matches('^(https://[^[:space:]"<>]+|assets/img/photos/[A-Za-z0-9._-]+([?]v=[0-9a-z]+)?)?$')
-        && isStr(p.get('url', ''), 0, 500)
-        && p.get('url', '').matches('^(https://[^[:space:]"<>]+|/([^/[:space:]][^[:space:]"<>]*)?)?$')
-        && p.get('hidden', false) is bool;
+        && p.get('url', '').matches('^(https://[^[:space:]"<>]+|/([^/[:space:]][^[:space:]"<>]*)?)?$');
     }
     // List-ээр давталт хийх боломжгүй тул 12 байрлалыг тус тусад нь (size()-ээр богино холболттой)
     function validPosts(ps) {
