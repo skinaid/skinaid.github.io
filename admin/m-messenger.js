@@ -616,16 +616,18 @@ async function save() {
   clearErrors(form);
   const next = { mode: v.mode, killSwitch: v.killSwitch, monthlyRunCap: caps.runs, monthlyCostCapUsd: caps.usd, autoAudience: v.audience, testThreads: saved ? [...saved.testThreads] : [] };
   // «Автомат» асаах, эсвэл бүх үйлчлүүлэгчид нээх — үйлчлүүлэгч рүү жинхэнэ мессеж явна: баталгаажуулна
-  const wasAll = saved && saved.mode === 'auto' && saved.autoAudience === 'all';
-  const wasAuto = saved && saved.mode === 'auto';
-  if (next.mode === 'auto' && next.autoAudience === 'all' && !wasAll) {
+  // «Асаалттай» = горим «Автомат» БА яаралтай зогсоолтгүй: зогсоолтыг унтрааж дахин асаах нь ч мөн адил баталгаажна
+  const wasAuto = Boolean(saved && saved.mode === 'auto' && !saved.killSwitch);
+  const wasAll = wasAuto && saved.autoAudience === 'all';
+  const willAuto = next.mode === 'auto' && !next.killSwitch;
+  if (willAuto && next.autoAudience === 'all' && !wasAll) {
     if (!(await dialog({
       title: 'БҮХ үйлчлүүлэгчид шууд хариулах уу?',
       body: 'Хадгалмагц AI пэйж рүү бичсэн хүн бүрд зөвшөөрсөн сэдвээр шууд хариулж эхэлнэ.',
       list: ['Туршилтын акаунтаар шалгаж, хариу зөв байсан', 'Meta Business Suite-ийн автомат хариуг (Instant reply, Away message, FAQ) унтраасан', 'Ажилтнууд «ажилтанд дамжууллаа» гэсэн яриаг Meta Inbox-оос хариулахаа мэдэж байгаа'],
       confirm: 'Бүгдэд нээх', cancel: 'Болих', danger: true,
     }))) return;
-  } else if (next.mode === 'auto' && !wasAuto) {
+  } else if (willAuto && !wasAuto) {
     const n = next.testThreads.length;
     if (!(await dialog({
       title: '«Автомат» горимыг асаах уу?',
