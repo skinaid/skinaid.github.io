@@ -430,7 +430,9 @@ test('аудит (eval): зэрэг/давхар хэсэг Claude-ийг НЭГ
   // Функц тасарч үлдсэн «pending» түгжээ: шинэ бол busy, 90 с-ээс хуучин бол дахин эзэмшинэ
   const path = `messenger_status/evalc_${st.runId}_${String(st.chunk).padStart(4, '0')}`;
   s.fake.seed(path, { runId: st.runId, from: st.chunk, status: 'pending', claimedAt: new Date(NOW - 10_000) }, encodeFields);
-  assert.deepEqual(await code(await s.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk })), [409, 'busy']);
+  const busy = await (await s.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk })).json();
+  assert.equal(busy.error, 'busy');
+  assert.ok(busy.retryAfterMs > 79_000 && busy.retryAfterMs <= 81_000, `түгжээ чөлөөлөгдөх хүртэл: ${busy.retryAfterMs}`);
   s.fake.seed(path, { runId: st.runId, from: st.chunk, status: 'pending', claimedAt: new Date(NOW - EVAL_CLAIM_STALE_MS - 1) }, encodeFields);
   const taken = await (await s.call({ action: 'eval_chunk', runId: st.runId, from: st.chunk })).json();
   assert.equal(taken.ok, true);
@@ -441,6 +443,19 @@ test('аудит (eval): зэрэг/давхар хэсэг Claude-ийг НЭГ
   assert.deepEqual(await code(await s.call({ action: 'eval_chunk', runId: st.runId, from: 2 * st.chunk })), [500, 'server_error']);
   assert.equal(s.fake.read(month).runs, runsBefore + st.chunk, 'зардал алдагдаагүй');
   assert.ok(s.logs.some((m) => /хэсэг бичигдсэнгүй/.test(m)));
+  // Баталгаажуулалт: түгжээ чөлөөлөгдсөн — admin-ий дахин оролдлого 90 с хүлээлгүй шууд амжина
+  assert.equal(s.fake.read(`messenger_status/evalc_${st.runId}_0012`), null);
+  assert.equal((await s.call({ action: 'eval_chunk', runId: st.runId, from: 2 * st.chunk })).status, 200);
+  // Баталгаажуулалт: 0 кейстэй дуусгасан (устсан) ажиллагааны замдаа яваа хэсэг run баримтыг expireAt-гүй дахин үүсгэхгүй
+  const o = setup();
+  const so = await (await o.call({ action: 'eval_start' })).json();
+  const { EVAL_CASES } = await import('../../api/_lib/generated/eval-cases.js');
+  await o.store.claimEvalChunk(so.runId, 0);
+  await o.call({ action: 'eval_finish', runId: so.runId });
+  assert.equal(o.fake.read(`messenger_status/eval_${so.runId}`), null);
+  const run = { status: 'ok', billable: true, costMicroUsd: 100, kind: 'eval' };
+  await assert.rejects(o.store.saveEvalChunk({ runId: so.runId, from: 0, results: [{ id: EVAL_CASES[0].id, pass: true, why: '', costMicroUsd: 100 }], runs: [run], month: ubMonth(new Date(NOW)) }));
+  assert.equal(o.fake.read(`messenger_status/eval_${so.runId}`), null, 'өнчин run баримт үүсээгүй');
 });
 
 test('аудит (eval): admin-ий дэд хязгаар (20%) — бүтэн ажиллагаанд хүрэлцэхгүй бол эхлэхгүй, хэтэрвэл хэсэг зогсоно; хоосон ажиллагаа түүхэд орохгүй; хагас ажиллагаа харьцуулалтын суурь болохгүй', async () => {

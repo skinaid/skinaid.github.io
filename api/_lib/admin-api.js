@@ -29,6 +29,7 @@ import { randomBytes } from 'node:crypto';
 import { capReached } from './agent.js';
 import { buildSocialRequest, SOCIAL_PROMPT_VERSION } from './social/prompt.js';
 import { describeError } from './errors.js';
+import { FirestoreError } from './firestore.js';
 
 export const ADMIN_ORIGIN = 'https://www.skinaid.mn';
 export const ADMIN_MAX_BODY = 16_384;
@@ -164,7 +165,7 @@ export function createAdminHandler(deps) {
       // Claude-ийг дуудахаас ӨМНӨ хэсгийг эзэмшинэ — давхар/зэрэг хүсэлт хоёр удаа төлөхгүй
       const claim = await rt.store.claimEvalChunk(runId, from);
       if (claim.state === 'done') return json({ ok: true, results: claim.results, costMicroUsd: Number(run.costMicroUsd) || 0, repeated: true });
-      if (claim.state === 'busy') return fail(409, 'busy');
+      if (claim.state === 'busy') return fail(409, 'busy', { retryAfterMs: claim.retryAfterMs });
       const rev = knowledgeRevOf(k);
       const cases = EVAL_CASES.slice(from, from + EVAL_LIMITS.chunk);
       const settled = await Promise.allSettled(cases.map(async (c) => {
@@ -196,7 +197,11 @@ export function createAdminHandler(deps) {
         const cost = results.reduce((n, r) => n + r.costMicroUsd, 0);
         log(`[messenger] admin eval: хэсэг бичигдсэнгүй (${Math.round(cost)} µ$): ${describeError(e)}`);
         await rt.store.recordEvalCost({ runs, month }).catch((e2) => log(`[messenger] admin eval: зардал бичигдсэнгүй: ${describeError(e2)}`));
-        return fail(500, 'server_error');
+        // Түгжээг чөлөөлнө — эс бөгөөс admin-ий дахин оролдлого 90 с «busy» авч ажиллагаа хагас дуусна (аудит)
+        await rt.store.releaseEvalChunk(runId, from).catch(() => {});
+        // Ажиллагаа энэ хооронд дууссан/устсан (хуудсыг орхисон) — дахин оролдох утгагүй
+        const gone = e instanceof FirestoreError && (e.isNotFound || e.isPrecondition);
+        return gone ? fail(409, 'eval_closed') : fail(500, 'server_error');
       }
       return json({ ok: true, results, costMicroUsd: (Number(run.costMicroUsd) || 0) + results.reduce((n, r) => n + r.costMicroUsd, 0) });
     },

@@ -217,6 +217,11 @@ test('eval (admin, аудит): төлбөртэй ажиллагааны бат
   assert.match(train, /new AbortController\(\)/);
   assert.match(train, /RETRY_CODES = new Set\(\[[^\]]*'network'[^\]]*'busy'/);
   assert.match(train, /Алдаагаар тасарсан ажиллагааны тайлан/);
+  // Баталгаажуулалт: «busy»-д серверийн хэлсэн хугацааг хүлээнэ; хүлээлтийн үеэр «Зогсоох» дарвал дахин илгээхгүй; ISO огноо
+  assert.match(train, /retryAfterMs/);
+  assert.match(train, /await sleep\(wait\);\s*\n[^\n]*\n\s*if \(!alive\(g\) \|\| \(stoppable && evalStop\)\) throw e;/);
+  assert.match(train, /typeof cmp\.at === 'string' \? new Date\(cmp\.at\)/);
+  assert.match(train, /e\.apiCode === 'eval_closed'/);
   const msg = src('m-messenger.js');
   assert.match(msg, /busy: \(\) => training\.busyText\(\)/);
   assert.match(msg, /training\.abandonEval\(\)/);

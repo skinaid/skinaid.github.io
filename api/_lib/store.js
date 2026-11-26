@@ -411,7 +411,8 @@ export function createStore(fs, opt = {}) {
      * Хэсгийг Claude-ийг дуудахаас ӨМНӨ эзэмшинэ (аудит: давхар/зэрэг хүсэлт хоёр удаа төлж, зардал бүртгэгдэхгүй байв).
      * `pending` баримтыг exists=false-аар үүсгэнэ; байвал — дууссан бол хадгалсан үр дүн, явж байгаа бол `busy`; функц тасарч
      * үлдсэн (EVAL_CLAIM_STALE_MS-ээс хуучин) `pending`-ийг updateTime precondition-оор дахин эзэмшинэ.
-     * @returns {Promise<{ state: 'claimed' } | { state: 'done', results: object[] } | { state: 'busy' }>}
+     * @returns {Promise<{ state: 'claimed' } | { state: 'done', results: object[] } | { state: 'busy', retryAfterMs: number }>}
+     *   retryAfterMs — түгжээ хэзээ чөлөөлөгдөхийг admin-д хэлнэ (тэр хүртэл хүлээгээд дахин илгээнэ)
      */
     async claimEvalChunk(runId, from) {
       const path = evalChunkPath(runId, from);
@@ -424,17 +425,24 @@ export function createStore(fs, opt = {}) {
         if (!(e instanceof FirestoreError && e.isPrecondition)) throw e;
       }
       const cur = await fs.get(path);
-      if (!cur) return { state: 'busy' };
+      if (!cur) return { state: 'busy', retryAfterMs: 1000 };
       if (cur.data.status !== 'pending' && Array.isArray(cur.data.results)) return { state: 'done', results: cur.data.results };
       const at = cur.data.claimedAt instanceof Date ? cur.data.claimedAt.getTime() : 0;
-      if (t.getTime() - at < EVAL_CLAIM_STALE_MS) return { state: 'busy' };
+      const age = t.getTime() - at;
+      if (age < EVAL_CLAIM_STALE_MS) return { state: 'busy', retryAfterMs: EVAL_CLAIM_STALE_MS - age + 500 };
       try {
         await fs.commit([setWrite(path, data, { updateTime: cur.updateTime })]);
         return { state: 'claimed' };
       } catch (e) {
-        if (e instanceof FirestoreError && e.isPrecondition) return { state: 'busy' };
+        if (e instanceof FirestoreError && e.isPrecondition) return { state: 'busy', retryAfterMs: 5000 };
         throw e;
       }
+    },
+    /** Хэсгийн үр дүн бичигдээгүй (commit унасан) — түгжээг чөлөөлнө: admin шууд дахин илгээж болно (зардал бүртгэгдсэн) */
+    async releaseEvalChunk(runId, from) {
+      const path = evalChunkPath(runId, from);
+      const cur = await fs.get(path);
+      if (cur && cur.data.status === 'pending') await fs.commit([deleteWrite(path, { exists: true })]);
     },
     async readEvalIndex() {
       return (await fs.get(EVAL_INDEX))?.data ?? { runs: [] };
@@ -448,7 +456,8 @@ export function createStore(fs, opt = {}) {
       const t = now();
       const writes = [
         setWrite(evalChunkPath(runId, from), { runId, from, status: 'done', results, knowledgeRev, at: t, expireAt: new Date(t.getTime() + 7 * DAY) }),
-        setWrite(evalRunPath(runId), { updatedAt: t }, { mask: ['updatedAt'], transforms: [transforms.increment('done', results.length), transforms.increment('costMicroUsd', evalCost(runs))] }),
+        // exists: true — ажиллагаа энэ хооронд устсан (0 кейстэй дуусгасан) бол run баримтыг expireAt-гүй дахин үүсгэхгүй (аудит)
+        setWrite(evalRunPath(runId), { updatedAt: t }, { mask: ['updatedAt'], exists: true, transforms: [transforms.increment('done', results.length), transforms.increment('costMicroUsd', evalCost(runs))] }),
         ...evalUsageWrites(runs, month, t),
       ];
       await fs.commit(writes);

@@ -681,7 +681,7 @@ function evalReportHtml(r, heading, reason = '') {
       <div><dt>AI алдаа</dt><dd>${Number(s.errors) || 0}</dd></div>
       <div><dt>Зардал</dt><dd>${esc(usd(s.costMicroUsd))}</dd></div>
     </dl>
-    ${cmp ? `<p class="ms-small">Өмнөх бүтэн ажиллагаатай (${cmp.at ? `${esc(fmtDate(cmp.at))}, ` : ''}${Number(cmp.done) || 0} кейс) харьцуулбал: шинээр унасан ${cmp.newlyFailing.length ? `<span class="ms-bad">${cmp.newlyFailing.map(esc).join(', ')}</span>` : 'алга'}; шинээр тэнцсэн ${cmp.newlyPassing.length ? `<span class="ms-good">${cmp.newlyPassing.map(esc).join(', ')}</span>` : 'алга'}.</p>` : '<p class="ms-small muted">Харьцуулах өмнөх бүтэн ажиллагаа алга.</p>'}
+    ${cmp ? `<p class="ms-small">Өмнөх бүтэн ажиллагаатай (${cmp.at ? `${esc(fmtDate(typeof cmp.at === 'string' ? new Date(cmp.at) : cmp.at))}, ` : ''}${Number(cmp.done) || 0} кейс) харьцуулбал: шинээр унасан ${cmp.newlyFailing.length ? `<span class="ms-bad">${cmp.newlyFailing.map(esc).join(', ')}</span>` : 'алга'}; шинээр тэнцсэн ${cmp.newlyPassing.length ? `<span class="ms-good">${cmp.newlyPassing.map(esc).join(', ')}</span>` : 'алга'}.</p>` : '<p class="ms-small muted">Харьцуулах өмнөх бүтэн ажиллагаа алга.</p>'}
     ${fails.length ? `<details class="ms-ctx"><summary>Унасан кейсүүд (${fails.length})</summary><div class="ms-tbl-wrap" tabindex="0" role="region" aria-label="Унасан кейсүүд"><table class="ms-tbl"><thead><tr><th scope="col">Кейс</th><th scope="col">Шалтгаан</th><th scope="col">AI-ийн хариу</th></tr></thead><tbody>${fails.map((f) => `<tr><td>${esc(f.id)}</td><td>${esc(evalWhyText(f.why))}${f.error ? ` (${esc(f.error)})` : ''}</td><td>${esc(f.reply || '')}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
 }
 async function loadEvalHistory() {
@@ -720,9 +720,13 @@ async function withRetry(fn, g, label, { stoppable = true } = {}) {
   for (let i = 0; ; i++) {
     try { return await fn(); } catch (e) {
       if (i >= RETRY_DELAYS.length || !RETRY_CODES.has(e.apiCode) || !alive(g) || (stoppable && evalStop)) throw e;
-      setStatus(evalStatus, `${apiMsg(e)} ${label}: ${Math.round(RETRY_DELAYS[i] / 1000)} секундын дараа дахин оролдоно (${i + 1}/${RETRY_DELAYS.length})…`, '');
-      await sleep(RETRY_DELAYS[i]);
-      if (!alive(g)) throw e;
+      // «busy» = хэсэг өөр хүсэлтээр явж байна: сервер түгжээ хэзээ чөлөөлөгдөхийг хэлнэ (≤ 95 с) — тэр хүртэл хүлээнэ
+      const hint = e.apiCode === 'busy' ? Number(e.body && e.body.retryAfterMs) : NaN;
+      const wait = Number.isFinite(hint) ? Math.min(Math.max(hint, 1000), 95_000) : RETRY_DELAYS[i];
+      setStatus(evalStatus, `${apiMsg(e)} ${label}: ${Math.round(wait / 1000)} секундын дараа дахин оролдоно (${i + 1}/${RETRY_DELAYS.length})…`, '');
+      await sleep(wait);
+      // «Зогсоох» хүлээлтийн үеэр дарагдсан бол дахин (төлбөртэй) хэсэг илгээхгүй
+      if (!alive(g) || (stoppable && evalStop)) throw e;
     }
   }
 }
@@ -778,7 +782,12 @@ async function runEval() {
       loadEvalHistory();
     }
   } catch (e) {
-    if (alive(g)) setStatus(evalStatus, `${failErr ? `${apiMsg(failErr)} ` : ''}Тайлан гаргаж чадсангүй: ${apiMsg(e)}`, 'err');
+    if (!alive(g)) return;
+    if (e.apiCode === 'eval_closed') {
+      // Тайлан аль хэдийн хадгалагдсан (хариу замдаа алдагдаад дахин илгээсэн) — түүхээс харуулна
+      setStatus(evalStatus, `${failErr ? `${apiMsg(failErr)} ` : ''}Тайлан хадгалагдсан — доорх «Өмнөх ажиллагаа»-наас «Дэлгэрэнгүй» дарж харна уу.`, failErr ? 'err' : 'ok');
+      loadEvalHistory();
+    } else setStatus(evalStatus, `${failErr ? `${apiMsg(failErr)} ` : ''}Тайлан гаргаж чадсангүй: ${apiMsg(e)}`, 'err');
   } finally {
     if (alive(g)) {
       evaling = false; evalRun = null;

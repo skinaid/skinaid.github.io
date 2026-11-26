@@ -11,7 +11,7 @@ import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, up
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
 import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=4ec734c0';
 import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft } from './messenger-lib.js?v=b6428a8a';
-import * as training from './m-messenger-train.js?v=8d520459';
+import * as training from './m-messenger-train.js?v=03be31c0';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };
