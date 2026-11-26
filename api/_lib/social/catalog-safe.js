@@ -25,13 +25,17 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMe
  * @typedef {{ id: string, title: string, body: string }} KbEntry  — admin «Сургалт» (messenger_kb), id = rules-ийн хэлбэр
  * @typedef {{ slug: string, name: string, catalogIds?: readonly string[], text: string }} PageEntry  — эмчилгээний хуудас
  * @typedef {{ clinicName: string, address?: string|null, hoursBrief?: string|null, services: readonly CatalogServiceRow[],
- *   packages: readonly CatalogPackageRow[], voiceBrief?: string|null, pages?: readonly PageEntry[], kb?: readonly KbEntry[] }} CatalogInput
- * @typedef {'clinic'|'address'|'hours'|'service'|'package'|'page'|'kb'} SocialFactKind
+ *   packages: readonly CatalogPackageRow[], voiceBrief?: string|null, pages?: readonly PageEntry[], kb?: readonly KbEntry[],
+ *   contactChannels?: readonly string[] }} CatalogInput  — contactChannels: «утас», «имэйл» (утга биш, зөвхөн суваг)
+ * @typedef {'clinic'|'address'|'hours'|'contact'|'service'|'package'|'page'|'kb'} SocialFactKind
  * @typedef {{ id: string, kind: SocialFactKind, text: string }} SocialFact
  * @typedef {{ id: string, kind: 'kb'|'page'|'voice', reason: 'pii'|'empty'|'limit'|'total_limit' }} ExcludedEntry
  * @typedef {{ clinicName: string, facts: SocialFact[], allowedAmounts: number[], allowedPercents: number[], knownNumbers: number[],
  *   knowledgeText: string, voiceBrief: string, excluded: ExcludedEntry[], truncated: string[] }} SocialCatalog
  */
+
+/** «contact» баримтын суваг → юуг систем нэмэх вэ (утга биш — нэр л) */
+const CONTACT_CHANNELS = Object.freeze({ утас: 'утасны дугаарыг', имэйл: 'имэйл хаягийг' });
 
 export const CATALOG_LIMITS = Object.freeze({ services: 80, packages: 30, descriptionChars: 200 });
 /** Мэдлэгийн (FAQ) бичлэг, эмчилгээний хуудас, брэнд дуу хоолойн хязгаар — prompt-ийн хэмжээ (кэштэй ч) хяналттай */
@@ -79,6 +83,15 @@ export function buildSocialCatalog(input) {
   if (address) facts.push({ id: 'address', kind: 'address', text: `Хаяг: ${address}` });
   const hours = clean(input.hoursBrief, 300);
   if (hours) facts.push({ id: 'hours', kind: 'hours', text: `Ажлын цаг: ${hours}` });
+  // Холбоо барих: утас/имэйлийн УТГА LLM-д очихгүй (хувийн мэдээллийн дүрэм — зөвхөн суваг бий гэдэг нь). Дугаар, хаягийг
+  // КОД хариуны доор нэмнэ (agent.js contactLine) — LLM «contact»-ыг иш татаад өөрөө хариулж чадна (өмнө нь үргэлж ажилтанд).
+  const channels = [...new Set(Array.isArray(input.contactChannels) ? input.contactChannels : [])].filter((c) => Object.hasOwn(CONTACT_CHANNELS, c));
+  if (channels.length) {
+    facts.push({
+      id: 'contact', kind: 'contact',
+      text: `Холбоо барих: ${channels.join(', ')} бий — ${channels.map((c) => CONTACT_CHANNELS[c]).join(', ')} чи бичихгүй; энэ баримтыг иш татсан хариуны доор систем өөрөө нэмнэ`,
+    });
+  }
 
   const seen = new Set();
   const services = (input.services || []).filter((s) => s && s.hidden !== true && clean(s.name, 120)).slice(0, CATALOG_LIMITS.services);

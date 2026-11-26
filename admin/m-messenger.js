@@ -11,7 +11,7 @@ import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, up
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
 import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=4ec734c0';
 import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft, AUTO_STOP_TEXT } from './messenger-lib.js?v=2244b555';
-import * as training from './m-messenger-train.js?v=4e33da24';
+import * as training from './m-messenger-train.js?v=7ee148c8';
 import * as overview from './m-messenger-overview.js?v=8d5ed899';
 import { api } from './messenger-api.js?v=29db812d';
 
@@ -119,6 +119,7 @@ function cardHtml(d) {
     ${earlier.length ? `<details class="ms-ctx"><summary>Ярианы өмнөх хэсэг (${earlier.length})</summary><ol class="ms-turns">${earlier.map(turnHtml).join('')}</ol></details>` : ''}
     ${d.reply ? `<div class="ms-block ms-block--ai"><span class="ms-label">AI-ийн санал</span><p class="ms-text">${esc(d.reply)}</p></div>` : ''}
     ${d.wouldSend ? `<div class="ms-block ms-block--send"><span class="ms-label">Автомат горимд (3-р үе шат) илгээгдэх байсан</span><p class="ms-text">${esc(d.wouldSend)}</p></div>` : ''}
+    ${!d.wouldSend && d.contact ? `<div class="ms-block"><span class="ms-label">Систем хариуны доор нэмэх мөр (утас, имэйлийг AI биш, код бичнэ)</span><p class="ms-text">${esc(d.contact)}</p></div>` : ''}
     <p class="ms-why">${reasons.length ? `Шалтгаан: ${reasons.map(esc).join('; ')}. ` : ''}${typeof d.confidence === 'number' ? `AI итгэл: ${Math.round(d.confidence * 100)}%. ` : ''}${d.aiReason ? `AI-ийн тайлбар: ${esc(d.aiReason)}` : ''}</p>
     <fieldset class="ms-rate" data-rate="${id}">
       <legend>Энэ ноорог зөв үү?</legend>

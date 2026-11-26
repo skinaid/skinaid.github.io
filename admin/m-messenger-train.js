@@ -142,6 +142,7 @@ function sourceLabel(id) {
   if (id === 'hours') return 'Ажлын цаг';
   if (id === 'address') return 'Хаяг';
   if (id === 'clinic') return 'Эмнэлэг';
+  if (id === 'contact') return 'Холбоо барих';
   if (kind === 'service') return (DEFAULTS.treatments || []).find((t) => t.id === rest)?.n || 'Үйлчилгээ';
   if (kind === 'package') return (DEFAULTS.packages || []).find((t) => t.id === rest)?.name || 'Багц';
   if (kind === 'kb') return `Мэдлэг «${(kb.get(rest) || {}).title || rest}»`;
@@ -163,6 +164,7 @@ function tryHtml(r, run) {
     ${block('Үйлчлүүлэгч (нууцалсан)', r.userText)}
     ${block('AI-ийн санал', r.reply, 'ms-block--ai')}
     ${block('Автомат горимд (3-р үе шат) илгээгдэх байсан', r.wouldSend, 'ms-block--send')}
+    ${r.wouldSend ? '' : block('Систем хариуны доор нэмэх мөр (утас, имэйлийг AI биш, код бичнэ)', r.contact)}
     <p class="ms-why">${reasons.length ? `Шалтгаан: ${reasons.map(esc).join('; ')}. ` : ''}${typeof r.confidence === 'number' ? `AI итгэл: ${Math.round(r.confidence * 100)}%. ` : ''}${src}${r.aiReason ? `AI-ийн тайлбар: ${esc(r.aiReason)}` : ''}</p>
     <div class="actions"><button class="btn btn--outline btn--sm" type="button" data-try-ex="good">Сайн жишээ болгох</button><button class="btn btn--outline btn--sm" type="button" data-try-ex="bad">Муу жишээ болгох</button></div>
   </article>`;

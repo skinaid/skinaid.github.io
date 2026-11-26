@@ -55,16 +55,30 @@ export function knowledgeInput(site, catalog) {
     clinicName: CLINIC.name,
     address: `${CLINIC.locality}, ${CLINIC.streetAddress}`,
     hoursBrief: str(s.hours),
+    // Утас/имэйлийн УТГА LLM-д очихгүй — зөвхөн аль суваг байгаа нь (дугаар, хаягийг код нэмнэ — agent.js)
+    contactChannels: ['утас', 'имэйл'],
     services,
     packages,
     voiceBrief: '',
   };
 }
 
-/** Яаралтай хариунд залгах утас (сайтын admin-д тохируулсан, эс бөгөөс тогтмол) */
+/** Имэйлийн хэлбэр: үсэг/цифрээр эхэлж төгссөн нэр, давхар цэггүй, цагаан толгойн TLD — хоосон зай, мөр шилжилт, тэмдэглэгээ орохгүй */
+const EMAIL_OK = /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.){1,4}[A-Za-z]{2,24}$/;
+/**
+ * Сайтын нийтийн имэйл (admin → «Тохиргоо»-д тохируулсан); тохируулаагүй / буруу хэлбэртэй бол сайт шиг тогтмол утга
+ * (assets/js/main.js мөн адил анхдагч руугаа буцдаг — сайтад харагдаж буй хаягтай зөрөхгүй).
+ */
+export function clinicEmail(site) {
+  const e = str(site?.email).trim();
+  return e.length <= 120 && EMAIL_OK.test(e) && !e.includes('..') ? e : CLINIC.email;
+}
+
+/** Яаралтай хариу ба «Холбоо барих» мөрөнд залгах утас (сайтын admin-д тохируулсан, эс бөгөөс тогтмол). Нэг дугаар: 7–12 цифр. */
 export function clinicPhone(site) {
   const p = str(site?.phone).trim();
-  return /^[+0-9 -]{7,20}$/.test(p) ? p : CLINIC.phoneDisplay;
+  const digits = p.replace(/\D/g, '').length;
+  return /^\+?[0-9][0-9 -]{5,18}[0-9]$/.test(p) && digits >= 7 && digits <= 12 ? p : CLINIC.phoneDisplay;
 }
 
 /**
@@ -96,6 +110,8 @@ export function buildKnowledge(docs, opt = {}) {
   return {
     catalog,
     phone: clinicPhone(docs.site),
+    /** Нийтийн имэйл — «Холбоо барих» мөрөнд код нэмнэ (LLM-д очихгүй) */
+    email: clinicEmail(docs.site),
     examples: ex.items,
     /** admin-д: prompt-д ороогүй бичлэг, шалтгаантай (текстгүй) */
     excluded: [...skipped, ...catalog.excluded, ...ex.excluded.map((e) => ({ id: `example:${e.id}`, kind: 'example', reason: e.reason }))],
