@@ -57,7 +57,10 @@ export function createPipeline(deps) {
       lastStaffAt: asDate(thread.lastStaffAt),
       lastUserAt: asDate(thread.lastUserAt),
     };
-    const plan = planBatch(conv, events, { mode, ownAppId: deps.ownAppId, now: now(), automationHashes });
+    // Өмнөх оролдлогоор аль хэдийн хадгалсан echo (дахин боловсруулалт) — ангиллыг нь хэвээр ашиглана (+1 read/echo; echo цөөн)
+    const echoIds = mode === 'off' ? [] : events.filter((e) => e.kind === 'echo').map((e) => e.id);
+    const knownEchoes = echoIds.length ? await store.readEchoMessages(psidHash, echoIds) : new Map();
+    const plan = planBatch(conv, events, { mode, ownAppId: deps.ownAppId, now: now(), automationHashes, knownEchoes });
     await store.saveBatch(psidHash, plan, thread);
     const nextThread = { ...thread, ...plan.conversation };
 

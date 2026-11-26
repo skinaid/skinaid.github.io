@@ -16,9 +16,10 @@ import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, DEFAULTS } 
 import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=4ec734c0';
 import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
-  exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, apiErrorText, EXCLUDE_TEXT, usd3,
+  exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, EXCLUDE_TEXT, usd3,
   kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText,
-} from './messenger-lib.js?v=b6428a8a';
+} from './messenger-lib.js?v=06a76b56';
+import { api, apiMsg } from './messenger-api.js?v=590a9ff9';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');
@@ -57,28 +58,7 @@ function syncOpeners() {
   btnExNew.disabled = !exReady || !!busy;
 }
 
-/* ---------- Сервер (/api/admin) ---------- */
-const codeErr = (code, body) => Object.assign(new Error(code), { apiCode: code, body });
-/** Хариу ирэхгүй (сүлжээ гацсан) бол ийм хугацааны дараа таслана — функцийн дээд хугацаа 60 с (аудит: «Зогсоох» гацдаг байв) */
-const API_TIMEOUT_MS = 75_000;
-async function api(action, payload = {}, { timeoutMs = API_TIMEOUT_MS } = {}) {
-  if (!session.user) throw codeErr('unauthorized');
-  let token;
-  try { token = await session.user.getIdToken(); } catch (_) { throw codeErr('unauthorized'); }
-  let res;
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    res = await fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ action, ...payload }), cache: 'no-store', signal: ctl.signal });
-  } catch (_) { throw codeErr(ctl.signal.aborted ? 'client_timeout' : 'network'); } finally { clearTimeout(timer); }
-  let j = null;
-  try { j = await res.json(); } catch (_) { j = null; }
-  // JSON биш хариу: 404/405/501 (GitHub Pages, localhost) = функц энэ хаяг дээр алга; бусад (504 timeout г.м.) = серверийн алдаа
-  if (!j || typeof j !== 'object' || (!j.ok && typeof j.error !== 'string')) throw codeErr([404, 405, 501].includes(res.status) ? 'no_server' : 'server_error');
-  if (!res.ok || !j.ok) throw codeErr(j.error, j);
-  return j;
-}
-const apiMsg = (e) => (e && e.apiCode ? apiErrorText(e.apiCode) : errText(e));
+/* ---------- Сервер (/api/admin) — admin/messenger-api.js ---------- */
 
 /* ---------- Бичилт: баримт + мэдлэгийн тэмдэг (`_rev`) НЭГ batch-д ---------- */
 const revData = () => ({ title: 'Кэшийн тэмдэг (систем)', body: new Date().toISOString(), status: 'draft', updatedAt: serverTimestamp(), updatedBy: session.user.email });

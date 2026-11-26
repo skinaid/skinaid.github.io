@@ -7,11 +7,13 @@
    Квот: ноорог нэг удаад ≤ 30 read («Цааш ачаалах»), тохиргоо 3 read. Цэсийг нээх хүртэл юу ч уншихгүй.
    Хэрэглэгчийн/AI-ийн бүх текстийг esc()-ээр л гаргана (XSS).
    ========================================================================== */
-import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
 import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=4ec734c0';
-import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft } from './messenger-lib.js?v=b6428a8a';
-import * as training from './m-messenger-train.js?v=03be31c0';
+import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft, AUTO_STOP_TEXT } from './messenger-lib.js?v=06a76b56';
+import * as training from './m-messenger-train.js?v=ad9a8f1f';
+import * as overview from './m-messenger-overview.js?v=648b893c';
+import { api } from './messenger-api.js?v=590a9ff9';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };
@@ -34,6 +36,13 @@ const cardErr = new Map();  // id → картын алдаа (дахин зур
 let saved = null;            // тохиргооны сүүлд уншсан/хадгалсан утга
 let lastState = null;        // messenger_status/main, messenger_usage — таг хадгалахад дахин зурна
 let lastUsage = { runs: 0, costMicroUsd: 0 };
+let savedBy = null;          // тохиргоог сүүлд хэн хадгалсан ('system' = автомат зогсолт)
+let savedAuditId = null;     // ачаалсан тохиргооны lastAuditId — хадгалахад өөрчлөгдсөн эсэхийг шалгана (автомат зогсолт)
+let loadedAt = 0;            // тохиргоог сүүлд уншсан мөч (хуудсанд буцаж ирэхэд дахин унших)
+let crisisTimer = 0;         // хямралын шалгалтыг хоцроож дахин илгээх (сервер 30 с-д ≤ 1)
+let sessionGen = 0;          // teardown бүрт нэмэгдэнэ — гарсны дараах async үр дүнг үл тооно
+/** Тохиргоо ачаалснаас хойш өөр газар өөрчлөгдсөн (систем автоматаар зогсоосон, өөр таб) */
+const STALE = 'settings_stale';
 let ready = false;
 let saving = false;
 
@@ -47,6 +56,7 @@ function selectTab(name, focus = false) {
     if (on && focus) t.focus();
   });
   if (name === 'train') training.openTraining();
+  if (name === 'overview') overview.openOverview();
 }
 tabList.addEventListener('click', (e) => { const t = e.target.closest('[role="tab"]'); if (t) selectTab(t.dataset.tab); });
 tabList.addEventListener('keydown', (e) => {
@@ -181,9 +191,12 @@ $('#btnMsReload').addEventListener('click', async () => {
   }
   ratingPick.clear(); noteDraft.clear(); cardErr.clear();
   const onTrain = !$('#msPanelTrain').hidden;
+  const onOverview = !$('#msPanelOverview').hidden;
   training.teardown();
+  overview.teardown();
   loadDrafts(false); loadSettings();
   if (onTrain) training.openTraining(); else training.loadExamples().catch(() => {});
+  if (onOverview) overview.openOverview();
   refreshDirty();
 });
 
@@ -266,6 +279,8 @@ async function saveRating(id) {
     busy.delete(id);
     renderDrafts();
     snack(`Үнэлгээ хадгалагдлаа: ${ratingLabel(rating)}`);
+    // «Буруу» олширвол AI-г автоматаар зогсооно (сервер шалгана — crisis.js); сервер алга бол чимээгүй
+    if (rating === 'wrong') crisisCheck();
     // Энэ картын ДАРААХ үнэлээгүй ноорог руу фокус; байхгүй бол энэ картын гарчиг (фокус body руу унахгүй)
     const cards = $$('.ms-card', list);
     const at = cards.findIndex((c) => c.dataset.id === id);
@@ -339,8 +354,45 @@ function renderState(st, usage, settings) {
     <details class="ms-cfg-wrap"><summary>Серверийн тохиргоо (нууц түлхүүрүүд — утга биш, зөвхөн тавьсан эсэх)</summary><ul class="ms-cfg">${cfg ? rows : '<li>Мэдээлэл алга</li>'}</ul></details>`;
 }
 
+/**
+ * «Буруу» үнэлгээний дараах хямралын шалгалт. Сервер инстанст 30 с-д ≤ 1 шалгадаг тул хоцорсон бол (throttled) НЭГ удаа
+ * дахин илгээнэ — дараалсан «Буруу» алгасагдахгүй (аудит).
+ */
+function crisisCheck() {
+  const g = sessionGen;
+  api('crisis_check').then((r) => {
+    if (g !== sessionGen || !session.user) return;
+    if (r && r.throttled) {
+      if (!crisisTimer) crisisTimer = setTimeout(() => { crisisTimer = 0; if (g === sessionGen && session.user) crisisCheck(); }, Math.min(Math.max(Number(r.retryAfterMs) || 31_000, 1000), 35_000));
+      return;
+    }
+    if (r && r.trip && r.stopped) {
+      snack(`AI автоматаар зогслоо: ${AUTO_STOP_TEXT[r.reason] || r.reason}. «Тохиргоо»-оос шалгаад дахин асаана уу.`, { error: true });
+      refreshAfterStop(g);
+    }
+  }).catch(() => {});
+}
+/** Автомат зогсолтын дараа: хадгалаагүй засвар байвал маягтыг дарахгүй — зөвхөн хадгалсан утга, тууз, зогсоолтын switch */
+async function refreshAfterStop(g) {
+  if (!settingsDirty()) { loadSettings(); return; }
+  try {
+    const [setSnap, stSnap] = await Promise.all([getDoc(doc(db, 'messenger_settings', 'main')), getDoc(doc(db, 'messenger_status', 'main'))]);
+    if (g !== sessionGen || !session.user) return;
+    const raw = setSnap.exists() ? setSnap.data() : null;
+    saved = normalizeSettings(raw);
+    savedBy = raw && typeof raw.updatedBy === 'string' ? raw.updatedBy : null;
+    savedAuditId = raw && typeof raw.lastAuditId === 'string' ? raw.lastAuditId : null;
+    lastState = stSnap.exists() ? stSnap.data() : lastState;
+    $('#ms-kill').checked = saved.killSwitch;
+    renderBanner();
+    refreshDirty();
+    snack('Таны хадгалаагүй тохиргоо хэвээр, харин «Яаралтай зогсоолт» асаалттай болсон — шалгаад хадгална уу.');
+  } catch (_) { /* дараагийн ачаалалт */ }
+}
+
 async function loadSettings() {
   if (!session.user || saving) return;
+  const g = sessionGen;
   ready = false;
   lockForm(true);
   loadBox.hidden = true;
@@ -351,8 +403,12 @@ async function loadSettings() {
       getDoc(doc(db, 'messenger_status', 'main')),
       getDoc(doc(db, 'messenger_usage', ubMonth())),
     ]);
+    if (g !== sessionGen) return;
     const raw = setSnap.exists() ? setSnap.data() : null;
     saved = normalizeSettings(raw);
+    savedBy = raw && typeof raw.updatedBy === 'string' ? raw.updatedBy : null;
+    savedAuditId = raw && typeof raw.lastAuditId === 'string' ? raw.lastAuditId : null;
+    loadedAt = Date.now();
     fill(saved);
     clearErrors(form);
     const u = usSnap.exists() ? usSnap.data() : {};
@@ -362,7 +418,8 @@ async function loadSettings() {
     renderBanner();
     ready = true;
     lockForm(false);
-    setStatus(status, raw ? `Сүүлд хадгалсан: ${fmtDate(raw.updatedAt)} · ${raw.updatedBy || ''}` : 'Одоогоор хадгалсан тохиргоо алга — AI унтраалттай.', '');
+    const who = raw && raw.updatedBy === 'system' ? 'систем (автомат зогсолт)' : (raw && raw.updatedBy) || '';
+    setStatus(status, raw ? `Сүүлд хадгалсан: ${fmtDate(raw.updatedAt)} · ${who}` : 'Одоогоор хадгалсан тохиргоо алга — AI унтраалттай.', '');
   } catch (e) {
     setStatus(status, '', '');
     loadMsg.textContent = `${errText(e)} Тохиргоог уншиж чадаагүй тул засварлахыг түр хаалаа.`;
@@ -379,22 +436,50 @@ function renderBanner() {
   b.hidden = false;
   const on = saved.mode === 'shadow' && !saved.killSwitch;
   b.className = `ms-modebar ${on ? 'is-on' : 'is-off'}`;
-  b.textContent = saved.killSwitch ? 'AI ЗОГСООСОН (яаралтай зогсоолт асаалттай).' : on ? 'AI сүүдэр горимд ажиллаж байна — ноорог бичнэ, үйлчлүүлэгч рүү юу ч илгээхгүй.' : 'AI унтраалттай — мессеж хадгалагдахгүй.';
+  const auto = saved.killSwitch && savedBy === 'system' ? (lastState && lastState.autoStop) || {} : null;
+  b.textContent = auto
+    ? `AI-Г СИСТЕМ АВТОМАТААР ЗОГСООСОН: ${AUTO_STOP_TEXT[auto.reason] || 'хямралын шалгуур'}${auto.at ? ` (${fmtDate(auto.at)})` : ''}. Шалгаад «Тохиргоо»-оос яаралтай зогсоолтыг унтрааж хадгална уу.`
+    : saved.killSwitch ? 'AI ЗОГСООСОН (яаралтай зогсоолт асаалттай).' : on ? 'AI сүүдэр горимд ажиллаж байна — ноорог бичнэ, үйлчлүүлэгч рүү юу ч илгээхгүй.' : 'AI унтраалттай — мессеж хадгалагдахгүй.';
   btnStop.hidden = saved.killSwitch;
 }
 
-async function persist(next) {
+/**
+ * Тохиргоо + audit — НЭГ transaction. Ачаалснаас хойш тохиргоо өөрчлөгдсөн бол (lastAuditId зөрсөн: систем автоматаар
+ * зогсоосон, өөр таб) ХАДГАЛАХГҮЙ — хуучин маягт автомат зогсолтыг чимээгүй дарж AI-г дахин асаахгүй (аудит).
+ */
+async function persist(next, { stop = false } = {}) {
   const id = auditId();
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'messenger_settings', 'main'), {
-    mode: next.mode, killSwitch: next.killSwitch, monthlyRunCap: next.monthlyRunCap, monthlyCostCapUsd: next.monthlyCostCapUsd,
-    lastAuditId: id, updatedAt: serverTimestamp(), updatedBy: session.user.email,
+  const ref = doc(db, 'messenger_settings', 'main');
+  let written = next;
+  let changed = false;
+  await runTransaction(db, async (tx) => {
+    const cur = await tx.get(ref);
+    const curData = cur.exists() ? cur.data() : null;
+    const curAudit = curData && typeof curData.lastAuditId === 'string' ? curData.lastAuditId : null;
+    changed = curAudit !== savedAuditId;
+    // «Яаралтай зогсоох» үргэлж аюулгүй тал: өөр газраас өөрчлөгдсөн байсан ч татгалзахгүй — ОДООГИЙН утган дээр зогсооно
+    // (баталгаажуулах аудит); ердийн хадгалалт хуучирсан бол цуцлагдана
+    if (stop) written = { ...normalizeSettings(changed ? curData : next), killSwitch: true };
+    else if (changed) throw Object.assign(new Error(STALE), { code: STALE });
+    tx.set(ref, {
+      mode: written.mode, killSwitch: written.killSwitch, monthlyRunCap: written.monthlyRunCap, monthlyCostCapUsd: written.monthlyCostCapUsd,
+      lastAuditId: id, updatedAt: serverTimestamp(), updatedBy: session.user.email,
+    });
+    tx.set(doc(db, 'messenger_audit', id), {
+      action: 'settings', by: session.user.email, at: serverTimestamp(),
+      detail: { mode: written.mode, killSwitch: written.killSwitch, monthlyRunCap: written.monthlyRunCap, monthlyCostCapUsd: written.monthlyCostCapUsd },
+    });
   });
-  batch.set(doc(db, 'messenger_audit', id), {
-    action: 'settings', by: session.user.email, at: serverTimestamp(),
-    detail: { mode: next.mode, killSwitch: next.killSwitch, monthlyRunCap: next.monthlyRunCap, monthlyCostCapUsd: next.monthlyCostCapUsd },
-  });
-  await batch.commit();
+  savedAuditId = id;
+  return { written, changed };
+}
+const STALE_TEXT = 'Тохиргоо таныг ачаалснаас хойш өөрчлөгдсөн байна (систем AI-г автоматаар зогсоосон эсвэл өөр цонхноос хадгалсан). Шинэ утгыг ачааллаа — шалгаад дахин хадгална уу.';
+/** Хуучирсан маягт: хадгалалтыг цуцалж, шинэ утгыг ачаална */
+async function onStale() {
+  saving = false;
+  await loadSettings();
+  setStatus(status, STALE_TEXT, 'err');
+  snack(STALE_TEXT, { error: true });
 }
 
 async function save() {
@@ -419,13 +504,16 @@ async function save() {
   try {
     await persist(next);
     saved = next;
+    savedBy = session.user.email;
     fill(saved);
     renderBanner();
     renderState(lastState, lastUsage, saved);
     setStatus(status, 'Хадгалагдлаа — сервер дараагийн мессежээс мөрдөнө.', 'ok');
     snack('Messenger AI-ийн тохиргоо хадгалагдлаа');
-  } catch (e) { setStatus(status, errText(e), 'err'); snack(errText(e), { error: true }); }
-  finally { saving = false; lockForm(false); refreshDirty(); restore(btnSave); }
+  } catch (e) {
+    if (e && e.code === STALE) { await onStale(); return; }
+    setStatus(status, errText(e), 'err'); snack(errText(e), { error: true });
+  } finally { saving = false; lockForm(!ready); refreshDirty(); restore(btnSave); }
 }
 
 /** Яаралтай зогсоох: хадгалсан утга + killSwitch = true (маягтын хадгалаагүй өөрчлөлтийг хадгалахгүй) */
@@ -435,17 +523,20 @@ async function stopNow() {
   lockForm(true);
   setStatus(status, 'Зогсоож байна…', '');
   try {
-    const next = { ...saved, killSwitch: true };
-    await persist(next);
-    saved = next;
+    const r = await persist({ ...saved, killSwitch: true }, { stop: true });
+    saved = r.written;
+    savedBy = session.user.email;
+    // Тохиргоо өөр газраас өөрчлөгдсөн байсан бол маягтыг шинэ утгаар (эс бөгөөс хадгалаагүй засвар хэвээр)
+    if (r.changed) fill(saved);
     $('#ms-kill').checked = true;
     renderBanner();
+    renderState(lastState, lastUsage, saved);
     setStatus(status, 'AI зогслоо. Дахин асаахдаа «Яаралтай зогсоолт»-ыг унтрааж хадгална.', 'ok');
     announce('AI зогслоо');
   } catch (e) { setStatus(status, errText(e), 'err'); snack(errText(e), { error: true }); }
   finally {
     saving = false;
-    lockForm(false);
+    lockForm(!ready);
     refreshDirty();
     // Товч нуугдсан (inert → hidden) — фокус body руу унахгүй: зогсоолтын switch руу
     $('#ms-kill').focus();
@@ -504,6 +595,7 @@ function refreshExampleRows() {
   }
 }
 training.initTraining({ selectTab, onExamplesChange: refreshExampleRows, onDirty: () => refreshDirty() });
+overview.initOverview({ getMonth: () => ({ usage: lastUsage, settings: saved }) });
 function open() {
   if (opened || !session.user) return;
   opened = true;
@@ -517,10 +609,21 @@ export function load() {
   if (/^#\/messenger/.test(location.hash)) open();
 }
 window.addEventListener('hashchange', () => { if (/^#\/messenger/.test(location.hash)) open(); });
+// Хуудсанд буцаж ирэхэд (≥ 1 мин) тохиргоог дахин уншина — систем автоматаар зогсоосныг харуулна (засвар хийгээгүй бол)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !opened || !ready || saving || !session.user) return;
+  if (Date.now() - loadedAt < 60_000 || settingsDirty()) return;
+  loadSettings();
+});
 export function teardown() {
+  sessionGen++;
+  if (crisisTimer) { clearTimeout(crisisTimer); crisisTimer = 0; }
+  savedAuditId = null; loadedAt = 0;
   opened = false; ready = false; saved = null; drafts = []; cursor = null; lastState = null; lastUsage = { runs: 0, costMicroUsd: 0 };
   ratingPick.clear(); noteDraft.clear(); busy.clear(); cardErr.clear();
   training.teardown();
+  overview.teardown();
+  savedBy = null;
   selectTab('drafts');
   lockForm(true);
   list.innerHTML = ''; meta.textContent = ''; more.hidden = true; stateBox.innerHTML = '';

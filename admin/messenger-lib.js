@@ -281,3 +281,86 @@ export function evalWhyText(code) {
   if (c.startsWith('reason:')) return `Бодлого: ${EVAL_REASON[c.slice(7)] || c.slice(7)}`;
   return c || '—';
 }
+
+/* ---------- «Тойм» (PR В) ---------- */
+/** Автомат зогсолтын шалтгаан (api/_lib/crisis.js CRISIS_REASONS) */
+export const AUTO_STOP_TEXT = {
+  wrong_ratings: 'сүүлийн 24 цагт үнэлсэн ноорогийн ихэнх нь «Буруу»',
+  error_streak: 'Claude дараалан 5 удаа засагдахгүй алдаа гаргасан (түлхүүр, кредит эсвэл тохиргоо)',
+  // wrong_ratings — одоогийн prompt-ийн ноорогт; автомат зогсолтын дараа асаасан бол түүнээс хойшхи ноорогт л (crisis.js)
+  day_cost: 'өнөөдрийн зардал сарын хязгаарын 20%-иас хэтэрсэн',
+};
+/** 3-р үе шатны гейт: «Автомат боломжтой» ноорогийн ≥ 85% шууд эсвэл бага засвартай, ≥ 50 үнэлгээ */
+export const AUTO_GATE = { share: 0.85, minRated: 50, smallEdit: 0.3 };
+export const ECHO_TEXT = {
+  automation_fast_gap: 'Meta автомат (хэрэглэгчээс ≤ 15 с)', automation_template: 'Meta автомат (давтагдсан загвар)',
+  automation_no_user: 'Meta автомат (хэрэглэгч бичээгүй)', automation_known_app: 'Meta автомат (апп)',
+  staff_default: 'Ажилтан', staff_no_user: 'Ажилтан (хэрэглэгч бичээгүй)', bot_own_app: 'Манай бот',
+};
+/** AI-ийн ажиллагааны төлөв (ai_runs.status — өдрийн нэгтгэл runs.<status>) → «Тойм»-ын текст */
+export const RUN_STATUS_TEXT = {
+  ok: 'амжилттай', error: 'алдаа', refusal: 'татгалзсан', invalid_output: 'гаралт буруу', cap: 'хязгаарт хүрсэн', not_configured: 'тохируулаагүй',
+};
+
+/** Засварын хувь (api/_lib/guardrails.js editRatio-той ИЖИЛ — тест тулгана): 0 = хэвээр, 1 = бүхэлд нь өөр */
+export function editRatio(original, edited) {
+  const a = [...String(original ?? '')].slice(0, 2000);
+  const b = [...String(edited ?? '')].slice(0, 2000);
+  if (a.length === 0 && b.length === 0) return 0;
+  const prev = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return Math.min(1, prev[b.length] / Math.max(a.length, b.length));
+}
+
+/** Сүүлийн n өдрийн УБ-ын огноо (хуучнаас шинэ рүү) — messenger_usage/<өдөр> */
+export function lastDays(n, nowMs = Date.now()) {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit' });
+  return Array.from({ length: n }, (_, i) => fmt.format(new Date(nowMs - (n - 1 - i) * 86_400_000)));
+}
+
+const addMap = (into, m) => { for (const [k, v] of Object.entries(m && typeof m === 'object' ? m : {})) into[k] = (into[k] || 0) + (Number(v) || 0); };
+/** Өдрийн баримтууд (id → data) → нийт ба өдөр бүрийн ноорог */
+export function aggregateDays(byDay, days) {
+  const t = { drafts: 0, routes: {}, intents: {}, runs: {}, echo: {}, costMicroUsd: 0, adminCostMicroUsd: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, tests: 0, evals: 0 };
+  const series = [];
+  for (const day of days) {
+    const d = byDay[day] || {};
+    series.push({ day, drafts: Number(d.drafts) || 0 });
+    t.drafts += Number(d.drafts) || 0;
+    for (const k of ['routes', 'intents', 'runs', 'echo']) addMap(t[k], d[k]);
+    for (const k of ['costMicroUsd', 'adminCostMicroUsd', 'inputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'tests', 'evals']) t[k] += Number(d[k]) || 0;
+  }
+  const denom = t.cacheReadTokens + t.inputTokens + t.cacheWriteTokens;
+  t.cacheHit = denom ? t.cacheReadTokens / denom : null;
+  t.aiErrors = (t.runs.error || 0) + (t.runs.refusal || 0);
+  return { totals: t, series };
+}
+
+/** Үнэлсэн ноорогууд → нарийвчлал; «Автомат боломжтой»-д шууд эсвэл бага засвар (editRatio < 0.3) */
+export function ratingStats(drafts) {
+  const s = { rated: 0, good: 0, edited: 0, wrong: 0, small: 0, auto: { rated: 0, good: 0, small: 0 } };
+  for (const d of drafts) {
+    if (!['good', 'edited', 'wrong'].includes(d.rating)) continue;
+    s.rated++;
+    s[d.rating]++;
+    const small = d.rating === 'edited' && editRatio(d.reply, d.note) < AUTO_GATE.smallEdit;
+    if (small) s.small++;
+    if (d.route === 'auto_candidate') {
+      s.auto.rated++;
+      if (d.rating === 'good') s.auto.good++;
+      if (small) s.auto.small++;
+    }
+  }
+  const share = s.auto.rated ? (s.auto.good + s.auto.small) / s.auto.rated : null;
+  s.gate = { share, met: share !== null && s.auto.rated >= AUTO_GATE.minRated && share >= AUTO_GATE.share, enough: s.auto.rated >= AUTO_GATE.minRated };
+  return s;
+}

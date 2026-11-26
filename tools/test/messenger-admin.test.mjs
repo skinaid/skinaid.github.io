@@ -161,9 +161,10 @@ test('сургалт: m-messenger-train.js — текстийг esc()-ээр; Fi
   // Ноорогоос жишээ ШУУД хадгалагдахгүй — урьдчилан бөглөсөн засварлагч (хувийн мэдээллийг арилгуулна)
   const fromDraft = src.slice(src.indexOf('export async function exampleFromDraftAction'), src.indexOf('export function editExample'));
   assert.ok(/openEx\(/.test(fromDraft) && !/commitWithRev/.test(fromDraft));
-  assert.match(src, /Authorization: `Bearer \$\{token\}`/);
-  assert.match(src, /fetch\('\/api\/admin'/);
-  assert.ok(!/localStorage|sessionStorage/.test(src), 'token хадгалахгүй');
+  const apiSrc = readFileSync(new URL('../../admin/messenger-api.js', import.meta.url), 'utf8');
+  assert.match(apiSrc, /Authorization: `Bearer \$\{token\}`/);
+  assert.match(apiSrc, /fetch\('\/api\/admin'/);
+  assert.ok(!/localStorage|sessionStorage/.test(src + apiSrc), 'token хадгалахгүй');
   const ms = readFileSync(new URL('../../admin/m-messenger.js', import.meta.url), 'utf8');
   assert.match(ms, /training\.exampleFromDraftAction\(d, x\)/);
 });
@@ -214,7 +215,7 @@ test('eval (admin, аудит): төлбөртэй ажиллагааны бат
   assert.match(train, /title: 'Бодит AI-тай eval ажиллуулах уу\?'[^\n]*safe: true/, 'Enter давхар дарахад эхлэхгүй');
   assert.match(train, /export const busyText/);
   assert.match(train, /export async function abandonEval/);
-  assert.match(train, /new AbortController\(\)/);
+  assert.match(src('messenger-api.js'), /new AbortController\(\)/);
   assert.match(train, /RETRY_CODES = new Set\(\[[^\]]*'network'[^\]]*'busy'/);
   assert.match(train, /Алдаагаар тасарсан ажиллагааны тайлан/);
   // Баталгаажуулалт: «busy»-д серверийн хэлсэн хугацааг хүлээнэ; хүлээлтийн үеэр «Зогсоох» дарвал дахин илгээхгүй; ISO огноо
@@ -230,4 +231,60 @@ test('eval (admin, аудит): төлбөртэй ажиллагааны бат
   assert.match(admin, /leaveBusy\(\)/);
   assert.ok(A.API_ERRORS.client_timeout);
   assert.ok(!src('index.html').includes('ОДООГИЙН мэдлэгтэй'), 'eval нь нийтэлсэн мэдлэгтэй');
+});
+
+test('тойм: өдрийн нэгтгэл, үнэлгээний нарийвчлал (бага засвар = editRatio < 0.3), гейт; editRatio = серверийнх; текст esc()-ээр', async () => {
+  const { editRatio: srv } = await import('../../api/_lib/guardrails.js');
+  for (const [a, b] of [['', ''], ['abc', 'abd'], ['Үзлэг ₮50,000', 'Арьсны үзлэг ₮50,000.'], ['x', ''], ['Сайн байна уу', 'Сайн уу']]) assert.equal(A.editRatio(a, b), srv(a, b));
+  const days = A.lastDays(3, Date.parse('2026-11-27T05:00:00Z'));
+  assert.deepEqual(days, ['2026-11-25', '2026-11-26', '2026-11-27']);
+  assert.deepEqual(A.lastDays(1, Date.parse('2026-11-27T17:30:00Z')), ['2026-11-28'], 'УБ-ын өдөр');
+  const agg = A.aggregateDays({
+    '2026-11-25': { drafts: 2, routes: { handoff: 2 }, runs: { ok: 1, error: 1 }, costMicroUsd: 100, cacheReadTokens: 900, inputTokens: 100, echo: { staff_default: 1 } },
+    '2026-11-27': { drafts: 1, routes: { auto_candidate: 1 }, runs: { refusal: 1 }, adminCostMicroUsd: 50 },
+  }, days);
+  assert.equal(agg.totals.drafts, 3);
+  assert.deepEqual(agg.totals.routes, { handoff: 2, auto_candidate: 1 });
+  assert.equal(agg.totals.aiErrors, 2);
+  assert.equal(agg.totals.cacheHit, 0.9);
+  assert.deepEqual(agg.series.map((x) => x.drafts), [2, 0, 1]);
+  const r = A.ratingStats([
+    { rating: 'good', route: 'auto_candidate' },
+    { rating: 'edited', route: 'auto_candidate', reply: 'Арьсны үзлэг ₮50,000', note: 'Арьсны үзлэг ₮50,000.' },
+    { rating: 'edited', route: 'auto_candidate', reply: 'Тийм', note: 'Үгүй, ажилтан Тантай холбогдоно.' },
+    { rating: 'wrong', route: 'handoff' },
+    { rating: null, route: 'draft' },
+  ]);
+  assert.deepEqual([r.rated, r.good, r.edited, r.wrong, r.small], [4, 1, 2, 1, 1]);
+  assert.deepEqual(r.auto, { rated: 3, good: 1, small: 1 });
+  assert.equal(Math.round(r.gate.share * 100), 67);
+  assert.equal(r.gate.met, false);
+  assert.equal(r.gate.enough, false, '< 50 үнэлгээ');
+  const { CRISIS_REASONS } = await import('../../api/_lib/crisis.js');
+  assert.deepEqual(Object.keys(A.AUTO_STOP_TEXT).sort(), [...CRISIS_REASONS].sort());
+  const ov = readFileSync(new URL('../../admin/m-messenger-overview.js', import.meta.url), 'utf8');
+  assert.ok(!/\$\{(?:k|s\.day|r\.\w+)\}/.test(ov.replace(/\$\{Number\([^)]*\)\}/g, '')), 'текст esc()/Number()-ээр');
+  assert.match(ov, /where\(documentId\(\), '>=', ids\[0\]\)/, 'өдрийн баримт documentId-ийн мужаар (composite index-гүй)');
+});
+
+test('тохиргоо/тойм (аудит, PR В): хуучин маягт автомат зогсолтыг дарахгүй (transaction + lastAuditId); хямралын шалгалт хоцорвол дахин; 4 таб 320px-д багтана; хавтанд dl-д p үгүй', () => {
+  const src = (f) => readFileSync(new URL(`../../admin/${f}`, import.meta.url), 'utf8');
+  const msg = src('m-messenger.js');
+  assert.match(msg, /runTransaction\(db, async \(tx\) =>/);
+  assert.match(msg, /changed = curAudit !== savedAuditId/);
+  // Баталгаажуулалт: «Яаралтай зогсоох» хуучирсан байсан ч татгалзахгүй — одоогийн утган дээр killSwitch = true
+  assert.match(msg, /if \(stop\) written = \{ \.\.\.normalizeSettings\(changed \? curData : next\), killSwitch: true \};/);
+  assert.match(msg, /persist\(\{ \.\.\.saved, killSwitch: true \}, \{ stop: true \}\)/);
+  assert.ok(!/batch\.set\(doc\(db, 'messenger_settings'/.test(msg), 'тохиргоог шалгалтгүй batch-аар бичихгүй');
+  assert.match(msg, /r\.throttled/);
+  assert.match(msg, /retryAfterMs/);
+  assert.match(msg, /visibilitychange/);
+  assert.match(msg, /'систем \(автомат зогсолт\)'/);
+  const ov = src('m-messenger-overview.js');
+  assert.ok(!/<\/dd><p>/.test(ov), 'dl > div дотор зөвхөн dt/dd');
+  assert.match(ov, /RUN_STATUS_TEXT\[k\]/);
+  assert.match(ov, /T00:00:00\+08:00/, 'үнэлгээний цонх = өдрийн цонх');
+  assert.match(src('admin.css'), /@media \(max-width: 360px\) \{ \.ms-tabs/);
+  assert.match(src('index.html'), /id="msPanelOverview"[^>]*>\s*<h2 class="sr-only">/);
+  for (const k of ['ok', 'error', 'refusal', 'cap']) assert.ok(A.RUN_STATUS_TEXT[k], k);
 });
