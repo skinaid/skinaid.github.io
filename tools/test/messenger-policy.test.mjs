@@ -9,7 +9,7 @@ import { detectRiskSignals, INTENT_KEYS, INTENTS, intentDef, SIGNAL_INTENT } fro
 import { CONFIDENCE_MIN, decideReply, deliveryFor, parseProposal, resolveIntent } from '../../api/_lib/social/policy.js';
 import { SOCIAL_MODES, SOCIAL_RATINGS, SOCIAL_REASON_TEXT, SOCIAL_ROUTES, SOCIAL_ROUTE_TEXT, socialReasonText } from '../../api/_lib/social/labels.js';
 import { buildSocialCatalog, groupThousands, priceAmounts } from '../../api/_lib/social/catalog-safe.js';
-import { aiDisclosure, composeBotReply, HANDOFF_REPLY, MEDIA_REPLY, needsDisclosure, urgentReply } from '../../api/_lib/social/disclosure.js';
+import { aiDisclosure, composeBotReply, HANDOFF_REPLY, MEDIA_REPLY, needsDisclosure, stripLeadingGreeting, urgentReply } from '../../api/_lib/social/disclosure.js';
 import { normalizeSettings, parseSocialCaps, SOCIAL_CAP_LIMITS, SOCIAL_DEFAULTS } from '../../api/_lib/social/settings-logic.js';
 import { buildSocialRequest, SOCIAL_MAX_TURNS, SOCIAL_OUTPUT_SCHEMA, SOCIAL_PROMPT_VERSION, SOCIAL_SYSTEM_STATIC } from '../../api/_lib/social/prompt.js';
 import { cyrillicRatio, findPii, lintDraft, moneyMentions, numberMentions, offerMentions, percentMentions, redactForLlm } from '../../api/_lib/guardrails.js';
@@ -287,6 +287,23 @@ test("тодруулга, загвар хариу: «AI туслах», «Та»
   assert.ok(composeBotReply("Хариу", { clinicName: "SkinAid", withDisclosure: true }).startsWith(d));
   assert.equal(composeBotReply("Хариу", { clinicName: "SkinAid", withDisclosure: false }), "Хариу");
   assert.equal(composeBotReply("х".repeat(2500), { clinicName: "SkinAid", withDisclosure: true }).length, 2000);
+  // Давхар мэндчилгээ (2026-11-26, анхны бодит ноорог): тодруулга «Сайн байна уу!»-гаар эхэлдэг
+  const greet = (s) => (s.match(/сайн\s+(?:байна\s+)?уу/giu) || []).length;
+  const real = "Сайн байна уу. SkinAid эмнэлэгт хандсанд баярлалаа. Танд юугаар туслах вэ?";
+  const composed = composeBotReply(real, { clinicName: "SkinAid", withDisclosure: true });
+  assert.equal(composed, `${d}\n\nSkinAid эмнэлэгт хандсанд баярлалаа. Танд юугаар туслах вэ?`);
+  assert.equal(greet(composed), 1);
+  assert.equal(composeBotReply(real, { clinicName: "SkinAid", withDisclosure: false }), real, "тодруулгагүй бол мэндчилгээ хэвээр");
+  for (const [inp, out] of [
+    ["сайн уу, танд юугаар туслах вэ?", "Танд юугаар туслах вэ?"],
+    ["Сайн байна уу! 😊 Ажлын цаг 09:00-19:00.", "😊 Ажлын цаг 09:00-19:00."],
+    ["Өдрийн мэнд. Хаяг: …", "Хаяг: …"],
+    ["Hello! Таныг сонслоо.", "Таныг сонслоо."],
+    ["Сайн чанарын үйлчилгээ үзүүлнэ.", "Сайн чанарын үйлчилгээ үзүүлнэ."],
+    ["Сайн уулзалт байлаа.", "Сайн уулзалт байлаа."],
+    ["Сайн байна уу!", ""],
+  ]) assert.equal(stripLeadingGreeting(inp), out, inp);
+  assert.equal(composeBotReply("Сайн байна уу!", { clinicName: "SkinAid", withDisclosure: true }), d, "зөвхөн мэндчилгээ бол тодруулга л");
   const now = new Date("2026-11-24T10:00:00Z");
   assert.equal(needsDisclosure({ lastBotAt: null, now, returnedFromHuman: false }), true);
   assert.equal(needsDisclosure({ lastBotAt: new Date("2026-11-24T09:00:00Z"), now, returnedFromHuman: false }), false);

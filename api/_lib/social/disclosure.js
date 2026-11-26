@@ -1,6 +1,7 @@
 /**
  * Messenger AI — КОДЫН бичдэг тогтмол текстүүд (LLM бичихгүй, хасаж чадахгүй). ЦЭВЭР модуль.
- * Эх сурвалж: skinaid/ubbeauty@1a43c95c src/lib/social/disclosure.ts (агуулга өөрчлөгдөөгүй).
+ * Эх сурвалж: skinaid/ubbeauty@1a43c95c src/lib/social/disclosure.ts. SkinAid-ийн өөрчлөлт: composeBotReply давхар
+ * мэндчилгээг хасна (stripLeadingGreeting).
  *
  *   · AI тодруулга — Meta-ийн бодлого: эхний ботын хариу, удаан завсарласны дараа, хүнээс бот руу буцахад.
  *     1-р үе шатанд ИЛГЭЭХГҮЙ — ноорогт «бот илгээх байсан» текстийг харуулахад л (`composeBotReply`).
@@ -25,11 +26,25 @@ export function needsDisclosure({ lastBotAt, now, returnedFromHuman }) {
   return now.getTime() - lastBotAt.getTime() >= DISCLOSURE_GAP_HOURS * 3600_000;
 }
 
-/** Илгээх текст = (тодруулга) + хариу; Messenger-ийн 2000 тэмдэгтэд багтаана */
+/** Хариуны эхний мэндчилгээ (+ араас нь байгаа цэг таслал, зай) */
+const LEADING_GREETING = /^(?:сайн\s+байна\s+уу|сайн\s+байцгаана\s+уу|сайн\s+уу|өглөөний\s+мэнд|өдрийн\s+мэнд|оройн\s+мэнд|мэнд\s+хүргэе|hello|hi)(?![\p{L}\p{N}])[\s!?.,…:;-]*/iu;
+
+/**
+ * Тодруулга «Сайн байна уу!»-гаар эхэлдэг тул хариуны эхний мэндчилгээг хасна (SkinAid-ийн нэмэлт, 2026-11-26: анхны
+ * бодит ноорогт «Сайн байна уу» хоёр удаа давхардсан). Үлдсэн хэсгийн эхний үсгийг томруулна. Хасаад хоосон бол ''.
+ * @param {string} body
+ */
+export function stripLeadingGreeting(body) {
+  const rest = String(body ?? '').replace(LEADING_GREETING, '').trim();
+  return rest ? rest.charAt(0).toLocaleUpperCase('mn') + rest.slice(1) : '';
+}
+
+/** Илгээх текст = (тодруулга) + хариу (тодруулгатай үед хариуны мэндчилгээг давхардуулахгүй); 2000 тэмдэгтэд багтаана */
 export function composeBotReply(reply, { clinicName, withDisclosure }) {
   const body = String(reply ?? '').trim();
-  const text = withDisclosure ? `${aiDisclosure(clinicName)}\n\n${body}` : body;
-  return text.slice(0, 2000);
+  if (!withDisclosure) return body.slice(0, 2000);
+  const rest = stripLeadingGreeting(body);
+  return (rest ? `${aiDisclosure(clinicName)}\n\n${rest}` : aiDisclosure(clinicName)).slice(0, 2000);
 }
 
 /** Зураг, видео, дуу, файл ирэхэд (LLM-гүй) */
