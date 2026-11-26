@@ -5,18 +5,20 @@
    · Жишээ (messenger_examples: сайн/муу) — ноорогоос (exampleFromDraftAction: урьдчилан бөглөсөн засварлагч — хувийн
      мэдээллийг арилгаад хадгална) эсвэл гараар.
    · AI-д юу орж байна — POST /api/admin {action:'knowledge'} (LLM-гүй).
+   · Eval — POST /api/admin eval_start → eval_chunk (6 кейс тутам) → eval_finish (бодит Claude; ≈ $2–3, өдөрт ≤ 3);
+     түүх = messenger_status/evals (1 read), дэлгэрэнгүй = messenger_status/eval_<id> (1 read).
    Бичилт бүр `messenger_kb/_rev` тэмдгийг НЭГ batch-д шинэчилнэ — сервер мэдлэгийг ≤ 1 минутад дахин ачаална.
    Firestore-д ЗӨВХӨН rules-ийн зөвшөөрсөн талбар (title/body/status, userText/reply/kind/note + updatedAt/updatedBy).
    Квот: таб анх нээхэд ≤ 100 + 100 read (жишээг ноорогийн цэс аль хэдийн уншсан бол дахин уншихгүй). Бүх текстийг esc()-ээр.
    ========================================================================== */
 import { collection, query, limit, getDocs, doc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, DEFAULTS } from './core.js?v=2c361933';
-import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=8848d02a';
+import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=4ec734c0';
 import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
   exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, apiErrorText, EXCLUDE_TEXT, usd3,
-  kbBudget, exampleBudget, KB_BUDGET,
-} from './messenger-lib.js?v=b1c66c99';
+  kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText,
+} from './messenger-lib.js?v=b6428a8a';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');
@@ -38,6 +40,7 @@ let kbEdit = null;             // { id, isNew, snap, opener }
 let exEdit = null;             // { id, isNew, snap, opener, fromDraft }
 let busy = '';                 // '' | 'kb' | 'ex' | 'del' | 'draft' — нэг удаад нэг бичилт
 let trying = false, knowing = false;
+let evaling = false, evalStop = false, evalHistReady = false;
 let lastTry = null;            // { result, run }
 let gen = 0;                   // teardown бүрт нэмэгдэнэ — гарсны дараах async үр дүнг үл тооно
 const alive = (g) => g === gen && !!session.user;
@@ -56,14 +59,18 @@ function syncOpeners() {
 
 /* ---------- Сервер (/api/admin) ---------- */
 const codeErr = (code, body) => Object.assign(new Error(code), { apiCode: code, body });
-async function api(action, payload = {}) {
+/** Хариу ирэхгүй (сүлжээ гацсан) бол ийм хугацааны дараа таслана — функцийн дээд хугацаа 60 с (аудит: «Зогсоох» гацдаг байв) */
+const API_TIMEOUT_MS = 75_000;
+async function api(action, payload = {}, { timeoutMs = API_TIMEOUT_MS } = {}) {
   if (!session.user) throw codeErr('unauthorized');
   let token;
   try { token = await session.user.getIdToken(); } catch (_) { throw codeErr('unauthorized'); }
   let res;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    res = await fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ action, ...payload }), cache: 'no-store' });
-  } catch (_) { throw codeErr('network'); }
+    res = await fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ action, ...payload }), cache: 'no-store', signal: ctl.signal });
+  } catch (_) { throw codeErr(ctl.signal.aborted ? 'client_timeout' : 'network'); } finally { clearTimeout(timer); }
   let j = null;
   try { j = await res.json(); } catch (_) { j = null; }
   // JSON биш хариу: 404/405/501 (GitHub Pages, localhost) = функц энэ хаяг дээр алга; бусад (504 timeout г.м.) = серверийн алдаа
@@ -142,6 +149,7 @@ export function openTraining() {
   if (opened || !session.user) return;
   opened = true;
   load();
+  if (!evalHistReady) loadEvalHistory();
 }
 /** Ноорогийн картын «Жишээ» мөр (m-messenger.js): 'none' | 'new' | 'same' | 'stale' | 'unknown' */
 export const draftExampleState = (d) => (exReady ? exampleState(d, ex.get(exampleIdForDraft(d.id))) : exampleFromDraft(d) ? 'unknown' : 'none');
@@ -647,6 +655,170 @@ knowBtn.addEventListener('click', async () => {
   }
 });
 
+/* ---------- Eval (бодит Claude-тэй) ---------- */
+const evalBtn = $('#btnMsEval'), evalStopBtn = $('#btnMsEvalStop'), evalStatus = $('#msEvalStatus'), evalProg = $('#msEvalProg'), evalOut = $('#msEvalOut'), evalHist = $('#msEvalHist');
+/** Явж буй ажиллагаа (гарах/дахин ачаалахад хагас тайлан хадгалуулах) */
+let evalRun = null;            // { runId, total, done, cost }
+let evalAbandoned = false;     // abandonEval тайланг аль хэдийн гаргуулсан — давтан eval_finish илгээхгүй
+/** Түр алдаа — хэсгийг дахин илгээх нь үнэгүй (сервер давтсан хэсгийг дахин төлөхгүй) */
+const RETRY_CODES = new Set(['network', 'client_timeout', 'server_error', 'timeout', 'busy', 'auth_unavailable']);
+const RETRY_DELAYS = [3000, 10_000, 30_000];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function evalReportHtml(r, heading, reason = '') {
+  const s = r.summary || {};
+  const risky = s.risky || { total: 0, pass: 0 };
+  const cmp = r.compare;
+  const fails = Array.isArray(r.failures) ? r.failures : [];
+  const fb = Number(s.fallbacks) || 0;
+  return `<h3 class="ms-sub" tabindex="-1" id="msEvalRepH">${esc(heading)}</h3>
+    ${r.partial ? `<p class="ms-banner">Хагас дууссан ажиллагаа${reason ? `: ${esc(reason.replace(/\.\s*$/, ''))}` : ' (зогсоосон эсвэл хязгаарт хүрсэн)'}.</p>` : ''}
+    ${r.knowledgeChanged ? '<p class="ms-banner">Ажиллагааны явцад мэдлэг/жишээ өөрчлөгдсөн — зарим кейс хуучин, зарим нь шинэ мэдлэгтэй шалгагдсан.</p>' : ''}
+    <dl class="ms-kv">
+      <div><dt>Тэнцсэн</dt><dd>${Number(s.pass) || 0} / ${Number(s.done) || 0} (${esc(String(s.passRate ?? 0))}%)</dd></div>
+      <div><dt>Эрсдэлтэй кейс зөв</dt><dd>${Number(risky.pass) || 0} / ${Number(risky.total) || 0}${risky.total && risky.pass < risky.total ? ' <span class="ms-bad">— шалгана уу</span>' : ''}</dd></div>
+      <div><dt>Зохиосон үнэ/санал (бодлого барьсан)</dt><dd>${Number(s.invented) || 0}</dd></div>
+      <div><dt>AI-ийн хариу бүтэлгүй (кодоор шилжүүлсэн)</dt><dd>${fb}${fb ? ' <span class="ms-bad">— олон байвал тохиргоо эвдэрсэн</span>' : ''}</dd></div>
+      <div><dt>AI алдаа</dt><dd>${Number(s.errors) || 0}</dd></div>
+      <div><dt>Зардал</dt><dd>${esc(usd(s.costMicroUsd))}</dd></div>
+    </dl>
+    ${cmp ? `<p class="ms-small">Өмнөх бүтэн ажиллагаатай (${cmp.at ? `${esc(fmtDate(typeof cmp.at === 'string' ? new Date(cmp.at) : cmp.at))}, ` : ''}${Number(cmp.done) || 0} кейс) харьцуулбал: шинээр унасан ${cmp.newlyFailing.length ? `<span class="ms-bad">${cmp.newlyFailing.map(esc).join(', ')}</span>` : 'алга'}; шинээр тэнцсэн ${cmp.newlyPassing.length ? `<span class="ms-good">${cmp.newlyPassing.map(esc).join(', ')}</span>` : 'алга'}.</p>` : '<p class="ms-small muted">Харьцуулах өмнөх бүтэн ажиллагаа алга.</p>'}
+    ${fails.length ? `<details class="ms-ctx"><summary>Унасан кейсүүд (${fails.length})</summary><div class="ms-tbl-wrap" tabindex="0" role="region" aria-label="Унасан кейсүүд"><table class="ms-tbl"><thead><tr><th scope="col">Кейс</th><th scope="col">Шалтгаан</th><th scope="col">AI-ийн хариу</th></tr></thead><tbody>${fails.map((f) => `<tr><td>${esc(f.id)}</td><td>${esc(evalWhyText(f.why))}${f.error ? ` (${esc(f.error)})` : ''}</td><td>${esc(f.reply || '')}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
+}
+async function loadEvalHistory() {
+  const g = gen;
+  try {
+    const snap = await getDoc(doc(db, 'messenger_status', 'evals'));
+    if (!alive(g)) return;
+    evalHistReady = true;
+    const runs = snap.exists() && Array.isArray(snap.data().runs) ? snap.data().runs : [];
+    evalHist.innerHTML = runs.length ? runs.map((r) => `<li class="ms-item" data-id="${esc(r.runId)}">
+        <div class="ms-item__body">
+          <p class="ms-item__title"><strong>${esc(fmtDate(r.at))}</strong> · тэнцсэн ${Number(r.pass) || 0}/${Number(r.done) || 0} (${esc(String(r.passRate ?? 0))}%)${r.partial ? ' · хагас' : ''}</p>
+          <p class="ms-item__meta muted">Эрсдэлтэй ${Number(r.risky?.pass) || 0}/${Number(r.risky?.total) || 0}${Number(r.fallbacks) ? ` · бүтэлгүй хариу ${Number(r.fallbacks)}` : ''} · ${esc(usd(r.costMicroUsd))} · ${esc(r.by || '')} · ${esc(r.promptVersion || '')}</p>
+        </div>
+        <div class="ms-item__act"><button class="btn btn--outline btn--sm" type="button" data-eval="${esc(r.runId)}" aria-label="Дэлгэрэнгүй: ${esc(fmtDate(r.at))}-ийн ажиллагаа">Дэлгэрэнгүй</button></div>
+      </li>`).join('') : '<li class="muted">Одоогоор ажиллуулаагүй.</li>';
+  } catch (e) {
+    if (alive(g)) evalHist.innerHTML = `<li class="muted">${esc(errText(e))}</li>`;
+  }
+}
+evalHist.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-eval]');
+  if (!b) return;
+  const g = gen;
+  try {
+    const snap = await getDoc(doc(db, 'messenger_status', `eval_${b.dataset.eval}`));
+    if (!alive(g)) return;
+    if (!snap.exists()) { evalOut.innerHTML = '<p class="muted">Энэ ажиллагааны дэлгэрэнгүй устсан байна.</p>'; return; }
+    const r = snap.data();
+    evalOut.innerHTML = evalReportHtml(r, `Ажиллагаа ${fmtDate(r.finishedAt || r.startedAt)}`);
+    $('#msEvalRepH', evalOut)?.focus();
+  } catch (err) { if (alive(g)) snack(errText(err), { error: true }); }
+});
+/** Түр алдаанд (сүлжээ, 5xx, хэсэг явж байна) дахин оролдоно — давтсан хэсгийг сервер дахин төлөхгүй */
+async function withRetry(fn, g, label, { stoppable = true } = {}) {
+  for (let i = 0; ; i++) {
+    try { return await fn(); } catch (e) {
+      if (i >= RETRY_DELAYS.length || !RETRY_CODES.has(e.apiCode) || !alive(g) || (stoppable && evalStop)) throw e;
+      // «busy» = хэсэг өөр хүсэлтээр явж байна: сервер түгжээ хэзээ чөлөөлөгдөхийг хэлнэ (≤ 95 с) — тэр хүртэл хүлээнэ
+      const hint = e.apiCode === 'busy' ? Number(e.body && e.body.retryAfterMs) : NaN;
+      const wait = Number.isFinite(hint) ? Math.min(Math.max(hint, 1000), 95_000) : RETRY_DELAYS[i];
+      setStatus(evalStatus, `${apiMsg(e)} ${label}: ${Math.round(wait / 1000)} секундын дараа дахин оролдоно (${i + 1}/${RETRY_DELAYS.length})…`, '');
+      await sleep(wait);
+      // «Зогсоох» хүлээлтийн үеэр дарагдсан бол дахин (төлбөртэй) хэсэг илгээхгүй
+      if (!alive(g) || (stoppable && evalStop)) throw e;
+    }
+  }
+}
+async function runEval() {
+  if (evaling || !session.user) return;
+  const g = gen;
+  // Төлбөртэй ажиллагаа: фокус «Болих» дээр (Enter дахин дарахад санамсаргүй эхлэхгүй — аудит)
+  if (!(await dialog({ title: 'Бодит AI-тай eval ажиллуулах уу?', body: ['Зохиомол 120+ асуултыг AI-д илгээж дүгнэнэ — хэнд ч юу ч илгээхгүй.', 'Ойролцоогоор $2–3 (дээд тал нь ~$5–6), 3–6 минут; сарын хязгаар ба туршилтын (20%) хязгаарт тоологдоно. Өдөрт 3 хүртэл.', 'Дуустал энэ хуудсыг бүү хаа, бүү дахин ачаал.'], confirm: 'Ажиллуулах', cancel: 'Болих', safe: true }))) return;
+  if (!alive(g)) return;
+  evaling = true; evalStop = false; evalRun = null; evalAbandoned = false;
+  evalBtn.setAttribute('aria-disabled', 'true');
+  evalStopBtn.hidden = false;
+  evalOut.innerHTML = '';
+  setStatus(evalStatus, 'Эхлүүлж байна…', '');
+  let st = null;
+  let failErr = null;
+  try {
+    st = await api('eval_start');
+    if (!alive(g)) return;
+    evalRun = { runId: st.runId, total: st.total, done: 0, cost: 0 };
+    evalProg.hidden = false; evalProg.max = st.total; evalProg.value = 0;
+    for (let from = 0; from < st.total && !evalStop; from += st.chunk) {
+      const r = await withRetry(() => api('eval_chunk', { runId: st.runId, from }), g, `Хэсэг ${from / st.chunk + 1}`);
+      if (!alive(g)) return;
+      evalRun.done += r.results.length; evalRun.cost = r.costMicroUsd;
+      evalProg.value = evalRun.done;
+      setStatus(evalStatus, `${evalRun.done} / ${st.total} кейс · ${usd(r.costMicroUsd)}`, '');
+    }
+  } catch (e) {
+    if (!alive(g)) return;
+    failErr = e;
+    setStatus(evalStatus, apiMsg(e), 'err');
+  }
+  try {
+    if (st && alive(g) && !evalAbandoned) {
+      const fin = await withRetry(() => api('eval_finish', { runId: st.runId }), g, 'Тайлан', { stoppable: false });
+      if (!alive(g)) return;
+      evalRun = null;
+      const stopped = evalStop && !failErr;
+      const why = failErr ? apiMsg(failErr) : '';
+      if (fin.discarded) {
+        evalOut.innerHTML = '';
+        setStatus(evalStatus, `${why ? `${why} ` : ''}Нэг ч кейс дуусаагүй тул тайлан хадгалаагүй.`, failErr ? 'err' : '');
+      } else {
+        evalOut.innerHTML = evalReportHtml(fin, failErr ? 'Алдаагаар тасарсан ажиллагааны тайлан' : stopped ? 'Зогсоосон ажиллагааны тайлан' : 'Тайлан', why);
+        const res = `тэнцсэн ${fin.summary.pass}/${fin.summary.done}`;
+        if (failErr) setStatus(evalStatus, `${why} Хагас тайлан (${fin.summary.done}/${st.total} кейс): ${res}.`, 'err');
+        else setStatus(evalStatus, `${stopped ? 'Зогсоосон' : 'Дууслаа'}: ${res}.`, 'ok');
+        // Өөр таб/цэс дээр байвал мэдэгдэнэ
+        if (!evalOut.offsetParent) snack(`Eval ${failErr ? 'алдаагаар тасарлаа' : stopped ? 'зогслоо' : 'дууслаа'}: ${res}.`, failErr ? { error: true } : undefined);
+        else $('#msEvalRepH', evalOut)?.focus();
+      }
+      loadEvalHistory();
+    }
+  } catch (e) {
+    if (!alive(g)) return;
+    if (e.apiCode === 'eval_closed') {
+      // Тайлан аль хэдийн хадгалагдсан (хариу замдаа алдагдаад дахин илгээсэн) — түүхээс харуулна
+      setStatus(evalStatus, `${failErr ? `${apiMsg(failErr)} ` : ''}Тайлан хадгалагдсан — доорх «Өмнөх ажиллагаа»-наас «Дэлгэрэнгүй» дарж харна уу.`, failErr ? 'err' : 'ok');
+      loadEvalHistory();
+    } else setStatus(evalStatus, `${failErr ? `${apiMsg(failErr)} ` : ''}Тайлан гаргаж чадсангүй: ${apiMsg(e)}`, 'err');
+  } finally {
+    if (alive(g)) {
+      evaling = false; evalRun = null;
+      evalBtn.removeAttribute('aria-disabled');
+      evalStopBtn.hidden = true;
+      evalProg.hidden = true;
+      if (document.activeElement === document.body) evalBtn.focus();
+    }
+  }
+}
+evalBtn.addEventListener('click', runEval);
+evalStopBtn.addEventListener('click', () => {
+  evalStop = true;
+  setStatus(evalStatus, 'Одоогийн хэсгийг дуусгаад зогсооно…', '');
+  evalBtn.focus();
+  evalStopBtn.hidden = true;
+});
+/** Гарах / дахин ачаалах / хаахаас өмнө (m-messenger.js, admin.js): явж буй ажлын тайлбар ('' = юу ч явахгүй) */
+export const busyText = () => (evaling
+  ? `Eval явж байна${evalRun ? ` (${evalRun.done}/${evalRun.total} кейс, ${usd(evalRun.cost)})` : ''}. Орхивол одоог хүртэлх кейсийн хагас тайлан хадгалагдана, үлдсэн нь шалгагдахгүй (өдрийн 3 эрхийн нэг хасагдсан).`
+  : '');
+/** Орхихын өмнө: хагас тайланг хадгалуулна (≤ 10 с; алдааг үл тооно — ажиллагаа 7 хоногийн дараа өөрөө устна) */
+export async function abandonEval() {
+  if (!evaling) return;
+  evalStop = true;
+  evalAbandoned = true;
+  const id = evalRun?.runId;
+  if (!id || !session.user) return;
+  try { await api('eval_finish', { runId: id }, { timeoutMs: 10_000 }); } catch (_) { /* best effort */ }
+}
+
 /* ---------- Хадгалаагүй өөрчлөлт, гарах ---------- */
 export const isDirty = () => kbDirty() || exDirty();
 /** Ctrl+S / хадгалах мөр */
@@ -666,7 +838,9 @@ export function discard() {
 export function teardown() {
   gen++;
   opened = false; kbReady = false; exReady = false; loadingKb = null; loadingEx = null; lastTry = null;
-  busy = ''; trying = false; knowing = false;
+  busy = ''; trying = false; knowing = false; evaling = false; evalStop = true; evalHistReady = false; evalRun = null;
+  evalBtn.removeAttribute('aria-disabled'); evalStopBtn.hidden = true; evalProg.hidden = true;
+  evalOut.innerHTML = ''; evalHist.innerHTML = ''; setStatus(evalStatus, '', '');
   kbForm.inert = false; exForm.inert = false;
   tryBtn.removeAttribute('aria-disabled'); knowBtn.removeAttribute('aria-disabled');
   kb.clear(); ex.clear();

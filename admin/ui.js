@@ -243,8 +243,9 @@ function ensureBar() {
   return bar;
 }
 
-/** @param {string} view  @param {{ isDirty: () => boolean, save?: () => Promise<any>, discard?: () => void, reset?: () => void, anchor?: Element, anchors?: Element[], bar?: boolean }} api
- *  anchors — нэг цэсэд хэд хэдэн маягт (таб) байвал тус бүрийн «Хадгалах» мөр */
+/** @param {string} view  @param {{ isDirty: () => boolean, save?: () => Promise<any>, discard?: () => void, reset?: () => void, anchor?: Element, anchors?: Element[], bar?: boolean, busy?: () => string, leave?: () => Promise<void>|void }} api
+ *  anchors — нэг цэсэд хэд хэдэн маягт (таб) байвал тус бүрийн «Хадгалах» мөр
+ *  busy — явж буй ажлын тайлбар ('' = юу ч явахгүй; гарах/хаахад анхааруулна, хадгалах мөрийг ГАРГАХГҮЙ); leave — орхихын өмнө */
 export function registerForm(view, api) {
   forms.set(view, api);
   if (io) for (const a of anchorsOf(api)) io.observe(a);
@@ -252,6 +253,12 @@ export function registerForm(view, api) {
 const anchorsOf = (f) => (f.anchors || (f.anchor ? [f.anchor] : [])).filter(Boolean);
 export function setCurrentView(view) { currentView = view; refreshDirty(); }
 export const anyDirty = () => !!session.user && [...forms.values()].some((f) => f.isDirty());
+/** Явж буй ажил (жишээ нь Messenger AI-ийн eval) — гарах/хаахаас өмнө анхааруулах текст ('' = алга) */
+export const busyText = () => (session.user ? [...forms.values()].map((f) => (f.busy ? f.busy() : '')).find(Boolean) || '' : '');
+/** Гарахын өмнө явж буй ажлуудад мэдэгдэнэ (хагас үр дүнг хадгалуулах) */
+export async function leaveBusy() {
+  await Promise.all([...forms.values()].map(async (f) => { try { if (f.busy && f.busy() && f.leave) await f.leave(); } catch (_) { /* best effort */ } }));
+}
 /** Гарах үед: маягтуудыг «ачаалаагүй» төлөвт оруулна (хадгалах мөр нэвтрэх хуудсан дээр гарахгүй, дараагийн нэвтрэлт цэвэр) */
 export function resetForms() {
   forms.forEach((f) => { if (f.reset) f.reset(); });

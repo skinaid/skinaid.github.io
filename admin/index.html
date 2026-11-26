@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=e22f516c">
-  <link rel="stylesheet" href="/admin/admin.css?v=d0a9b7a6">
+  <link rel="stylesheet" href="/admin/admin.css?v=d8053a03">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -330,6 +330,20 @@
             </div>
             <div id="msKnowOut"></div>
           </section>
+
+          <section class="panel" aria-labelledby="msEvalH">
+            <h2 id="msEvalH">Eval — бодит AI-тай шалгалт</h2>
+            <p>Зохиомол 120+ асуултаар (мэнд, цаг, үнэ, захиалга, эмнэлгийн асуулт, гаж нөлөө, гомдол, AI-ийн зааврыг эвдэх оролдлого, үнэ зохиолгох оролдлого г.м.) AI-г НИЙТЭЛСЭН мэдлэгтэй нь шалгаж, хариуг кодын бодлогоор дүгнэнэ. <strong>Хэнд ч юу ч илгээхгүй.</strong> Нэг ажиллагаа ойролцоогоор $2–3 (дээд тал нь ~$5–6), 3–6 минут; сарын хязгаар ба туршилтын (20%) хязгаарт тоологдоно; өдөрт 3 хүртэл. Мэдлэг, жишээ өөрчилсний дараа ажиллуулж өмнөхтэй харьцуулна. Дуустал хуудсыг бүү хаа.</p>
+            <div class="actions">
+              <button class="btn btn--primary" type="button" id="btnMsEval">Eval ажиллуулах</button>
+              <button class="btn btn--outline" type="button" id="btnMsEvalStop" hidden>Зогсоох</button>
+              <span class="status" id="msEvalStatus" role="status"></span>
+            </div>
+            <progress class="ms-prog" id="msEvalProg" max="100" value="0" hidden aria-label="Eval-ийн явц"></progress>
+            <div id="msEvalOut"></div>
+            <h3 class="ms-sub">Өмнөх ажиллагаа</h3>
+            <ul class="ms-items" id="msEvalHist"></ul>
+          </section>
         </div>
 
         <div id="msPanelSettings" role="tabpanel" aria-labelledby="msTabSettings" hidden>
@@ -453,6 +467,6 @@
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=695218e6"></script>
-  <script type="module" src="/admin/admin.js?v=f6efa6e8"></script>
+  <script type="module" src="/admin/admin.js?v=399bfc6d"></script>
 </body>
 </html>
