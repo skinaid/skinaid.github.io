@@ -46,6 +46,72 @@ test('admin: normalizeSettings, parseCaps = серверийнх (ижил ор�
   }
 });
 
+test('admin («Автомат»): бичих баримт — анхдагч үзэгчид/хоосон жагсаалтыг бичихгүй (rules хуучин байсан ч «Яаралтай зогсоох» хадгалагдана)', () => {
+  const H = 'c'.repeat(64);
+  const RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
+  const block = RULES.slice(RULES.indexOf('match /messenger_settings/{doc}'), RULES.indexOf('match /messenger_audit/{id}'));
+  const keys = (re) => [...block.match(re)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const only = keys(/keys\(\)\.hasOnly\(\[([^\]]+)\]\)/);
+  const all = keys(/keys\(\)\.hasAll\(\[([^\]]+)\]\)/);
+  const audit = RULES.slice(RULES.indexOf('match /messenger_audit/{id}'), RULES.indexOf('match /messenger_kb/{id}'));
+  const detailOnly = [...audit.match(/detail\.keys\(\)\.hasOnly\(\[([^\]]+)\]\)/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  // Нийтлэгдсэн ХУУЧИН rules (origin/main, 2026-11-26)-ийн зөвшөөрдөг талбар — шинэ admin түүнд ч таарах ёстой (горим auto-оос бусад үед)
+  const OLD = ['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'lastAuditId', 'updatedAt', 'updatedBy'];
+  const OLD_DETAIL = ['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd'];
+  const META = ['lastAuditId', 'updatedAt', 'updatedBy'];
+  for (const d of [null, { mode: 'shadow' }, { mode: 'shadow', killSwitch: true }, { mode: 'off', autoAudience: 'test', testThreads: [] }, { mode: 'auto' }, { mode: 'auto', killSwitch: true },
+    { mode: 'auto', autoAudience: 'all' }, { mode: 'auto', testThreads: [H] }, { mode: 'shadow', autoAudience: 'all', testThreads: [H] }]) {
+    const n = A.normalizeSettings(d);
+    const doc = A.settingsDoc(n);
+    const written = [...Object.keys(doc), ...META];
+    for (const k of written) assert.ok(only.includes(k), `${k} rules-д зөвшөөрөгдөөгүй`);
+    for (const k of all) assert.ok(written.includes(k), `${k} заавал байх ёстой`);
+    for (const k of Object.keys(doc)) assert.ok(detailOnly.includes(k), `audit detail: ${k}`);
+    // Бичсэн баримтыг сервер/admin буцааж уншихад ИЖИЛ тохиргоо гарна (орхисон талбар = анхдагч)
+    assert.deepEqual(A.normalizeSettings(doc), n, JSON.stringify(d));
+    const s = serverNormalize(doc);
+    assert.deepEqual([s.autoAudience, s.testThreads], [n.autoAudience, n.testThreads]);
+    if (n.autoAudience === 'test' && !n.testThreads.length) {
+      assert.deepEqual(written.sort(), [...OLD].sort(), `анхдагч үзэгчидтэй баримт = хуучин rules-ийн яг 7 талбар (${JSON.stringify(d)})`);
+      assert.deepEqual(Object.keys(doc).sort(), [...OLD_DETAIL].sort());
+    }
+  }
+  assert.equal(A.settingsDoc(A.normalizeSettings({ mode: 'auto', autoAudience: 'all' })).autoAudience, 'all');
+  assert.deepEqual(A.settingsDoc(A.normalizeSettings({ mode: 'auto', testThreads: [H] })).testThreads, [H]);
+});
+
+test('admin («Автомат»): сервер илгээж чадахгүй бол тууз худал хэлэхгүй (sendBlocker); амьд ярианы илгээгээгүй ноорог сүүдрээс ялгарна', () => {
+  const ok = { config: { metaPageToken: true, metaAppId: true, metaPageId: true }, metaToken: 'ok' };
+  assert.equal(A.sendBlocker(ok), '');
+  assert.equal(A.sendBlocker({ ...ok, metaToken: null }), '', 'token хараахан шалгагдаагүй (cron өдөрт нэг) — саад биш');
+  assert.equal(A.sendBlocker({ ...ok, metaToken: 'network' }), '', 'шалгаж чадаагүй нь token буруу гэсэн үг биш');
+  for (const st of [null, undefined, {}, { config: null }, { config: 'x' }]) assert.match(A.sendBlocker(st), /холбогдоогүй/);
+  assert.match(A.sendBlocker({ config: { ...ok.config, metaPageToken: false } }), /META_PAGE_TOKEN/);
+  assert.match(A.sendBlocker({ config: { metaPageToken: true, metaAppId: true } }), /id/);
+  assert.match(A.sendBlocker({ config: { ...ok.config, metaAppId: false } }), /id/);
+  for (const t of ['token_invalid', 'page_mismatch', 'permission']) assert.match(A.sendBlocker({ ...ok, metaToken: t }), /пэйжийн token/);
+  // Ноорогийн тэмдэг
+  assert.equal(A.sendBadge({ mode: 'shadow', sendStatus: null }), null);
+  assert.equal(A.sendBadge({ sendStatus: undefined }), null, 'хуучин ноорог (талбаргүй)');
+  assert.equal(A.sendBadge(null), null);
+  assert.deepEqual(A.sendBadge({ mode: 'auto', sendStatus: null }), { tone: 'muted', text: 'Илгээгээгүй — ажилтан хариулна' });
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'sent' }, '14:32').text, /илгээсэн · 14:32/);
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'failed', sendReason: 'token_invalid' }).text, /Илгээж чадсангүй: пэйжийн token хүчингүй/);
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'skipped', sendReason: 'standby' }).text, /Илгээгээгүй: яриаг өөр апп/);
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'skipped', sendReason: 'шинэ_код' }).text, /шинэ_код/, 'танихгүй шалтгаан — кодоороо');
+  assert.equal(A.sendBadge({ mode: 'auto', sendStatus: 'weird' }), null);
+  // Туршилтын акаунт нэмэх/хасах; түүхий (цэвэрлээгүй) тохиргоонд isLiveThread унахгүй
+  const H = 'c'.repeat(64), G = 'd'.repeat(64);
+  assert.deepEqual(A.toggleTestThread([], H), [H]);
+  assert.deepEqual(A.toggleTestThread([H, G], H), [G]);
+  assert.equal(A.toggleTestThread([H], 'x'), null);
+  const full = Array.from({ length: A.TEST_THREADS_MAX }, (_, i) => i.toString(16).padStart(64, '0'));
+  assert.equal(A.toggleTestThread(full, H), null, 'дүүрсэн');
+  assert.equal(A.toggleTestThread(full, full[0]).length, A.TEST_THREADS_MAX - 1, 'дүүрсэн үед хасаж болно');
+  assert.equal(A.isLiveThread({ mode: 'auto', killSwitch: false, autoAudience: 'test', testThreads: H }, H), false);
+  assert.equal(A.isLiveThread({ mode: 'auto', killSwitch: false, autoAudience: 'test' }, H), false);
+});
+
 test('admin: audit id нь rules-ийн хэлбэрт (8–64, ^[A-Za-z0-9_-]+$); сар = серверийн ubMonth', () => {
   for (let i = 0; i < 50; i++) {
     const id = A.auditId();

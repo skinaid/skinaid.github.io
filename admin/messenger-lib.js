@@ -81,7 +81,34 @@ export function normalizeSettings(d) {
 /** Бот энэ ярианд ШУУД хариулах эсэх — api/_lib/social/settings-logic.js isLive-тэй ИЖИЛ */
 export function isLiveThread(settings, threadId) {
   if (!settings || settings.mode !== 'auto' || settings.killSwitch !== false) return false;
-  return settings.autoAudience === 'all' || (isThreadId(threadId) && settings.testThreads.includes(threadId));
+  return settings.autoAudience === 'all' || (isThreadId(threadId) && Array.isArray(settings.testThreads) && settings.testThreads.includes(threadId));
+}
+
+/**
+ * Сервер одоо илгээж ЧАДАХГҮЙ шалтгаан (messenger_status/main — сервер бичсэн сүүлийн төлөв) → текст; чадна = ''.
+ * Тууз, баталгаажуулах цонх «шууд хариулж байна» гэж худал хэлэхгүйн тулд (api/_lib/outbound.js not_configured, token алдаа).
+ * @param {Record<string, any> | null | undefined} st
+ */
+export function sendBlocker(st) {
+  const cfg = st && typeof st === 'object' ? st.config : null;
+  if (!cfg || typeof cfg !== 'object') return 'сервер хараахан холбогдоогүй (төлөв алга)';
+  if (cfg.metaPageToken !== true) return 'серверт пэйжийн token (META_PAGE_TOKEN) тохируулаагүй';
+  if (cfg.metaAppId !== true || cfg.metaPageId !== true) return 'серверт Meta аппын id эсвэл пэйжийн id тохируулаагүй';
+  if (['token_invalid', 'page_mismatch', 'permission'].includes(st.metaToken)) return `пэйжийн token: ${metaTokenText(st.metaToken)}`;
+  return '';
+}
+
+/**
+ * Firestore-д бичих тохиргооны талбар (lastAuditId/updatedAt/updatedBy-гүй) ба audit-ийн detail — ИЖИЛ объект.
+ * Анхдагч утгыг (autoAudience 'test', хоосон testThreads) БИЧИХГҮЙ: rules шинэчлэгдээгүй (шинэ талбаргүй) байсан ч
+ * «Яаралтай зогсоох» ба «Автомат» биш горимын хадгалалт татгалзагдахгүй; rules ба сервер байхгүйг анхдагчаар уншина.
+ * @param {ReturnType<typeof normalizeSettings>} n  normalizeSettings-ийн гаралт
+ */
+export function settingsDoc(n) {
+  const d = { mode: n.mode, killSwitch: n.killSwitch, monthlyRunCap: n.monthlyRunCap, monthlyCostCapUsd: n.monthlyCostCapUsd };
+  if (n.autoAudience === 'all') d.autoAudience = 'all';
+  if (n.testThreads.length) d.testThreads = [...n.testThreads];
+  return d;
 }
 
 /** Туршилтын акаунтын жагсаалтад нэмэх/хасах → шинэ жагсаалт; дүүрсэн / буруу id бол null */
@@ -129,7 +156,10 @@ export const SEND_KIND_TEXT = { reply: 'AI-ийн хариу', handoff: '«аж�
  * @param {{ sendStatus?: string|null, sendReason?: string|null }} d @param {string} when  илгээсэн мөч (форматласан)
  */
 export function sendBadge(d, when = '') {
-  if (!d || !d.sendStatus) return null;
+  if (!d) return null;
+  // Амьд ярианы ноорог боловч илгээх оролдлого хийгээгүй («Хүн хянана» чиглэл г.м.) — сүүдрийн ноорогоос ялгана:
+  // үйлчлүүлэгч юу ч аваагүй, ажилтан хариулах ёстой
+  if (!d.sendStatus) return d.mode === 'auto' ? { tone: 'muted', text: 'Илгээгээгүй — ажилтан хариулна' } : null;
   if (d.sendStatus === 'sent') return { tone: 'ok', text: `✓ Үйлчлүүлэгчид илгээсэн${when ? ` · ${when}` : ''}` };
   if (d.sendStatus === 'failed') return { tone: 'warn', text: `Илгээж чадсангүй: ${sendReasonText(d.sendReason)}` };
   if (d.sendStatus === 'skipped') return { tone: 'muted', text: `Илгээгээгүй: ${sendReasonText(d.sendReason)}` };
