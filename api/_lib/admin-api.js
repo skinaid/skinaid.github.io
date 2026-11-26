@@ -13,6 +13,7 @@
  *                 өдөрт ≤ ADMIN_TESTS_PER_DAY, сард ≤ сарын AI хязгаарын 20% (үйлдвэрлэлийн ноорогт үлдээнэ); Claude-ийг
  *                 дуудахаас ӨМНӨ тоолно; инстанст нэг удаад нэг; яаралтай зогсоолт асаалттай бол татгалзана. Горим
  *                 «Унтраалттай» үед ч ажиллана (асаахаас өмнө шалгах).
+ *   · crisis_check — хямралын автомат зогсолтын шалгалт (crisis.js) — admin «Буруу» үнэлгээ хадгалсны дараа
  *   · eval_start / eval_chunk / eval_finish — бодит Claude-тэй eval (≥ 100 зохиомол кейс, generated/eval-cases.js) ҮЙЛДВЭРЛЭЛИЙН
  *                 мэдлэгтэй; хэсэг тус бүр ≤ 6 кейс (зэрэг, функцийн 60 с-т багтана; Claude-ээс ӨМНӨ хэсгийг эзэмшинэ — давхар
  *                 төлөхгүй). Өдөрт ≤ 3 ажиллагаа, нэг ажиллагаа ≤ $5 (хэтэрвэл зогсоно), сарын хязгаар ба туршилттай ижил admin-ий
@@ -68,6 +69,7 @@ export function createAdminHandler(deps) {
   const clock = deps.clock ?? Date.now;
   /** Инстанст нэг удаад нэг туршилт (олон таб, давхар дарах) */
   let testInFlight = false;
+  let lastCrisisCheck = -Infinity;
 
   /** @type {Record<string, (rt: any, body: Record<string, any>, started: number, who: { email: string }) => Promise<Response>>} */
   const actions = {
@@ -104,6 +106,24 @@ export function createAdminHandler(deps) {
           blocks: req.system.slice(1).map((b) => b.text),
         },
       });
+    },
+
+    /** «Буруу» үнэлгээ хадгалсны дараа (admin) — хямралын шалгалт (≤ 200 read; инстанст 30 с-д нэг) */
+    async crisis_check(rt) {
+      if (!rt.guard) return fail(503, 'not_configured');
+      // Инстанст 30 с-д ≤ 1 (уншилт ≤ 53); хоцорсон хүсэлтэд хэзээ дахин илгээхийг хэлнэ — admin дахин нэг удаа шалгана
+      const wait = 30_000 - (clock() - lastCrisisCheck);
+      if (wait > 0) return json({ ok: true, trip: false, throttled: true, retryAfterMs: wait + 500 });
+      lastCrisisCheck = clock();
+      let r;
+      try {
+        r = await rt.guard.check({ ratings: true });
+      } catch (e) {
+        // Бүтэлгүй шалгалт дараагийнхыг 30 с хаахгүй (баталгаажуулах аудит)
+        lastCrisisCheck = -Infinity;
+        throw e;
+      }
+      return json({ ok: true, trip: r.trip, reason: r.trip ? r.reason : null, stopped: Boolean(r.stopped) });
     },
 
     async eval_start(rt, body, started, who) {

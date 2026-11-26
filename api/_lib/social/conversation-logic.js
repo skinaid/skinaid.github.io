@@ -11,7 +11,10 @@
  *     `AUTOMATION_ECHO_MS` дотор ирсэн echo = автомат. Мөн: ижил текст (`echoFingerprint`) ≥ 3 өөр ярианд гарсан =
  *     автомат загвар; хэрэглэгч огт бичээгүй ярианы echo = Page-ээс эхэлсэн автомат (Comment to message, зарын greeting).
  *     Сүүдэр горимд алдах эрсдэл бага (ажилтныг автомат гэж үзвэл зөвхөн илүү ноорог бичнэ).
- *     TODO(3-р үе шат, assist/auto): чиглэлийг ЭСРЭГЭЭР болго — тодорхойгүй echo = ажилтан (`human`).
+ *     2026-11-27: ангилал бүр ШАЛТГААНТАЙ (`classifyEchoWhy` → own_app | known_app | template | no_user | fast_gap | default) —
+ *     мессеж ба өдрийн тоологчид хадгалж бодит echo-гоор тохируулна. `echoPolicy: 'strict'` (3-р үе шат: assist/auto) —
+ *     тодорхойгүй echo (no_user, fast_gap) = АЖИЛТАН (бот ажилтны яриаг таслахгүй); зөвхөн манай апп ба ≥ 3 ярианд давтагдсан
+ *     загвар автомат. Одоо (сүүдэр) идэвхгүй — `planBatch`-ийн анхдагч 'shadow'.
  *   · take_thread_control → human; бидэнд pass_thread_control → bot.
  *   · хүн 12 цаг идэвхгүй байхад хэрэглэгч бичвэл → bot руу буцна.
  *   · standby (өөр апп яриаг эзэмшиж байна) мессежийг хадгална; сүүдэр горимд ноорог бичсээр.
@@ -24,6 +27,8 @@ import { createHash } from 'node:crypto';
 export const HUMAN_IDLE_HOURS = 12;
 /** Хэрэглэгчийн мессежээс хойш ийм хурдан ирсэн пэйжийн echo = Meta-ийн автомат хариу (хүн биш) */
 export const AUTOMATION_ECHO_MS = 15_000;
+/** strict бодлого (3-р үе шат): илүү нарийн босго — production-д Meta-ийн автомат хариу 2–4 с, ажилтан ~1 цаг (2026-11-27) */
+export const STRICT_AUTOMATION_ECHO_MS = 8_000;
 /** Meta-ийн автоматжуулалтын апп id (тогтоогдвол). Page Inbox (263902037430900) энд ОРОХГҮЙ — хүний хариу ч тэр id-тай. */
 export const KNOWN_AUTOMATION_APP_IDS = Object.freeze([]);
 /** Ижил echo текст ийм тооны ӨӨР ярианд гарсан бол Meta-ийн автомат загвар (messenger_echo_templates) */
@@ -38,7 +43,7 @@ export const AUTOMATION_TEMPLATE_MIN_CONVERSATIONS = 3;
  * @typedef {{ id: string, kind: import('./meta-events.js').SocialEventKind, mid: string|null, eventTime: Date,
  *   payload: import('./meta-events.js').SocialEventPayload }} StoredEvent
  * @typedef {{ eventId: string, role: MessageRole, textHash: string|null, kind: MessageKind, text: string,
- *   attachments: string[], mid: string|null, sentAt: Date }} PlannedMessage
+ *   attachments: string[], mid: string|null, sentAt: Date, echoWhy?: string }} PlannedMessage
  * @typedef {{ type: 'none', reason: 'mode_off'|'human_active'|'no_user_message'|'already_answered' }
  *   | { type: 'agent', replyToEventId: string } | { type: 'media_template', replyToEventId: string }} BatchAction
  */
@@ -53,31 +58,68 @@ export function echoFingerprint(text) {
   return createHash('sha256').update(norm).digest('hex').slice(0, 32);
 }
 
+/** @typedef {'own_app'|'known_app'|'template'|'no_user'|'fast_gap'|'default'} EchoWhy */
+/** Echo-гийн бодлого: shadow (одоо) — тодорхойгүйг автомат гэж үзнэ; strict (3-р үе шат) — хэрэглэгчгүй яриа = ажилтан,
+ *  хурдан хариуны босго 8 с (Meta-ийн автомат хариу 2–4 с тул автомат хэвээр — бот дуугүй болохгүй; аудит) */
+export const ECHO_POLICIES = Object.freeze(['shadow', 'strict']);
+
 /**
- * Пэйжийн echo хэнийх вэ — манай бот, Meta-ийн автомат хариу, эсвэл ажилтан.
+ * Пэйжийн echo хэнийх вэ, ЯАГААД — манай бот, Meta-ийн автомат хариу, эсвэл ажилтан.
  * @param {Pick<StoredEvent, 'eventTime' | 'payload'>} echo
- * @param {{ ownAppId: string|null, lastUserAt: Date|null, automationHashes?: ReadonlySet<string> }} ctx
- * @returns {EchoSource}
+ * @param {{ ownAppId: string|null, lastUserAt: Date|null, userWrote?: boolean, automationHashes?: ReadonlySet<string>, policy?: 'shadow'|'strict' }} ctx
+ *   userWrote — хэрэглэгч энэ ярианд бичсэн нь мэдэгдэж байгаа ч echo-оос ӨМНӨХ мөч нь тодорхойгүй (lastUserAt = null)
+ * @returns {{ source: EchoSource, why: EchoWhy }}
  */
-export function classifyEcho(echo, ctx) {
+export function classifyEchoWhy(echo, ctx) {
   const app = echo.payload.app_id ?? null;
-  if (ctx.ownAppId && app === ctx.ownAppId) return 'own_bot';
-  if (app && KNOWN_AUTOMATION_APP_IDS.includes(app)) return 'automation';
+  if (ctx.ownAppId && app === ctx.ownAppId) return { source: 'own_bot', why: 'own_app' };
+  if (app && KNOWN_AUTOMATION_APP_IDS.includes(app)) return { source: 'automation', why: 'known_app' };
   const fp = echoFingerprint(echo.payload.text);
-  if (fp && ctx.automationHashes?.has(fp)) return 'automation';
+  if (fp && ctx.automationHashes?.has(fp)) return { source: 'automation', why: 'template' };
+  const strict = ctx.policy === 'strict';
+  // Хэрэглэгч бичсэн ч echo-оос өмнөх мөч тодорхойгүй (echo хоцорч, дараалал алдагдаж ирсэн) — «бичээгүй» гэж бүү андуур:
+  // зөрүүг хэмжих боломжгүй тул ажилтан гэж үзнэ (баталгаажуулах аудит; өмнөх зан төлөв)
+  if (!ctx.lastUserAt && ctx.userWrote) return { source: 'staff', why: 'default' };
   // Хэрэглэгч энэ ярианд огт бичээгүй — Page-ээс эхэлсэн (Comment to message, зарын greeting)
-  if (!ctx.lastUserAt) return 'automation';
+  if (!ctx.lastUserAt) return { source: strict ? 'staff' : 'automation', why: 'no_user' };
   const gap = echo.eventTime.getTime() - ctx.lastUserAt.getTime();
-  if (gap >= 0 && gap <= AUTOMATION_ECHO_MS) return 'automation';
-  return 'staff';
+  if (gap >= 0 && gap <= (strict ? STRICT_AUTOMATION_ECHO_MS : AUTOMATION_ECHO_MS)) return { source: 'automation', why: 'fast_gap' };
+  return { source: 'staff', why: 'default' };
+}
+
+/** @returns {EchoSource} — classifyEchoWhy-ийн эх сурвалж л */
+export function classifyEcho(echo, ctx) {
+  return classifyEchoWhy(echo, ctx).source;
 }
 
 const hoursBetween = (a, b) => (b.getTime() - a.getTime()) / 3600_000;
 
 /**
+ * Echo-гийн ӨМНӨХ хэрэглэгчийн мессежийн мөч: энэ багцынх (эрэмбэлсэн тул ≤ echo), эс бөгөөс ярианы lastUserAt — зөвхөн echo-оос
+ * өмнө бол. Аудит: дахин боловсруулахад (retry) ярианы lastUserAt аль хэдийн багцын СҮҮЛИЙН мессежээр шинэчлэгдсэн байдаг тул
+ * Meta-ийн автомат хариуны зөрүү сөрөг гарч «ажилтан» гэж ангилагдаад бот 12 цаг дуугүй болдог байв.
+ */
+function userBefore(echoTime, inBatch, convLastUserAt) {
+  if (inBatch) return { lastUserAt: inBatch, userWrote: true };
+  if (!convLastUserAt) return { lastUserAt: null, userWrote: false };
+  return { lastUserAt: convLastUserAt.getTime() <= echoTime.getTime() ? convLastUserAt : null, userWrote: true };
+}
+const ROLE_SOURCE = { bot: 'own_bot', automation: 'automation', staff: 'staff' };
+/**
+ * Аль хэдийн хадгалсан echo (өмнөх оролдлогоор ангилагдсан — pipeline message баримтыг уншина): ангиллыг ДАХИН
+ * тооцохгүй. Дахин боловсруулахад ярианы төлөв өөрчлөгдсөн байдаг тул шинээр тооцвол өөр гарч болно (баталгаажуулах аудит).
+ */
+function knownEcho(known, e) {
+  const k = known?.get(e.id);
+  const source = k && ROLE_SOURCE[k.role];
+  return source ? { source, why: k.echoWhy || 'default' } : null;
+}
+
+/**
  * @param {ConversationSnapshot} conv
  * @param {readonly StoredEvent[]} events
- * @param {{ mode: 'off'|'shadow', ownAppId: string|null, now: Date, automationHashes?: ReadonlySet<string> }} opts
+ * @param {{ mode: 'off'|'shadow', ownAppId: string|null, now: Date, automationHashes?: ReadonlySet<string>, echoPolicy?: 'shadow'|'strict',
+ *   knownEchoes?: ReadonlyMap<string, { role: string, echoWhy?: string|null }> }} opts  knownEchoes — өмнө хадгалсан echo мессеж (event id → ангилал)
  */
 export function planBatch(conv, events, opts) {
   const sorted = [...events].sort((a, b) => a.eventTime.getTime() - b.eventTime.getTime());
@@ -97,6 +139,7 @@ export function planBatch(conv, events, opts) {
   let humanSince = conv.humanSince;
   let lastStaffAt = conv.lastStaffAt;
   let lastUserAt = conv.lastUserAt;
+  let lastUserInBatch = null;
   let added = 0;
   let referral = null;
   /** @type {PlannedMessage[]} */
@@ -111,7 +154,8 @@ export function planBatch(conv, events, opts) {
     const attachments = e.payload.attachments ?? [];
     switch (e.kind) {
       case 'echo': {
-        const source = classifyEcho(e, { ownAppId: opts.ownAppId, lastUserAt, automationHashes: opts.automationHashes });
+        const stored = knownEcho(opts.knownEchoes, e);
+        const { source, why } = stored ?? classifyEchoWhy(e, { ownAppId: opts.ownAppId, ...userBefore(e.eventTime, lastUserInBatch, conv.lastUserAt), automationHashes: opts.automationHashes, policy: opts.echoPolicy });
         if (source === 'staff') {
           state = 'human';
           humanSince = humanSince ?? e.eventTime;
@@ -126,6 +170,9 @@ export function planBatch(conv, events, opts) {
           attachments,
           mid: e.mid,
           sentAt: e.eventTime,
+          echoWhy: why,
+          // Өмнө хадгалсан — өдрийн тоонд дахин тоолохгүй (store.saveBatch)
+          ...(stored ? { echoKnown: true } : {}),
         });
         // Meta-ийн автомат хариу асуултад хариулаагүй гэж үзнэ — сүүдэр ноорог бичигдсээр (үнэлгээнд хэрэгтэй)
         if (lastUser && source !== 'automation') answeredAfterUser = true;
@@ -155,6 +202,7 @@ export function planBatch(conv, events, opts) {
         messages.push({ eventId: e.id, role: 'user', textHash: null, kind, text, attachments, mid: e.mid, sentAt: e.eventTime });
         // Дараалал алдагдсан / хойшилсон багц lastUserAt-ийг ухраахгүй
         if (!lastUserAt || e.eventTime > lastUserAt) lastUserAt = e.eventTime;
+        lastUserInBatch = e.eventTime;
         if (e.payload.referral) referral = { ...e.payload.referral, at: e.eventTime };
         added++;
         if (e.kind !== 'referral') {
@@ -175,7 +223,7 @@ export function planBatch(conv, events, opts) {
   // TODO(3-р үе шат): assist/auto-д standby үед илгээхгүй (thread эзэмшээгүй — code 10 / 2018300).
   else {
     // Сүүлийн хариулаагүй хэсэгт текст байвал агент (бүх мессежийг нэг ноорогт), эс бөгөөс зөвхөн хавсралт
-    const since = lastAnswerAt(sorted, opts.ownAppId, conv.lastUserAt, opts.automationHashes);
+    const since = lastAnswerAt(sorted, opts.ownAppId, conv.lastUserAt, opts.automationHashes, opts.echoPolicy, opts.knownEchoes);
     const pending = sorted.filter(
       (e) => (e.kind === 'message' || e.kind === 'attachment' || e.kind === 'postback') && (!since || e.eventTime >= since),
     );
@@ -192,12 +240,13 @@ export function planBatch(conv, events, opts) {
 }
 
 /** Сүүлийн хүн/ботын хариуны мөч (echo; Meta-ийн автомат хариуг тоолохгүй) — түүнээс хойшхи = хариулаагүй хэсэг */
-function lastAnswerAt(sorted, ownAppId, lastUserBefore, automationHashes) {
+function lastAnswerAt(sorted, ownAppId, lastUserBefore, automationHashes, policy, known) {
   let at = null;
-  let lastUser = lastUserBefore;
+  let lastUser = null;
   for (const e of sorted) {
     if (e.kind === 'echo') {
-      if (classifyEcho(e, { ownAppId, lastUserAt: lastUser, automationHashes }) !== 'automation') at = e.eventTime;
+      const source = knownEcho(known, e)?.source ?? classifyEcho(e, { ownAppId, ...userBefore(e.eventTime, lastUser, lastUserBefore), automationHashes, policy });
+      if (source !== 'automation') at = e.eventTime;
     } else if (e.kind === 'message' || e.kind === 'attachment' || e.kind === 'postback') {
       lastUser = e.eventTime;
     }

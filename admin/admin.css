@@ -529,6 +529,8 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-privacy { padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn); font-size: 13.5px; line-height: 1.45; }
 .ms-privacy strong { display: block; }
 @media (max-width: 380px) { .ms-tabs [role="tab"] { padding-inline: 10px; } }
+/* 4 таб 320px-д хэвтээ гүйлгээгүй багтана (WCAG 1.4.10 — аудит) */
+@media (max-width: 360px) { .ms-tabs { gap: 2px; } .ms-tabs [role="tab"] { padding-inline: 6px; font-size: 15px; } }
 .ms-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .ms-check input { width: 18px; height: 18px; accent-color: var(--purple); }
 .ms-editor { display: grid; gap: 12px; margin: 4px 0 16px; padding: 14px; border: 1.5px solid var(--purple-200); border-radius: 16px; background: var(--cream-50); }
@@ -560,3 +562,26 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-tbl th { font-weight: 800; color: var(--ink-2); }
 .ms-good { color: var(--ok); font-weight: 800; }
 .ms-bad { color: var(--err); font-weight: 800; }
+/* Messenger AI → «Тойм» (нэг өнгө = хэмжээ; тоо, нэр текстээр) */
+.ms-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; margin: 0 0 16px; }
+.ms-tiles > div { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; }
+.ms-tiles dt { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.ms-tiles dd { margin: 4px 0 0; }
+.ms-tiles__v { display: block; margin-bottom: 2px; font-size: 28px; font-weight: 800; color: var(--purple-900); font-variant-numeric: tabular-nums; }
+.ms-tiles__sub { display: block; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.ms-gate { display: inline-flex; gap: 4px; align-items: center; font-weight: 800; margin-left: 4px; }
+.ms-gate--ok { color: var(--ok); }
+.ms-gate--warn { color: var(--warn); }
+.ms-gate--muted { color: var(--muted); }
+.ms-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.ms-ov-grid .panel { margin: 0; }
+.ms-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ms-bars li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; }
+.ms-bars__label { overflow-wrap: anywhere; color: var(--ink-2); }
+.ms-bars__track { height: 10px; background: var(--purple-50); border-radius: 4px; overflow: hidden; }
+.ms-bars__fill { display: block; height: 100%; background: var(--purple); border-radius: 0 4px 4px 0; }
+.ms-bars__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink-2); }
+.ms-cols { display: flex; align-items: flex-end; gap: 2px; height: 96px; padding-top: 4px; border-bottom: 1px solid var(--line); }
+.ms-cols__c { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; min-width: 4px; }
+.ms-cols__bar { display: block; width: 100%; background: var(--purple); border-radius: 4px 4px 0 0; }
+.ms-cols__axis { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: 4px; }

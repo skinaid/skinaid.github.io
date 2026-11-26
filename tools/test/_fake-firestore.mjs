@@ -7,6 +7,7 @@ const RANGE = { LESS_THAN: (c) => c < 0, LESS_THAN_OR_EQUAL: (c) => c <= 0, GREA
 const typeOf = (v) => (v === null ? 'null' : v instanceof Date ? 'date' : typeof v);
 const cmp = (a, b) => (a instanceof Date ? a.getTime() - b.getTime() : a < b ? -1 : a > b ? 1 : 0);
 const unquote = (f) => f.split('.').map((p) => p.replace(/^`|`$/g, '')).join('.');
+// (давхар map-ийн transform-ыг applyTransform дэмжинэ; mask нь зөвхөн дээд түвшний талбар)
 
 export function createFakeFirestore({ projectId = 'skinaid-mn' } = {}) {
   const root = `projects/${projectId}/databases/(default)/documents`;
@@ -21,8 +22,16 @@ export function createFakeFirestore({ projectId = 'skinaid-mn' } = {}) {
   const err = (status, st, message = st) => reply(status, { error: { code: status, status: st, message } });
   const out = (name, d) => ({ name, fields: d.fields, createTime: d.createTime, updateTime: d.updateTime });
 
-  function applyTransform(fields, t, now) {
-    const f = unquote(t.fieldPath);
+  function applyTransform(root, t, now) {
+    // Бодит Firestore шиг: «a.b» = давхар map (mapValue.fields) — өдрийн тоологчийн routes.<route> г.м.
+    const parts = unquote(t.fieldPath).split('.');
+    let fields = root;
+    for (const p of parts.slice(0, -1)) {
+      if (!fields[p] || !fields[p].mapValue) fields[p] = { mapValue: { fields: {} } };
+      fields[p].mapValue.fields = fields[p].mapValue.fields || {};
+      fields = fields[p].mapValue.fields;
+    }
+    const f = parts[parts.length - 1];
     if (t.increment) {
       const cur = decodeValue(fields[f]) || 0;
       const inc = decodeValue(t.increment);
@@ -67,9 +76,18 @@ export function createFakeFirestore({ projectId = 'skinaid-mn' } = {}) {
       if (w.updateMask) {
         fields = { ...(cur?.fields ?? {}) };
         for (const p of w.updateMask.fieldPaths) {
-          const f = unquote(p);
-          if (f in w.update.fields) fields[f] = w.update.fields[f];
-          else delete fields[f];
+          // Бодит Firestore шиг: «a.b» маск = давхар map-ийн НЭГ талбар (бусад дэд талбар хэвээр) — autoStop.resumedAt г.м.
+          const parts = p.includes('`') ? [unquote(p)] : p.split('.');
+          let src = w.update.fields;
+          let dst = fields;
+          for (const seg of parts.slice(0, -1)) {
+            src = src?.[seg]?.mapValue?.fields;
+            dst[seg] = { mapValue: { fields: { ...(dst[seg]?.mapValue?.fields ?? {}) } } };
+            dst = dst[seg].mapValue.fields;
+          }
+          const f = parts[parts.length - 1];
+          if (src && f in src) dst[f] = src[f];
+          else delete dst[f];
         }
       } else {
         fields = { ...w.update.fields };

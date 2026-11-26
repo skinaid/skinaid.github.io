@@ -83,6 +83,9 @@ export function ubDay(date) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
+/** Өдрийн нэгтгэлийн талбарын нэр (давхар map-ийн түлхүүр) — зөвхөн [a-z0-9_] */
+const statKey = (v) => String(v ?? 'unknown').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 40) || 'unknown';
+
 /**
  * @param {ReturnType<import('./firestore.js').createFirestore>} fs
  * @param {{ now?: () => Date }} [opt]
@@ -93,6 +96,80 @@ export function createStore(fs, opt = {}) {
 
   return {
     fs,
+
+    /**
+     * Өдрийн нэгтгэлийн бичилт (messenger_usage/<УБ өдөр>, 90 хоног): increments = [[«a» эсвэл «a.b», n]]. Нэмэлт commit-гүй —
+     * дуудагч өөрийн commit-д нэмнэ («Тойм» KPI).
+     */
+    dayStatsWrite(t, increments) {
+      const day = ubDay(t);
+      return setWrite(`${COL.usage}/${day}`, { day, updatedAt: t, expireAt: new Date(t.getTime() + DAY_DOC_DAYS * DAY) }, {
+        mask: ['day', 'updatedAt', 'expireAt'],
+        transforms: increments.filter(([, n]) => Number.isFinite(n) && n !== 0).map(([f, n]) => transforms.increment(f, n)),
+      });
+    },
+
+    /** Тохиргооны баримт (хэн, хэзээ хадгалсан, updateTime) — хямралын зогсолтод */
+    async readSettingsMeta() {
+      const d = await fs.get(`${COL.settings}/main`);
+      return { settings: normalizeSettings(d?.data), updatedAt: d?.data?.updatedAt instanceof Date ? d.data.updatedAt : null, updatedBy: typeof d?.data?.updatedBy === 'string' ? d.data.updatedBy : null, updateTime: d?.updateTime ?? null, exists: Boolean(d) };
+    },
+
+    /** Сүүлд үнэлсэн ноорог (ratedAt ≥ since — нэг талбарын range, composite index-гүй) */
+    async readRecentRatings(since, limit = 50) {
+      const docs = await fs.query({ collection: COL.drafts, where: [['ratedAt', '>=', since]], orderBy: [['ratedAt', 'desc']], limit });
+      const date = (v) => (v instanceof Date ? v : null);
+      return docs.map((d) => ({ rating: d.data.rating, ratedAt: date(d.data.ratedAt), createdAt: date(d.data.createdAt), promptVersion: typeof d.data.promptVersion === 'string' ? d.data.promptVersion : null, route: d.data.route }));
+    },
+
+    /** Хямралын тоологч: Claude-ийн дараалсан алдаа (messenger_status/main) ба өнөөдрийн зардал */
+    async readCrisisCounters(t) {
+      const paths = [`${COL.status}/main`, `${COL.usage}/${ubDay(t)}`];
+      const m = await fs.batchGet(paths);
+      const st = m.get(paths[0])?.data;
+      const a = st?.autoStop;
+      const date = (v) => (v instanceof Date ? v : null);
+      return {
+        errorStreak: Number(st?.errorStreak) || 0,
+        dayCostMicroUsd: Number(m.get(paths[1])?.data?.costMicroUsd) || 0,
+        autoStop: a && typeof a === 'object' ? { reason: typeof a.reason === 'string' ? a.reason : '', at: date(a.at), resumedAt: date(a.resumedAt) } : null,
+        // Өдрийн зардлаар сүүлд зогсоосон мөч — дараагийн (өөр шалтгааны) зогсолт үүнийг дарахгүй
+        dayCostStopAt: date(st?.dayCostStopAt),
+      };
+    },
+
+    /**
+     * Автомат зогсолт: тохиргоо (killSwitch, горим/хязгаар ХЭВЭЭР) + audit + статус — НЭГ commit, тохиргооны updateTime
+     * precondition-тай (эзэмшигч яг тэр мөчид хадгалсан бол дарахгүй — дараагийн шалгалт дахин үнэлнэ).
+     * @returns {Promise<boolean>} зогсоосон эсэх
+     */
+    async autoStop({ reason, detail, updateTime }) {
+      const t = now();
+      const id = `a_${t.getTime().toString(36)}_auto_${statKey(reason)}`.slice(0, 64);
+      try {
+        await fs.commit([
+          setWrite(`${COL.settings}/main`, { killSwitch: true, lastAuditId: id, updatedAt: t, updatedBy: 'system' }, {
+            mask: ['killSwitch', 'lastAuditId', 'updatedAt', 'updatedBy'],
+            ...(updateTime ? { updateTime } : {}),
+          }),
+          setWrite(`${COL.audit}/${id}`, { action: 'auto_stop', by: 'system', at: t, detail: { reason, ...detail } }, { exists: false }),
+          setWrite(`${COL.status}/main`, { autoStop: { reason, at: t, detail }, errorStreak: 0, ...(reason === 'day_cost' ? { dayCostStopAt: t } : {}) },
+            { mask: ['autoStop', 'errorStreak', ...(reason === 'day_cost' ? ['dayCostStopAt'] : [])] }),
+        ]);
+        return true;
+      } catch (e) {
+        if (e instanceof FirestoreError && e.isPrecondition) return false;
+        throw e;
+      }
+    },
+
+    /**
+     * Автомат зогсолтын дараа эзэмшигч АНХ дахин асаасан мөчийг тэмдэглэнэ (autoStop.resumedAt) — дараагийн ердийн хадгалалт
+     * «дахин асаасан мөч»-ийг урагшлуулж, завсарт үүссэн ноорогийн «Буруу» үнэлгээг тооноос хасахгүй (баталгаажуулах аудит).
+     */
+    async pinResume(at) {
+      await fs.commit([setWrite(`${COL.status}/main`, { autoStop: { resumedAt: at } }, { mask: ['autoStop.resumedAt'], exists: true })]);
+    },
 
     async readSettings() {
       const d = await fs.get(`${COL.settings}/main`);
@@ -292,6 +369,7 @@ export function createStore(fs, opt = {}) {
       for (const m of plan.messages) {
         writes.push(setWrite(`${threadPath(psidHash)}/${COL.messages}/${m.eventId}`, {
           role: m.role, kind: m.kind, text: m.text, attachments: m.attachments, textHash: m.textHash, sentAt: m.sentAt, expireAt: exp,
+          ...(m.echoWhy ? { echoWhy: m.echoWhy } : {}),
         }));
       }
       const c = plan.conversation;
@@ -306,7 +384,28 @@ export function createStore(fs, opt = {}) {
       if (c.referral) th.referral = { source: c.referral.source ?? null, ref: c.referral.ref ?? null, ad_id: c.referral.ad_id ?? null, at: c.referral.at };
       if (plan.messages.length && !asDate(thread?.oldestExpireAt)) th.oldestExpireAt = exp;
       writes.push(setWrite(threadPath(psidHash), th, { mask: Object.keys(th) }));
+      // Echo-гийн ангилал, шалтгаан — өдрийн нэгтгэлд («Тойм»; бодит echo-гоор тохируулах). Мессеж АНХ бичигдэх үед л
+      // тоолно: багцыг дахин боловсруулахад (retry, deadline) давхар тоологдохгүй (аудит) — pipeline хадгалсан echo-г
+      // readEchoMessages-ээр уншиж planBatch-д өгдөг (echoKnown); яриаг thread-ийн түгжээ нэг зэрэг нэг л боловсруулна.
+      const fresh = plan.messages.filter((m) => m.echoWhy && !m.echoKnown);
+      if (fresh.length) {
+        const counts = {};
+        for (const m of fresh) counts[`echo.${statKey(m.role)}_${statKey(m.echoWhy)}`] = (counts[`echo.${statKey(m.role)}_${statKey(m.echoWhy)}`] || 0) + 1;
+        writes.push(this.dayStatsWrite(t, Object.entries(counts)));
+      }
       for (let i = 0; i < writes.length; i += 400) await fs.commit(writes.slice(i, i + 400));
+    },
+
+    /** Аль хэдийн хадгалсан echo мессежүүд (event id → { role, echoWhy }) — дахин боловсруулахад ангиллыг хэвээр авна */
+    async readEchoMessages(psidHash, eventIds) {
+      const paths = eventIds.map((id) => `${threadPath(psidHash)}/${COL.messages}/${id}`);
+      const m = await fs.batchGet(paths);
+      const out = new Map();
+      eventIds.forEach((id, i) => {
+        const d = m.get(paths[i])?.data;
+        if (d && typeof d.role === 'string') out.set(id, { role: d.role, echoWhy: typeof d.echoWhy === 'string' ? d.echoWhy : null });
+      });
+      return out;
     },
 
     /** Event-ийн эцсийн төлөв (done/skipped) — commit-ийн бичилтүүд */
@@ -460,11 +559,18 @@ export function createStore(fs, opt = {}) {
         setWrite(evalRunPath(runId), { updatedAt: t }, { mask: ['updatedAt'], exists: true, transforms: [transforms.increment('done', results.length), transforms.increment('costMicroUsd', evalCost(runs))] }),
         ...evalUsageWrites(runs, month, t),
       ];
+      // Өдрийн нэгтгэл («Тойм»): admin-ий (туршилт + eval) зардал — үйлдвэрлэлийн day_cost шалгуурт ОРОХГҮЙ
+      const cost = evalCost(runs.filter((r) => r?.billable));
+      if (cost) writes.push(this.dayStatsWrite(t, [['adminCostMicroUsd', cost]]));
       await fs.commit(writes);
     },
     /** saveEvalChunk бүтэлгүйтвэл (Claude аль хэдийн төлбөртэй) — зөвхөн ai_runs + сарын зардлыг дахин бичнэ */
     async recordEvalCost({ runs, month }) {
-      await fs.commit(evalUsageWrites(runs, month, now()));
+      const t = now();
+      const writes = evalUsageWrites(runs, month, t);
+      const cost = evalCost(runs.filter((r) => r?.billable));
+      if (cost) writes.push(this.dayStatsWrite(t, [['adminCostMicroUsd', cost]]));
+      await fs.commit(writes);
     },
     /** Бүх ДУУССАН хэсгийн үр дүн (дарааллаар) ба хэсэг бүрийн мэдлэгийн тэмдэг */
     async readEvalResults(runId, total, chunk) {
@@ -509,6 +615,8 @@ export function createStore(fs, opt = {}) {
       const writes = [setWrite(`${COL.runs}/${newId('r')}`, {
         ...run, draftId: null, createdAt: t, expireAt: new Date(t.getTime() + RETENTION_DAYS.runs * DAY),
       }, { exists: false })];
+      // Туршилт/eval-ийн зардал өдрийн нэгтгэлд ТУСДАА (хямралын day_cost шалгуурт орохгүй — өөрийн хязгаартай)
+      if (run.billable) writes.push(this.dayStatsWrite(t, [['adminCostMicroUsd', Math.max(0, Math.round(run.costMicroUsd || 0))]]));
       if (run.billable) {
         const cost = Math.max(0, Math.round(run.costMicroUsd || 0));
         writes.push(setWrite(`${COL.usage}/${month}`, { month, updatedAt: t }, {
@@ -546,6 +654,21 @@ export function createStore(fs, opt = {}) {
           }));
         }
       }
+      // «Тойм»-ын өдрийн нэгтгэл (энэ commit-д — функц тасарвал давхар тоологдохгүй)
+      const stats = [];
+      if (draft) stats.push(['drafts', 1], [`routes.${statKey(draft.route)}`, 1], [`intents.${statKey(draft.intent)}`, 1]);
+      if (run) {
+        stats.push([`runs.${statKey(run.status)}`, 1]);
+        if (run.billable) {
+          stats.push(['costMicroUsd', Math.max(0, Math.round(run.costMicroUsd || 0))], ['inputTokens', Number(run.inputTokens) || 0],
+            ['outputTokens', Number(run.outputTokens) || 0], ['cacheReadTokens', Number(run.cacheReadTokens) || 0], ['cacheWriteTokens', Number(run.cacheWriteTokens) || 0]);
+        }
+        // Claude-ийн ДАРААЛСАН засагдахгүй алдаа (хямралын автомат зогсолт — crisis.js): +1, амжилттай хариу 0. Түр зуурын
+        // (retryable — дахин оролдогдоно) алдаа тоологчийг өөрчлөхгүй (аудит: богино тасалдал зогсоодог байв)
+        if (run.status === 'error' && run.retryable !== true) writes.push(setWrite(`${COL.status}/main`, {}, { mask: [], transforms: [transforms.increment('errorStreak', 1)] }));
+        else if (run.status === 'ok' || run.status === 'refusal') writes.push(setWrite(`${COL.status}/main`, { errorStreak: 0 }, { mask: ['errorStreak'] }));
+      }
+      if (stats.length) writes.push(this.dayStatsWrite(t, stats));
       writes.push(...this.eventStatusWrites(eventStatus));
       if (!writes.length) return draftId;
       try {

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=e22f516c">
-  <link rel="stylesheet" href="/admin/admin.css?v=d8053a03">
+  <link rel="stylesheet" href="/admin/admin.css?v=76b2e753">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -223,6 +223,7 @@
         <p class="ms-modebar" id="msModeBanner" role="status" hidden></p>
         <div class="ms-tabs" role="tablist" id="msTabs" aria-label="Messenger AI">
           <button type="button" role="tab" id="msTabDrafts" data-tab="drafts" aria-controls="msPanelDrafts" aria-selected="true">Ноорог</button>
+          <button type="button" role="tab" id="msTabOverview" data-tab="overview" aria-controls="msPanelOverview" aria-selected="false" tabindex="-1">Тойм</button>
           <button type="button" role="tab" id="msTabTrain" data-tab="train" aria-controls="msPanelTrain" aria-selected="false" tabindex="-1">Сургалт</button>
           <button type="button" role="tab" id="msTabSettings" data-tab="settings" aria-controls="msPanelSettings" aria-selected="false" tabindex="-1">Тохиргоо</button>
         </div>
@@ -236,6 +237,16 @@
           <div class="actions actions--center">
             <button class="btn btn--outline btn--sm" type="button" id="msMore" hidden>Цааш ачаалах (хуучин ноорог)</button>
           </div>
+        </div>
+
+        <div id="msPanelOverview" role="tabpanel" aria-labelledby="msTabOverview" hidden>
+          <h2 class="sr-only">Тойм — сүүлийн өдрүүдийн тоон дүн</h2>
+          <div class="toolbar">
+            <div class="chips" id="msOvChips" role="group" aria-label="Хугацаа"></div>
+            <button class="btn btn--outline btn--sm" type="button" id="btnMsOvReload">Шинэчлэх</button>
+          </div>
+          <p class="status" id="msOvStatus" role="status"></p>
+          <div id="msOverview" aria-busy="false"></div>
         </div>
 
         <div id="msPanelTrain" role="tabpanel" aria-labelledby="msTabTrain" hidden>
@@ -467,6 +478,6 @@
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=695218e6"></script>
-  <script type="module" src="/admin/admin.js?v=399bfc6d"></script>
+  <script type="module" src="/admin/admin.js?v=8ca21d5d"></script>
 </body>
 </html>

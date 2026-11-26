@@ -55,6 +55,11 @@ export function createCronHandler(deps) {
       }
       out.purged.messages = msgs;
       if (Date.now() < deadline - 3000) out.purged.draftExamples = await rt.store.purgeDraftExamples(500);
+      // Хямралын автомат зогсолт (үнэлгээ, алдааны дараалал, өдрийн зардал) — өдөрт нэг удаа ч шалгана
+      if (rt.guard && Date.now() < deadline - 3000) {
+        const c = await rt.guard.check({ ratings: true }).catch(() => null);
+        out.crisis = c ? (c.trip ? c.reason : 'ok') : 'error';
+      }
       const m = metaConfig(env);
       if (m.pageToken && m.pageId && Date.now() < deadline) {
         try {

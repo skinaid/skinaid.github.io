@@ -9,8 +9,10 @@ import { createStore } from './store.js';
 import { createKnowledge } from './knowledge.js';
 import { createClaudeCaller } from './claude.js';
 import { createAgent } from './agent.js';
+import { createCrisisGuard } from './crisis.js';
 import { createPipeline } from './pipeline.js';
 import { metaConfig } from './social/meta-config.js';
+import { SOCIAL_PROMPT_VERSION } from './social/prompt.js';
 
 let cached;
 
@@ -24,8 +26,10 @@ export function getRuntime(env = process.env) {
   const fs = createFirestore({ projectId: auth.projectId, getAccessToken: () => auth.getAccessToken() });
   const store = createStore(fs);
   const knowledge = createKnowledge(store);
-  const agent = createAgent({ store, knowledge, callClaude: createClaudeCaller(), env });
+  // «Буруу» үнэлгээг ОДООГИЙН prompt-ийн хувилбартай ноорогт л тооцно (crisis.js)
+  const guard = createCrisisGuard({ store, promptVersion: SOCIAL_PROMPT_VERSION });
+  const agent = createAgent({ store, knowledge, callClaude: createClaudeCaller(), env, guard });
   const pipeline = createPipeline({ store, agent, ownAppId: metaConfig(env).appId });
-  cached = { store, pipeline, knowledge, agent };
+  cached = { store, pipeline, knowledge, agent, guard };
   return cached;
 }
