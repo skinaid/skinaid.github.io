@@ -24,7 +24,7 @@ assets/js/ubbeauty-config.js  — UB Beauty API хаяг + НИЙТИЙН түл
 admin/                        — Удирдлагын хэсэг: index.html, admin.css, admin.js (эхлэл: нэвтрэлт, #/hash routing),
                                 core.js (Firebase, туслах), ui.js (dialog, snackbar+«Буцаах», хадгалаагүй өөрчлөлтийн мөр,
                                 алдааны хураангуй, тоолуур), lib.js (цэвэр функц — tools/test/admin-lib.test.mjs),
-                                m-bookings|m-settings|m-home|m-catalog|m-pages.js (5 цэс)
+                                m-bookings|m-settings|m-home|m-catalog|m-pages|m-messenger.js (6 цэс), messenger-lib.js
 admin/pages-status.js         — «Эмчилгээний хуудас» цэсийн өгөгдөл (build үүсгэнэ)
 admin/home-data.js            — «Нүүр хуудас» цэсийн анхны утга + сайтын зургийн жагсаалт (build үүсгэнэ, эх: content/home.json)
 admin/claims.js               — tools/lib/claims.mjs-ийн хуулбар: admin хориотой үгийг анхааруулна (build үүсгэнэ)
@@ -328,7 +328,7 @@ Messenger → Meta → POST https://www.skinaid.mn/api/messenger
 | `api/_lib/agent.js`, `claude.js`, `knowledge.js` | Мэдлэг → prompt (кэштэй) → Claude (`fallbacks: "default"`) → бодлого → ноорог |
 | `api/_lib/social/` | UB Beauty-ээс (skinaid/ubbeauty@1a43c95c) шилжүүлсэн цэвэр модулиуд (файл бүрийн толгойд эх сурвалж) |
 | `api/_lib/firestore.js`, `gcp-auth.js` | Firestore REST (firebase-admin-гүй), Google-ийн серверийн эрх (WIF / SA key) |
-| `admin/m-messenger.js` | «Ноорог» (үнэлгээ), «Тохиргоо» (горим, яаралтай зогсоолт, сарын хязгаар, серверийн төлөв) — **дараагийн PR** (#6/#7-ийн admin бүтэц merge болсны дараа) |
+| `admin/m-messenger.js` | «Ноорог» (үнэлгээ), «Тохиргоо» (горим, яаралтай зогсоолт, сарын хязгаар, серверийн төлөв) |
 
 **Хувийн мэдээлэл.** PSID хадгалахгүй (`PSID_SALT`-аар HMAC → `psidHash`). Текст ЗӨВХӨН нууцалсан. Зураг/видео/дууны зөвхөн төрөл
 (URL-гүй), LLM руу хэзээ ч явахгүй. Захиалгын (`bookings`) өгөгдөлд хүрэхгүй. `ai_runs`-д текст байхгүй (токен, зардал, хугацаа л).
@@ -359,8 +359,7 @@ Spark квот: нэг хэрэглэгчийн мессежид ойролцо�
 3. **Rules нийтлэх:** `firestore.rules`-ийг console → Firestore → Rules-д буулгаж Publish (доорх «Rules шалгах»).
 4. **Meta developer апп → Webhooks:** Callback URL `https://www.skinaid.mn/api/messenger`, Verify token = `META_VERIFY_TOKEN`,
    field: `messages`, `message_echoes`, `messaging_postbacks`, `messaging_referrals`, `messaging_handovers`, `standby`.
-5. **Admin → Messenger AI → Тохиргоо → «Сүүдэр»** → Хадгалах (admin цэсийн PR merge болсны дараа). Тэр хүртэл горим анхдагчаар
-   «Унтраалттай» — webhook юу ч хадгалахгүй, AI ажиллахгүй.
+5. **Admin → Messenger AI → Тохиргоо → «Сүүдэр»** → Хадгалах. «Серверийн төлөв»-д webhook-ийн сүүлийн цаг гарч эхэлнэ.
 
 **Яаралтай зогсоох:** admin → Messenger AI → «Яаралтай зогсоох» (нэг товч; мессеж хадгалагдахаа больж, AI ажиллахгүй). Бүрэн
 салгах: Vercel env-ээс `ANTHROPIC_API_KEY`-г устгах эсвэл Meta аппын webhook-ийг унтраах.

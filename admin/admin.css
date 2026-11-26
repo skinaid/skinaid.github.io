@@ -113,7 +113,7 @@ body.has-savebar .main { padding-bottom: 96px; }
   .topbar__out:hover { background: rgba(255,255,255,.1); }
   .side { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; top: auto; height: auto; padding: 6px 4px calc(6px + var(--safe-b)); gap: 0; flex-direction: row; box-shadow: 0 -6px 20px rgba(31,18,48,.18); }
   .side__logo, .side__foot { display: none; }
-  .menu { flex: 1; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+  .menu { flex: 1; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; }
   .menu a { flex-direction: column; justify-content: center; gap: 3px; min-height: 52px; padding: 6px 2px; font-size: 11px; line-height: 1.15; text-align: center; border-radius: 12px; }
   .menu a[aria-current="page"] { background: rgba(255,255,255,.14); color: #fff; }
   .menu a[aria-current="page"] .nav__ic { color: var(--gold); }
@@ -468,3 +468,57 @@ body.has-savebar .snackbar { bottom: 92px; }
   body.has-savebar .snackbar { bottom: calc(var(--nav-h) + var(--safe-b) + 124px); }
 }
 .hm-post__ctl .btn-icon:focus-visible { outline-offset: -3px; }
+
+/* ---------- Messenger AI ---------- */
+.ms-modebar { margin: 0 0 14px; padding: 10px 14px; border-radius: 14px; font-size: 14px; font-weight: 700; }
+.ms-modebar.is-on { background: var(--ok-bg); color: var(--ok); }
+.ms-modebar.is-off { background: var(--warn-bg); color: var(--warn); }
+.ms-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.ms-tabs [role="tab"] { padding: 10px 16px; min-height: 44px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-weight: 700; color: var(--muted); cursor: pointer; margin-bottom: -1px; }
+.ms-tabs [role="tab"][aria-selected="true"] { color: var(--purple-900); border-bottom-color: var(--purple); }
+.ms-tabs [role="tab"]:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-radius: 8px; }
+.ms-list { display: grid; gap: 14px; }
+.ms-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: clamp(14px, 2.2vw, 22px); box-shadow: var(--shadow-sm); display: grid; gap: 10px; }
+.ms-card.is-rated { border-color: var(--purple-100); background: #fcfbfd; }
+.ms-card__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 14px; flex-wrap: wrap; font-size: 13px; }
+.ms-card__title { font-family: inherit; font-size: 15px; font-weight: 700; color: var(--purple-900); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+.ms-tone { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; }
+.ms-tone--ok { background: var(--ok-bg); color: var(--ok); }
+.ms-tone--info { background: var(--purple-100); color: var(--purple-900); }
+.ms-tone--warn { background: var(--warn-bg); color: var(--warn); }
+.ms-tone--muted { background: #eee; color: #555; }
+.ms-rated { color: var(--purple-900); }
+.ms-block { border-left: 3px solid var(--purple-200); padding: 2px 0 2px 12px; }
+.ms-block--ai { border-left-color: var(--purple); }
+.ms-block--send { border-left-color: var(--ok); }
+.ms-label { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.ms-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.5; margin: 0; }
+.ms-ctx summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--purple-900); min-height: 44px; display: flex; align-items: center; }
+.ms-turns { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13.5px; overflow-wrap: anywhere; }
+.ms-who { font-weight: 800; color: var(--ink-2); }
+.ms-why { font-size: 12.5px; color: var(--muted); margin: 0; overflow-wrap: anywhere; }
+.ms-rate { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px 12px; display: grid; gap: 8px; margin: 0; }
+.ms-rate legend { font-size: 13px; font-weight: 800; color: var(--ink-2); padding: 0 4px; }
+.ms-rate__opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.ms-opt { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; min-height: 44px; border: 1.5px solid var(--purple-200); border-radius: 999px; font-weight: 700; font-size: 14px; cursor: pointer; }
+.ms-opt:has(input:checked) { border-color: var(--purple); background: var(--purple-50); }
+.ms-rate textarea { min-height: 64px; }
+.ms-modes { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ms-modes #msModes { display: grid; gap: 10px; margin-bottom: 14px; }
+.ms-mode { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1.5px solid var(--purple-200); border-radius: 14px; cursor: pointer; }
+.ms-mode:has(input:checked) { border-color: var(--purple); background: var(--purple-50); }
+.ms-mode input { margin-top: 4px; }
+.ms-mode strong { display: block; color: var(--purple-900); }
+.ms-mode small { display: block; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.ms-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; margin: 8px 0 12px; }
+.ms-kv div { background: var(--purple-50); border-radius: 12px; padding: 10px 12px; }
+.ms-kv dt { font-size: 12px; color: var(--muted); font-weight: 700; }
+.ms-kv dd { margin: 2px 0 0; font-weight: 800; color: var(--purple-900); font-variant-numeric: tabular-nums; }
+.ms-banner { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
+.ms-err { color: var(--err); font-size: 13.5px; }
+.ms-cfg-wrap summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--purple-900); min-height: 44px; display: flex; align-items: center; }
+.ms-cfg { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 4px 16px; font-size: 13.5px; }
+.ms-cfg .is-ok span { color: var(--ok); font-weight: 800; }
+.ms-cfg .is-miss { color: var(--muted); }
+/* 6 цэс 360px-ийн утсанд багтах (Messenger AI нэмэгдсэн) */
+@media (max-width: 380px) { .menu a { font-size: 10px; padding-inline: 1px; } }
