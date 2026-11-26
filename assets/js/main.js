@@ -63,16 +63,22 @@
 
   /* ---------- Reveal on scroll ---------- */
   // Агуулга анхдагчаар харагдана. Зөвхөн дэлгэцээс доор байгааг түр нууж (.is-pending), харагдах үед гаргана.
-  const reveals = reduceMotion ? [] : $$('.reveal');
+  // Observer-гүй хөтөч эсвэл reduced motion үед юуг ч нуухгүй.
   const pending = new Set();
-  reveals.forEach(el => {
-    if (el.getBoundingClientRect().top < window.innerHeight * 0.95) return;   // эхний дэлгэц: хөдөлгөхгүй
+  const show = (el) => { if (pending.delete(el)) el.classList.remove('is-pending'); };
+  const io = !reduceMotion && 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { show(e.target); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }) : null;
+  // Дараа нь DOM-д орсон элементэд ч ажиллана (admin-аас ирсэн «Зөвлөгөө» картууд — applyHome)
+  const watchReveal = (el) => {
+    if (!io || el.getBoundingClientRect().top < window.innerHeight * 0.95) return;   // эхний дэлгэц: хөдөлгөхгүй
     el.style.transition = 'none';
     el.classList.add('is-pending');
     pending.add(el);
-  });
-  requestAnimationFrame(() => requestAnimationFrame(() => pending.forEach(el => { el.style.transition = ''; })));
-  const show = (el) => { if (pending.delete(el)) el.classList.remove('is-pending'); };
+    io.observe(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transition = ''; }));
+  };
+  $$('.reveal').forEach(watchReveal);
   // Fallback: scroll/resize дээр ч шалгана (observer-ийг сааруулдаг хөтчид)
   let revealTick = 0;
   const revealInView = () => {
@@ -83,37 +89,32 @@
   };
   window.addEventListener('scroll', revealInView, { passive: true });
   window.addEventListener('resize', revealInView);
-  if ('IntersectionObserver' in window) {
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(e => { if (e.isIntersecting) { show(e.target); io.unobserve(e.target); } });
-    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-    pending.forEach(el => io.observe(el));
-  } else {
-    [...pending].forEach(show);
-  }
 
   /* ---------- Count-up numbers ---------- */
-  const counters = $$('[data-count]');
+  const fmtCount = (n) => Math.round(n).toLocaleString('en-US');   // home-render.js fmtNum()-тэй ижил (1,200)
   const runCounter = (el) => {
     const target = parseFloat(el.dataset.count);
     const suffix = el.dataset.suffix || '';
+    if (!isFinite(target)) return;
     const dur = 1400; const start = performance.now();
     const step = (t) => {
+      if (!el.isConnected) return;   // applyHome солисон хуучин элемент
       const p = Math.min(1, (t - start) / dur);
       const eased = 1 - Math.pow(1 - p, 3);
-      el.textContent = Math.round(target * eased).toLocaleString('en-US') + suffix;
+      el.textContent = fmtCount(target * eased) + suffix;
       if (p < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   };
-  if ('IntersectionObserver' in window) {
-    const co = new IntersectionObserver((entries) => {
-      entries.forEach(e => { if (e.isIntersecting) { runCounter(e.target); co.unobserve(e.target); } });
-    }, { threshold: 0.6 });
-    counters.forEach(c => co.observe(c));
-  } else {
-    counters.forEach(c => c.textContent = c.dataset.count + (c.dataset.suffix || ''));
-  }
+  const co = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { runCounter(e.target); co.unobserve(e.target); } });
+  }, { threshold: 0.6 }) : null;
+  // Дараа нь солигдсон статистикт ч ажиллана (applyHome)
+  const countUp = (el) => {
+    if (co) co.observe(el);
+    else el.textContent = fmtCount(parseFloat(el.dataset.count) || 0) + (el.dataset.suffix || '');
+  };
+  $$('[data-count]').forEach(countUp);
 
   /* ---------- Marquee pause ---------- */
   const mq = $('.marquee'); const mqBtn = $('.marquee__pause');
@@ -302,7 +303,76 @@
       if (visible === 0) { const promo = $('#promo'); if (promo) hideEl(promo); $$('a[href="#promo"]').forEach(a => hideEl(a.closest('li') || a)); }
     }
   };
-  const applySettings = (s) => { if (!s) return; applySite(s.site); applyCatalog(s.catalog); };
+  /* ---------- Нүүрний hero + «Зөвлөгөө» картууд (Firestore settings/home ← admin «Нүүр хуудас») ----------
+     Статик HTML-ийг build (content/home.json) ЯГ ЭНЭ загвараар (home-render.js) бичдэг. Энд зөвхөн ялгаатай
+     хэсгийг солино: admin-ий утга repo-той ижил бол DOM-д хүрэхгүй (анивчилт, CLS, фокус алдагдахгүй). */
+  const HOME = window.SKINAID_HOME_RENDER;
+  // Харьцуулах тамга: ?v=hash, зай, reveal-ийн түр төлөв, тоолуурын явцын текстийг тооцохгүй
+  const homeSig = (el) => {
+    const c = el.cloneNode(true);
+    [c, ...c.querySelectorAll('*')].forEach(x => {
+      x.classList.remove('is-pending'); if (!x.classList.length) x.removeAttribute('class');
+      x.removeAttribute('style');
+      if (x.hasAttribute('data-count')) x.textContent = '';
+    });
+    return c.outerHTML.replace(/\?v=[0-9a-z]+/g, '').replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
+  };
+  /**
+   * container-ийн хүүхдүүдийг html-ээр шинэчилнэ. Хүүхэд бүрийг түлхүүрээр (data-home, эсвэл байрлал) тулгаж,
+   * ижил хэсгийг хэвээр үлдээнэ — зөвхөн өөрчлөгдсөнийг солино. Шинээр орсон элементүүдийг буцаана.
+   */
+  const patchHome = (container, html) => {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    const next = Array.from(tpl.content.children), prev = Array.from(container.children);
+    const key = (el, i) => el.dataset.home || el.tagName + '#' + i;
+    const old = new Map(prev.map((el, i) => [key(el, i), el]));
+    const fresh = [];
+    const result = next.map((n, i) => {
+      const o = old.get(key(n, i));
+      if (o && o.tagName === n.tagName && homeSig(o) === homeSig(n)) return o;
+      fresh.push(n);
+      return n;
+    });
+    if (!fresh.length && result.length === prev.length) return [];
+    const focused = document.activeElement && container.contains(document.activeElement) ? document.activeElement : null;
+    if (result.length === prev.length && result.every((el, i) => el === prev[i] || fresh.includes(el))) {
+      result.forEach((el, i) => { if (el !== prev[i]) prev[i].replaceWith(el); });
+    } else {
+      container.replaceChildren(...result);
+    }
+    // Хасагдсан хуучин элементүүдийг reveal/тоолуурын ажиглалтаас чөлөөлнө (scroll бүрт тасархай node хэмжихгүй)
+    prev.filter(el => !result.includes(el)).forEach(el => [el, ...el.querySelectorAll('*')].forEach(x => {
+      if (pending.delete(x) && io) io.unobserve(x);
+      if (co) co.unobserve(x);
+    }));
+    if (focused && !container.contains(document.activeElement)) {   // фокус body руу унахгүй (гарын хэрэглэгч)
+      if (focused.isConnected) focused.focus({ preventScroll: true });
+      else {
+        container.tabIndex = -1;
+        container.addEventListener('blur', () => container.removeAttribute('tabindex'), { once: true });
+        container.focus({ preventScroll: true });
+      }
+    }
+    return fresh;
+  };
+  const applyHome = (raw) => {
+    if (!HOME || !raw || typeof raw !== 'object') return;
+    const heroEl = $('[data-home="hero"]'), postsEl = $('[data-home="posts"]');
+    // Admin хадгалснаас хойш repo-ийн хувилбар (content/home.json) шинэчлэгдсэн бол статик HTML ялна:
+    // хөгжүүлэгчийн засвар, синк хийсэн хувилбарыг Firestore-ийн хуучин хуулбар дарахгүй.
+    const rev = heroEl ? heroEl.getAttribute('data-home-rev') : '';
+    if (rev && typeof raw.baseRev === 'string' && raw.baseRev && raw.baseRev !== rev) return;
+    let h;
+    try { h = HOME.norm(raw); } catch (_) { return; }
+    if (!h) return;
+    if (heroEl && h.hero) {
+      patchHome(heroEl, HOME.hero(h.hero)).forEach(el => $$('[data-count]', el).forEach(countUp));
+    }
+    // Бүх карт нуугдсан бол картын хэсэг хоосон үлдэнэ; гарчиг, Facebook холбоос, цэсний #blog холбоос ажилласаар
+    if (postsEl && h.posts) patchHome(postsEl, HOME.posts(h.posts)).forEach(watchReveal);
+  };
+  const applySettings = (s) => { if (!s) return; applySite(s.site); applyCatalog(s.catalog); applyHome(s.home); };
   document.addEventListener('skinaid:settings', (e) => applySettings(e.detail));
   if (window.SkinAidBackend && window.SkinAidBackend.settings) applySettings(window.SkinAidBackend.settings);
 
@@ -314,7 +384,7 @@
   let backendPromise = null;
   const loadBackend = () => {
     if (!backendPromise) {
-      backendPromise = import('/assets/js/backend.js?v=90e14c2b')
+      backendPromise = import('/assets/js/backend.js?v=fb12455a')
         .then(() => window.SkinAidBackend || null)
         .catch(() => { document.dispatchEvent(new Event('skinaid:backend-failed')); return null; });
     }

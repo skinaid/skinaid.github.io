@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/style.css?v=37989dbc">
-  <link rel="stylesheet" href="/admin/admin.css?v=09a2aed8">
+  <link rel="stylesheet" href="/assets/css/style.css?v=9ef6c77d">
+  <link rel="stylesheet" href="/admin/admin.css?v=9a2c0e31">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -41,6 +41,7 @@
       <nav class="menu" aria-label="Модулиуд">
         <button type="button" data-view="bookings" aria-current="page"><span>Захиалга</span><span class="count" id="newCount"><span class="sr-only">шинэ: </span><span data-n>0</span></span></button>
         <button type="button" data-view="settings"><span>Тохиргоо</span></button>
+        <button type="button" data-view="home"><span>Нүүр хуудас</span></button>
         <button type="button" data-view="catalog"><span>Үйлчилгээ / Багц</span></button>
         <button type="button" data-view="pages"><span>Эмчилгээний хуудас</span></button>
       </nav>
@@ -102,6 +103,83 @@
             <button class="btn btn--primary" type="submit" id="btnSaveSite">Хадгалах</button>
             <span class="status" id="siteStatus" role="status"></span>
           </div>
+        </form>
+      </section>
+
+      <!-- Модуль: Нүүр хуудас (settings/home) — hero + «Зөвлөгөө» картууд -->
+      <section class="view" id="view-home" aria-labelledby="h-home" hidden>
+        <div class="main__head">
+          <div><h1 id="h-home">Нүүр хуудас</h1><p>Нүүрний эхний хэсэг (hero) болон «Зөвлөгөө» картууд. Хадгалмагц зочдод дараагийн ачааллаас харагдана.</p></div>
+          <div class="actions">
+            <button class="btn btn--outline btn--sm" type="button" id="btnHomeReload">Дахин ачаалах</button>
+            <button class="btn btn--outline btn--sm" type="button" id="btnHomeDefaults">Анхны утгаар дүүргэх</button>
+          </div>
+        </div>
+        <div class="hm-load" id="hmLoad" role="alert" hidden><span id="hmLoadMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnHmRetry">Дахин оролдох</button></div>
+        <div class="panel hm-note">
+          <p><strong>Google хайлт.</strong> Энд хадгалсан өөрчлөлт зочдод шууд (дараагийн ачааллаас) харагдана. Харин Google сайтын үндсэн хувилбарыг уншдаг тул өөрчлөлтийг тэнд хүргэхийн тулд «Хөгжүүлэгчид илгээх JSON хуулах» дарж хөгжүүлэгчид илгээнэ (дараа нь автомат болно). Тэр хүртэл нүүр ачаалахад хуучин текст хормын төдий харагдаж болно.</p>
+          <div class="hm-note__diff" id="hmDiff" hidden><span id="hmDiffMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnHmLoadSaved" hidden>Хадгалсан хувилбараа ачаалах</button></div>
+        </div>
+        <form id="homeForm" novalidate>
+          <div class="panel">
+            <h2>Hero — нүүрний эхний хэсэг</h2>
+            <p>Товчны текст хоосон бол анхны текст («Цаг захиалах», «Үйлчилгээ үзэх») харагдана; товчны холбоос тогтмол. Тэмдэг, тайлбар хоосон бол сайтаас алга болно.</p>
+            <div class="form__grid">
+              <div class="field field--full">
+                <label for="hm-badge">Тэмдэг (гарчгийн дээрх жижиг шошго)</label>
+                <input id="hm-badge" data-h="badge" type="text" maxlength="80" placeholder="жишээ: 2007 оноос хойш · Улаанбаатар хот">
+              </div>
+              <fieldset class="field field--full hm-title">
+                <legend>Гарчиг (h1) — гурван хэсгээс бүрдэнэ; дундах хэсэг нил ягаанаар тодорно</legend>
+                <div class="hm-title__row">
+                  <div class="field"><label for="hm-titlePre">Эхлэл</label><input id="hm-titlePre" data-h="titlePre" type="text" maxlength="80"></div>
+                  <div class="field"><label for="hm-titleEm">Тодруулах хэсэг</label><input id="hm-titleEm" data-h="titleEm" type="text" maxlength="60"></div>
+                  <div class="field"><label for="hm-titlePost">Төгсгөл</label><input id="hm-titlePost" data-h="titlePost" type="text" maxlength="80"></div>
+                </div>
+              </fieldset>
+              <div class="field field--full">
+                <label for="hm-text">Тайлбар текст <small>(нэг догол мөр — мөр шилжилт хадгалагдахгүй)</small></label>
+                <textarea id="hm-text" data-h="text" maxlength="400"></textarea>
+              </div>
+              <div class="field">
+                <label for="hm-btnPrimary">Үндсэн товч (→ цаг захиалах)</label>
+                <input id="hm-btnPrimary" data-h="btnPrimary" type="text" maxlength="30" placeholder="Цаг захиалах">
+              </div>
+              <div class="field">
+                <label for="hm-btnSecondary">Хоёр дахь товч (→ үйлчилгээ)</label>
+                <input id="hm-btnSecondary" data-h="btnSecondary" type="text" maxlength="30" placeholder="Үйлчилгээ үзэх">
+              </div>
+            </div>
+            <h3 class="hm-sub">Статистик</h3>
+            <p class="hm-hint">Тоо — бүхэл тоо (жишээ: 58, 1200; мянгатын таслалыг сайт өөрөө тавина, 4.9 гэх мэт бутархай болохгүй). Дагавар нь тооны ард (+, K+, %). Тоо хоосон мөр сайтад харагдахгүй.</p>
+            <div class="tbl-wrap">
+              <table class="tbl hm-stats" id="hmStats">
+                <thead><tr><th>№</th><th>Тоо</th><th>Дагавар</th><th>Тайлбар</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <h2>«Зөвлөгөө» картууд <span class="badge" id="hmCount">0</span></h2>
+            <p>Сайтад энэ дарааллаар (зүүнээс баруун, дээрээс доош) харагдана — ↑ ↓-ээр солино. «Нуух» сонгосон карт сайтад гарахгүй, устахгүй. Холбоос оруулбал карт бүхэлдээ дарагддаг болно (жишээ: Facebook пост).</p>
+            <div class="hm-posts" id="hmPosts"></div>
+            <div class="actions"><button class="btn btn--ghost btn--sm" type="button" id="btnHmAdd">+ Карт нэмэх</button></div>
+          </div>
+          <div class="panel">
+            <h2>Урьдчилан харах</h2>
+            <p>Сайтын загвараар (хадгалаагүй өөрчлөлттэй хамт).</p>
+            <ul class="pg-warn" id="hmWarn" aria-live="polite"></ul>
+            <div class="hm-preview" inert>
+              <div class="hm-preview__hero" id="hmPrevHero"></div>
+              <div class="posts hm-preview__posts" id="hmPrevPosts"></div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn btn--primary" type="submit" id="btnSaveHome">Хадгалах</button>
+            <button class="btn btn--ghost btn--sm" type="button" id="btnHmJson">Хөгжүүлэгчид илгээх JSON хуулах</button>
+            <span class="status" id="homeStatus" role="status"></span>
+          </div>
+          <textarea class="hm-json" id="hmJson" readonly hidden aria-label="content/home.json-д тавих JSON"></textarea>
         </form>
       </section>
 
@@ -168,6 +246,8 @@
 
   <script src="/assets/js/catalog-defaults.js?v=cf4cf057"></script>
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
-  <script type="module" src="/admin/admin.js?v=cb8b0521"></script>
+  <script src="/assets/js/home-render.js?v=a84824d3"></script>
+  <script src="/admin/home-data.js?v=695218e6"></script>
+  <script type="module" src="/admin/admin.js?v=32f3bb6f"></script>
 </body>
 </html>

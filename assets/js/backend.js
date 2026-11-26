@@ -1,7 +1,7 @@
 /* ==========================================================================
    SKIN AID — backend.js (ES module, нийтийн сайт)
    Firestore-lite ашиглан: (1) захиалгыг `bookings`-д бичих, (2) `settings/site`,
-   `settings/catalog`-ийг унших. main.js (энгийн script) window.SkinAidBackend-ээр холбогдоно.
+   `settings/catalog`, нүүрэнд `settings/home`-ийг унших. main.js (энгийн script) window.SkinAidBackend-ээр холбогдоно.
    Энэ файл ачаалагдахгүй (CDN блок, offline) бол main.js fallback сувгуудаа харуулна.
    Firestore хүсэлт бүр App Check (reCAPTCHA) token-той явна — app-check.js.
    ========================================================================== */
@@ -36,13 +36,18 @@ export async function submitBooking(d) {
   return ref.id;
 }
 
-/** settings/site + settings/catalog — хоёулаа нийтэд уншигдана (2 read / нэг нээлт). */
+/**
+ * settings/site + settings/catalog (+ нүүр хуудсанд settings/home) — нийтэд уншигдана (2–3 read / нэг нээлт).
+ * Doc тус бүр бие даана: нэг нь уншигдахгүй бол бусад нь хэрэглэгдэнэ; бүгд унавал алдаа шидэнэ.
+ */
 export async function loadPublicSettings() {
-  const [site, catalog] = await Promise.all([
-    getDoc(doc(db, 'settings', 'site')),
-    getDoc(doc(db, 'settings', 'catalog')),
-  ]);
-  return { site: site.exists() ? site.data() : null, catalog: catalog.exists() ? catalog.data() : null };
+  const ids = ['site', 'catalog'];
+  if (document.querySelector('[data-home]')) ids.push('home');   // зөвхөн hero/«Зөвлөгөө» бүхий хуудас (нүүр)
+  const res = await Promise.allSettled(ids.map((id) => getDoc(doc(db, 'settings', id))));
+  if (res.every((r) => r.status === 'rejected')) throw res[0].reason;
+  const out = {};
+  ids.forEach((id, i) => { const r = res[i]; out[id] = r.status === 'fulfilled' && r.value.exists() ? r.value.data() : null; });
+  return out;
 }
 
 const api = { submitBooking, settings: null, ready: null };

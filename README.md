@@ -13,14 +13,18 @@ assets/css/style.css          — Загвар (өнгө, фонт, responsive)
 assets/js/main.js             — Цэс, анимаци, үйлчилгээний шүүлтүүр, FAQ, маягт (Firestore + fallback), тохиргоо унших
 assets/js/catalog-defaults.js — Үйлчилгээ/ангилал/багцын АНХНЫ утга (сайт + admin + build ашиглана)
 assets/js/catalog-render.js   — Үйлчилгээний мөрийн HTML загвар (main.js болон tools/build.mjs хоёулаа ашиглана)
+assets/js/home-render.js      — Нүүрний hero + «Зөвлөгөө» картын HTML загвар, norm()/хязгаар (main.js, build, admin ашиглана)
 assets/js/firebase-config.js  — Firebase төслийн нийтийн тохиргоо, admin и-мэйлийн жагсаалт (UI-д), reCAPTCHA сайтын түлхүүр
 assets/js/app-check.js        — Firebase App Check (reCAPTCHA): сайт + admin хоёулаа Firestore-оос өмнө дуудна
-assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog унших (main.js `loadBackend()` хуудас
-                                ачаалагдсаны дараа сул үед эсвэл нөөц маягтад хүрэхэд импортлоно — эхэнд БҮҮ ачаал: PageSpeed FCP 6+ с болдог)
+assets/js/backend.js          — Firestore-lite: захиалга бичих, settings/site + settings/catalog (+ нүүрэнд settings/home) унших
+                                (main.js `loadBackend()` хуудас ачаалагдсаны дараа сул үед эсвэл нөөц маягтад хүрэхэд импортлоно —
+                                эхэнд БҮҮ ачаал: PageSpeed FCP 6+ с болдог)
 assets/js/booking.js          — Онлайн цаг захиалга: UB Beauty вэб сувгийн API (сул цаг → захиалга); доорх «Онлайн цаг захиалга»
 assets/js/ubbeauty-config.js  — UB Beauty API хаяг + НИЙТИЙН түлхүүр (pk_live_…). Нууц sk_ түлхүүр хэзээ ч энд биш
-admin/                        — Удирдлагын хэсэг (index.html, admin.js, admin.css): Google нэвтрэлт, 4 модуль
+admin/                        — Удирдлагын хэсэг (index.html, admin.js, admin.css): Google нэвтрэлт, 5 модуль
 admin/pages-status.js         — «Эмчилгээний хуудас» цэсийн өгөгдөл (build үүсгэнэ)
+admin/home-data.js            — «Нүүр хуудас» цэсийн анхны утга + сайтын зургийн жагсаалт (build үүсгэнэ, эх: content/home.json)
+admin/claims.js               — tools/lib/claims.mjs-ийн хуулбар: admin хориотой үгийг анхааруулна (build үүсгэнэ)
 firestore.rules               — Firestore аюулгүй байдлын дүрэм (console-д нийтэлсэнтэй ижил байлгана)
 api/                          — Vercel Functions: messenger.js (Meta webhook), cron/daily.js, _lib/ (туслах код) — «Messenger AI»
 package.json, package-lock.json — ЗӨВХӨН api/-ийн хамаарал (сайтын build хамааралгүй; build script БҮҮ нэм — статик output өөрчлөгдөнө)
@@ -35,6 +39,7 @@ tools/test/                   — node --test 'tools/test/*.test.mjs'
 tools/leak-scan.mjs           — pre-push: push хийх commit бүрийн content/pages-д ноорогийн тэмдэглэл үлдсэн эсэх
 emchilgee/                    — Эмчилгээний хуудсууд ба hub (build үүсгэнэ — гараар бүү засаарай)
 content/site.mjs              — Эмнэлгийн баталгаатай мэдээлэл (NAP, JSON-LD), байнгын хуудсууд, footer
+content/home.json             — Нүүрний hero + «Зөвлөгөө» картуудын СТАТИК хувилбар (= Firestore settings/home-ийн бүтэц)
 content/pipeline.mjs          — 15 эмчилгээний хуудасны төлөвлөгөө (түлхүүр үг, долоо хоног, үйлчилгээ, хуучин URL)
 content/pages/*.mjs           — ЗӨВХӨН эмчийн баталсан эмчилгээний хуудас (repo нийтэд нээлттэй!)
 content/doctors.mjs           — Хянагч эмч нар (нэр, цол, нэр гаргах зөвшөөрлийн огноо)
@@ -79,6 +84,16 @@ Build юу хийдэг вэ:
   ташуугүй URL дээр харьцангуй зам буруу задарна).
 
 Тэмдэглэл: Нүүр хуудас дээр Firestore-ийн `settings/catalog` (admin → Үйлчилгээ / Багц) статик жагсаалтыг хэрэглэгчийн хөтөч дээр дахин зурна. Google статик (catalog-defaults.js) хувилбарыг харна — тиймээс тайлбар засахдаа хоёуланд нь засна (admin-ыг Google-д автоматаар хүргэх синк нь SEO төлөвлөгөөний 7-р үе шат).
+
+**Нүүрний hero ба «Зөвлөгөө» картууд** (admin → Нүүр хуудас). Статик HTML-ийг `content/home.json`-оос build бичнэ
+(`<!-- build:home-hero -->`, `<!-- build:home-posts -->`); admin Firestore `settings/home`-д хадгалбал `main.js` зочны
+хөтөч дээр ЗӨВХӨН ялгаатай хэсгийг сольж давхарлана (ижил бол DOM-д хүрэхгүй). Google, JS-гүй хөтөч, Firestore унасан үед
+статик хувилбар харагдана. Admin-ий өөрчлөлтийг Google-д хүргэх (7-р үе шатны синк хүртэл): admin → «Хөгжүүлэгчид илгээх
+JSON хуулах» → `content/home.json`-д тавих → `node tools/build.mjs` → commit. `content/home.json` өөрчлөгдөхөд index.html-ийн
+`data-home-rev` шинэчлэгдэж, түүнээс өмнө admin-д хадгалсан хувилбарыг сайт давхарлахаа болино (repo ялна; admin дахин
+хадгалбал буцна). Build `content/home.json`-ийг `tools/lib/home.mjs`-ээр шалгана: хэвшсэн (`norm()`-той ижил,
+updatedAt/updatedBy-гүй), дор хаяж 1 харагдах карт, дотоод холбоос байгаа хуудас руу, зураг git-д, хориотой үггүй
+(`HOME_CLAIMS_ALLOW`).
 
 ## Эмчилгээний хуудас нийтлэх (эмчийн хяналттай)
 
@@ -193,6 +208,9 @@ node tools/ub-mock-server.mjs
   Хэн ч **зөвхөн үүсгэж** чадна (талбар бүр дүрмээр шалгагдана); унших/засах/устгах — зөвхөн admin.
 - `settings/site` — `hours, phone, email, promoEnabled, bookingEnabled` — нийтэд уншигдана, admin бичнэ.
 - `settings/catalog` — `services[] (id,c,n,d,t,p,hidden), packages[] (id,name,price,hidden)` — нийтэд уншигдана, admin бичнэ.
+- `settings/home` — `hero{badge,titlePre,titleEm,titlePost,text,btnPrimary,btnSecondary,stats[≤3]{num,suffix,label}}, posts[≤12]{id,cat,title,text,by,img,url,hidden}, baseRev` —
+  нийтэд уншигдана (зөвхөн нүүр хуудас; нүүр нээх бүрт 3 read болно), admin «Нүүр хуудас» бичнэ. Хязгаар: `assets/js/home-render.js`
+  LIMITS = `firestore.rules` validHero/validPost. `baseRev` = хадгалах үеийн `content/home.json`-ийн хувилбар (index.html `data-home-rev`).
 
 - `messenger_*`, `ai_runs` — Messenger AI (доорх «Messenger AI» хэсэг).
 
