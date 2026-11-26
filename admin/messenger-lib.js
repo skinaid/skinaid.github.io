@@ -91,19 +91,27 @@ export function draftMatches(d, filter) {
 
 /** Микро-доллар → «$1.23» */
 export const usd = (micro) => `$${(Math.max(0, Number(micro) || 0) / 1e6).toFixed(2)}`;
+/** Нэг туршилтын зардал (жижиг дүн) → «$0.014» */
+export const usd3 = (micro) => `$${(Math.max(0, Number(micro) || 0) / 1e6).toFixed(3)}`;
 
 /* ---------- 2-р үе шат: «Сургалт» ---------- */
 
-/** Мэдлэг (messenger_kb), жишээ (messenger_examples)-ийн талбарын хязгаар = firestore.rules (tools/test/messenger-admin.test.mjs) */
-export const KB_LIMITS = { title: 120, body: 4000 };
+/** Мэдлэг (messenger_kb), жишээ (messenger_examples)-ийн талбарын хязгаар ≤ firestore.rules (tools/test/messenger-admin.test.mjs).
+ *  Мэдлэгийн агуулга 1500 = AI-ийн уншдаг хэмжээ (api/_lib/social/catalog-safe.js KB_LIMITS) — rules 4000 хүртэл зөвшөөрдөг ч
+ *  урт бичлэг AI-д тасарч ордог байсан (аудит 2026-11-27). */
+export const KB_LIMITS = { title: 120, body: 1500 };
 export const EX_LIMITS = { userText: 2000, reply: 2000, note: 500 };
-/** Брэнд дуу хоолой, нэмэлт заавар — тусгай id (api/_lib/knowledge.js KB_VOICE_ID) */
+/** Брэнд дуу хоолой, нэмэлт заавар — тусгай id; `_rev` = мэдлэгийн тэмдэг (api/_lib/store.js KB_IDS) */
 export const KB_VOICE_ID = 'voice';
+export const KB_REV_ID = '_rev';
 export const KB_VOICE_TITLE = 'Брэнд дуу хоолой, заавар';
 export const KB_STATUS = [
-  { key: 'draft', label: 'Ноорог', hint: 'AI ашиглахгүй (зөвхөн «Туршилтын асуулт»-д «нийтлээгүйг хамт турших» үед).' },
-  { key: 'published', label: 'Нийтэлсэн', hint: 'AI ≤ 5 минутын дотор ашиглаж эхэлнэ.' },
+  { key: 'draft', label: 'Ноорог', hint: 'AI ашиглахгүй. «Туршилтын асуулт»-д «Ноорог (нийтлээгүй) мэдлэгийг хамт турших»-ыг чагталж шалгана.' },
+  { key: 'published', label: 'Нийтэлсэн', hint: 'AI 1 минутын дотор ашиглаж эхэлнэ.' },
 ];
+/** Сервер prompt-д оруулах хэмжээ (api/_lib/social/catalog-safe.js KB_LIMITS, examples.js EXAMPLE_LIMITS — тест тулгана) */
+export const KB_BUDGET = { chars: 24000, entries: 60, entryChars: 1700 };
+export const EX_BUDGET = { items: 30, customer: 500, reply: 600, why: 200, total: 12000 };
 export const EX_KINDS = [
   { key: 'good', label: 'Сайн жишээ', hint: 'AI ингэж хариулбал зөв.' },
   { key: 'bad', label: 'Муу жишээ', hint: 'AI ингэж хариулж БОЛОХГҮЙ (яагаад гэдгийг тайлбарт бичнэ).' },
@@ -165,10 +173,46 @@ export function exampleFromDraft(d) {
   return null;
 }
 
+/**
+ * Ноорогийн жишээний төлөв: 'none' (жишээ болгох боломжгүй), 'new', 'same', 'stale' (үнэлгээ өөрчлөгдсөн — жишээ хуучин
+ * үнэлгээтэй: төрөл зөрсөн, эсвэл «Засвартай» болсон ч жишээ AI-ийн хуучин хариутай хэвээр).
+ */
+export function exampleState(d, cur) {
+  const v = exampleFromDraft(d);
+  if (!v) return 'none';
+  if (!cur) return 'new';
+  if (cur.kind !== v.kind) return 'stale';
+  if (d.rating === 'edited' && String(cur.reply ?? '').trim() === String(d.reply ?? '').trim() && v.reply !== String(cur.reply ?? '').trim()) return 'stale';
+  return 'same';
+}
+
+/** Нийтэлсэн мэдлэгийн AI-д орох ойролцоо хэмжээ (серверийнхтэй ижил тооцоо, нууцлалгүй) */
+export function kbBudget(rows) {
+  const pub = rows.filter((r) => r.status === 'published' && r.id !== KB_VOICE_ID && r.id !== KB_REV_ID);
+  const len = (r) => Math.min(KB_BUDGET.entryChars, chars(String(r.title ?? '').trim()) + 3 + chars(String(r.body ?? '').trim()));
+  const total = pub.reduce((n, r) => n + len(r), 0);
+  return { published: pub.length, chars: total, over: total > KB_BUDGET.chars || pub.length > KB_BUDGET.entries };
+}
+/** AI-д орох жишээний тоо: ШИНЭ нь эхэнд, тоо ба нийт хэмжээний хязгаартай (сервер examples.js-тэй ижил) */
+export function exampleBudget(rows) {
+  const ms = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : v instanceof Date ? v.getTime() : 0);
+  const sorted = [...rows].sort((a, b) => ms(b.updatedAt) - ms(a.updatedAt));
+  let used = 0;
+  let total = 0;
+  for (const r of sorted) {
+    if (used >= EX_BUDGET.items) break;
+    const size = Math.min(EX_BUDGET.customer, chars(r.userText)) + Math.min(EX_BUDGET.reply, chars(r.reply)) + Math.min(EX_BUDGET.why, chars(r.note));
+    if (total + size > EX_BUDGET.total) continue;
+    total += size;
+    used++;
+  }
+  return { used, chars: total };
+}
+
 /** Мэдлэгийн жагсаалтын эрэмбэ: брэнд дуу хоолой → нийтэлсэн → ноорог, тус бүр гарчгаар */
 export function sortKb(rows) {
   const rank = (r) => (r.id === KB_VOICE_ID ? 0 : r.status === 'published' ? 1 : 2);
-  return [...rows].sort((a, b) => rank(a) - rank(b) || String(a.title).localeCompare(String(b.title), 'mn'));
+  return [...rows].filter((r) => r.id !== KB_REV_ID).sort((a, b) => rank(a) - rank(b) || String(a.title).localeCompare(String(b.title), 'mn'));
 }
 
 /** /api/admin-ийн алдааны код → ойлгомжтой текст */
@@ -182,7 +226,11 @@ export const API_ERRORS = {
   no_ai_key: 'Claude AI-ийн түлхүүр серверт тохируулаагүй байна.',
   kill_switch: 'Яаралтай зогсоолт асаалттай — «Тохиргоо»-оос унтраасны дараа туршина.',
   month_cap: 'Энэ сарын хязгаарт хүрсэн — «Тохиргоо»-оос хязгаарыг нэмэх эсвэл дараа сарыг хүлээнэ.',
-  day_cap: 'Өнөөдрийн туршилтын хязгаарт хүрсэн. Маргааш дахин оролдоно уу.',
+  day_cap: 'Өнөөдрийн туршилтын хязгаарт (100) хүрсэн. Маргааш дахин оролдоно уу.',
+  month_tests: 'Энэ сарын туршилтын хязгаарт хүрсэн (сарын AI хязгаарын 20% — үлдсэнийг Messenger-ийн ноорогт үлдээнэ).',
+  busy: 'Өөр туршилт явж байна. Хэдэн секунд хүлээгээд дахин оролдоно уу.',
+  timeout: 'Сервер удаан хариулсан тул AI-г дуудсангүй (төлбөргүй). Дахин оролдоно уу.',
+  knowledge_error: 'Мэдлэгийг бүрдүүлж чадсангүй. Сүүлд засварласан бичлэгээ шалгаад дахин оролдоно уу.',
   bad_text: 'Мессеж хоосон эсвэл 1000 тэмдэгтээс урт байна.',
   ai_error: 'AI хариу өгсөнгүй (түр алдаа). Хэсэг хүлээгээд дахин оролдоно уу.',
   too_large: 'Хүсэлт хэт том байна.',

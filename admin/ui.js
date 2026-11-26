@@ -231,18 +231,22 @@ function ensureBar() {
     else if (await dialog({ title: 'Өөрчлөлтийг хаях уу?', body: 'Хадгалаагүй өөрчлөлт алга болж, маягт сүүлд хадгалсан байдалдаа буцна.', confirm: 'Өөрчлөлтийг хаях', cancel: 'Үргэлжлүүлэн засах', danger: true })) { f.discard(); announce('Өөрчлөлтийг хаялаа.'); }
     // Мөр нуугдсан бол фокусыг маягтын өөрийн «Хадгалах» товч руу (body руу унахгүй)
     if (bar.hidden && (bar.contains(document.activeElement) || document.activeElement === document.body)) {
-      const t = f.anchor && f.anchor.querySelector('button:not([disabled])');
+      const a = anchorsOf(f).find((x) => x.offsetParent !== null);
+      const t = a && a.querySelector('button:not([disabled])');
       if (t) { t.scrollIntoView({ block: 'center' }); t.focus({ preventScroll: true }); }
+      else $('#main')?.focus({ preventScroll: true });
     }
   });
   return bar;
 }
 
-/** @param {string} view  @param {{ isDirty: () => boolean, save?: () => Promise<any>, discard?: () => void, reset?: () => void, anchor?: Element, bar?: boolean }} api */
+/** @param {string} view  @param {{ isDirty: () => boolean, save?: () => Promise<any>, discard?: () => void, reset?: () => void, anchor?: Element, anchors?: Element[], bar?: boolean }} api
+ *  anchors — нэг цэсэд хэд хэдэн маягт (таб) байвал тус бүрийн «Хадгалах» мөр */
 export function registerForm(view, api) {
   forms.set(view, api);
-  if (api.anchor && io) io.observe(api.anchor);
+  if (io) for (const a of anchorsOf(api)) io.observe(a);
 }
+const anchorsOf = (f) => (f.anchors || (f.anchor ? [f.anchor] : [])).filter(Boolean);
 export function setCurrentView(view) { currentView = view; refreshDirty(); }
 export const anyDirty = () => !!session.user && [...forms.values()].some((f) => f.isDirty());
 /** Гарах үед: маягтуудыг «ачаалаагүй» төлөвт оруулна (хадгалах мөр нэвтрэх хуудсан дээр гарахгүй, дараагийн нэвтрэлт цэвэр) */
@@ -261,7 +265,7 @@ export function refreshDirty() {
   const b = ensureBar();
   const f = forms.get(currentView);
   // Маягтын өөрийн «Хадгалах» товч дэлгэцэнд харагдаж байвал давхар мөр гаргахгүй
-  const show = on && !!(f && f.bar !== false && f.isDirty() && !(f.anchor && anchorVisible.get(f.anchor)));
+  const show = on && !!(f && f.bar !== false && f.isDirty() && !anchorsOf(f).some((a) => anchorVisible.get(a)));
   b.hidden = !show;
   document.body.classList.toggle('has-savebar', show);
   document.documentElement.classList.toggle('has-savebar', show);   // scroll-padding (фокустай талбар мөрийн ард орохгүй)
@@ -278,11 +282,13 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------- Алдааны хураангуй + талбарын мэдэгдэл ---------- */
 let errSeq = 0;
-/** errs: [{ msg, el?, reveal?() }] — summary нь маягтын дээрх .err-summary элемент */
-export function showErrors(summary, errs, scope = summary.parentElement) {
+/** errs: [{ msg, el?, reveal?() }] — summary нь маягтын дээрх .err-summary элемент; level — гарчгийн түвшин (маягтын
+ *  гарчиг h3 бол 4 — гарчгийн дараалал эвдрэхгүй) */
+export function showErrors(summary, errs, scope = summary.parentElement, { level = 2 } = {}) {
   clearErrors(scope);
   if (!errs.length) return;
-  summary.innerHTML = `<div role="alert"><h2 class="err-summary__title">${ICON.alert}<span>Хадгалах боломжгүй — ${errs.length} зүйл засна уу</span></h2><ul></ul></div>`;
+  const h = `h${Math.min(6, Math.max(2, Number(level) || 2))}`;
+  summary.innerHTML = `<div role="alert"><${h} class="err-summary__title">${ICON.alert}<span>Хадгалах боломжгүй — ${errs.length} зүйл засна уу</span></${h}><ul></ul></div>`;
   const ul = $('ul', summary);
   errs.forEach((e) => {
     const li = document.createElement('li');

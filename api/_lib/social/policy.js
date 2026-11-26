@@ -9,6 +9,9 @@
  *   2. Сэдэв (LLM эсвэл кодын дохио) эрсдэлтэй → хүнд. Кодын дохио LLM-ийн ангиллыг ДАРНА.
  *   3. AI итгэл бага, хариу хоосон, мэдлэгт байхгүй ₮/% дүн, валютгүй дүн («25,000-аар», «50 мянгаар»), мэдлэгт
  *      байхгүй хөнгөлөлт/үнэгүй/бэлэг/хувь → хүнд (үнэ, санал ЗӨВХӨН мэдлэгээс; SkinAid аудит 2026-11-25).
+ *      `facts` өгвөл (агент үргэлж өгнө): дүн, хувь, хөнгөлөлтийн үг ЗӨВХӨН ИШ ТАТСАН (source_ids) баримтаас; үгүйсгэсэн
+ *      өгүүлбэр («хөнгөлөлт байхгүй») хөнгөлөлтийг зөвшөөрөхгүй (аудит 2026-11-27: өөр баримтын дүн/үг бүх хариунд хүчинтэй
+ *      байсан).
  *   4. Блоклох lint (баталгаа, эмчилгээний амлалт, PII, хувьсагч, 2000 тэмдэгт) → ноорог.
  *   5. Мэдээллийн сэдэвт мэдлэгийн иш байхгүй / мэдэгдэхгүй иш; иш шаардахгүй сэдэвт (мэнд, цаг захиалах) хэт урт
  *      хариу → ноорог.
@@ -32,7 +35,7 @@ export const NO_SOURCE_REPLY_MAX = 400;
  *   quick_replies: string[], reason: string }} AgentProposal
  * @typedef {{ mode: 'off'|'shadow', conversationState: 'bot'|'human'|'paused', userText: string, proposal: AgentProposal,
  *   knownSourceIds: readonly string[], allowedAmounts: readonly number[], allowedPercents: readonly number[],
- *   knownNumbers?: readonly number[], knowledgeText?: string,
+ *   knownNumbers?: readonly number[], knowledgeText?: string, facts?: readonly { id: string, text: string }[],
  *   bannedPhrases?: readonly string[], allowedHosts?: readonly string[] }} PolicyInput
  *   knownNumbers — мэдлэгийн текстэд байгаа тоо (үйлчилгээний нэр «Glutathione 1200» г.м.); knowledgeText — мэдлэгийн
  *   бүх текст (хөнгөлөлт/бэлэг гэх үг мэдлэгт байгаа эсэхийг шалгахад)
@@ -42,6 +45,19 @@ export const NO_SOURCE_REPLY_MAX = 400;
  */
 
 const PLACEHOLDER_RE = /\{[^{}\s]{1,30}\}/u;
+/** Үгүйсгэсэн өгүүлбэр — доторх хөнгөлөлт/үнэгүй/бэлэг гэх үг санал болохгүй */
+const NEGATED_RE = /(?<!\p{L})(?:байхгүй|үгүй|хийхгүй|хийдэггүй|олгохгүй|олгодоггүй|байдаггүй|боломжгүй|хамаарахгүй|үйлчлэхгүй)(?!\p{L})/iu;
+
+/**
+ * Иш татсан баримтаас зөвшөөрөгдөх дүн, хувь, санал (хөнгөлөлтийн үг)-ийн текст.
+ * @param {readonly { id: string, text: string }[]} facts @param {readonly string[]} sourceIds
+ */
+export function citedAllowance(facts, sourceIds) {
+  const ids = new Set(sourceIds);
+  const text = facts.filter((f) => ids.has(f.id)).map((f) => f.text).join('\n');
+  const offerText = text.split(/[.!?;\n·]+/u).filter((x) => !NEGATED_RE.test(x)).join('\n').toLowerCase();
+  return { amounts: moneyMentions(text), percents: percentMentions(text).map((n) => Math.round(n)), offerText };
+}
 
 /** Хүргэлт — 1-р үе шатанд ямар ч горимд илгээхгүй (assist/auto = 3-р үе шат) */
 export function deliveryFor(mode, route) {
@@ -84,13 +100,14 @@ export function decideReply(input) {
   if (p.needs_human) human.push('llm_needs_human');
   if (!(Number(p.confidence) >= CONFIDENCE_MIN)) human.push('low_confidence');
   if (!reply) human.push('empty_reply');
-  const amounts = new Set(input.allowedAmounts.map((n) => Math.round(n)));
+  const cited = input.facts ? citedAllowance(input.facts, sourceIds) : null;
+  const amounts = new Set((cited ? cited.amounts : input.allowedAmounts).map((n) => Math.round(n)));
   if (moneyMentions(reply).some((n) => !amounts.has(n))) human.push('invented_price');
-  const percents = new Set(input.allowedPercents.map((n) => Math.round(n)));
+  const percents = new Set((cited ? cited.percents : input.allowedPercents).map((n) => Math.round(n)));
   if (percentMentions(reply).some((n) => !percents.has(Math.round(n)))) human.push('invented_percent');
   const numbers = new Set([...amounts, ...(input.knownNumbers ?? []).map((n) => Math.round(n))]);
   if (!human.includes('invented_price') && numberMentions(reply).some((n) => !numbers.has(Math.round(n)))) human.push('invented_price');
-  const knowledge = String(input.knowledgeText ?? '').toLowerCase();
+  const knowledge = cited ? cited.offerText : String(input.knowledgeText ?? '').toLowerCase();
   if (offerMentions(reply).some((w) => !knowledge.includes(w))) human.push('invented_offer');
   if (human.length) return { ...base, route: 'handoff', reasons: [...new Set(human)] };
 

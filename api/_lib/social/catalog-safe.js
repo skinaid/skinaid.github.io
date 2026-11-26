@@ -35,7 +35,8 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMe
 
 export const CATALOG_LIMITS = Object.freeze({ services: 80, packages: 30, descriptionChars: 200 });
 /** Мэдлэгийн (FAQ) бичлэг, эмчилгээний хуудас, брэнд дуу хоолойн хязгаар — prompt-ийн хэмжээ (кэштэй ч) хяналттай */
-export const KB_LIMITS = Object.freeze({ entries: 60, entryChars: 1500, totalChars: 16_000, voiceChars: 1500 });
+// entryChars = гарчиг (≤ 120) + « — » + агуулга (admin ≤ 1500) — admin-ий хязгаарт багтсан бичлэг тасрахгүй
+export const KB_LIMITS = Object.freeze({ entries: 60, entryChars: 1700, totalChars: 24_000, voiceChars: 1500 });
 export const PAGE_LIMITS = Object.freeze({ pages: 40, pageChars: 900, totalChars: 20_000 });
 
 /** 50000 → «50,000» */
@@ -49,8 +50,13 @@ function clean(text, max) {
   return findPii(s).length ? '' : s;
 }
 
-/** Хоосон зайг нэгтгэнэ (мөр шилжилтийг « · » болгож бүтцийг хадгална) */
-const squash = (text) => String(text ?? '').replace(/\s*\n\s*/g, ' · ').replace(/\s+/g, ' ').trim();
+/** Хоосон зайг нэгтгэнэ (мөр шилжилтийг « · » болгож бүтцийг хадгална), удирдлагын тэмдэгтийг хасна */
+const squash = (text) => String(text ?? '').replace(/\r\n?/g, '\n').replace(/\s*\n\s*/g, ' · ').replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim();
+/**
+ * PII-г prompt-д ОРОХ ЯГ ТЭР текст дээр шалгана (тасалсны дараа ч — «₮»-ийг тасалбал үнэ дугаар болно; JSON хэлбэрийг ч).
+ * Аудит 2026-11-27: өмнө нь тасдахаас өмнө шалгадаг байсан тул эцсийн assertNoPii бүх ноорогийг зогсоож болох байв.
+ */
+export const hasPii = (text) => findPii(text).length > 0 || findPii(JSON.stringify(text)).length > 0;
 
 /** Үнийн текстээс ₮ дүнгүүд («₮300,000-с» → [300000]). ₮-гүй цифр («1 тун») дүн биш. */
 export function priceAmounts(text) {
@@ -126,8 +132,8 @@ export function buildSocialCatalog(input) {
     if (id === 'page:' || seen.has(id)) continue;
     const raw = squash(`${p.name}: ${p.text}`);
     if (!raw.replace(/[:·\s]/g, '')) { excluded.push({ id, kind: 'page', reason: 'empty' }); continue; }
-    if (findPii(raw).length) { excluded.push({ id, kind: 'page', reason: 'pii' }); continue; }
     const text = raw.slice(0, PAGE_LIMITS.pageChars);
+    if (hasPii(text)) { excluded.push({ id, kind: 'page', reason: 'pii' }); continue; }
     if (pageTotal + text.length > PAGE_LIMITS.totalChars) { excluded.push({ id, kind: 'page', reason: 'total_limit' }); continue; }
     pageTotal += text.length;
     seen.add(id);
@@ -144,9 +150,11 @@ export function buildSocialCatalog(input) {
     const body = squash(e.body);
     if (!title || !body) { excluded.push({ id, kind: 'kb', reason: 'empty' }); continue; }
     const raw = `${title} — ${body}`;
-    if (findPii(raw).length) { excluded.push({ id, kind: 'kb', reason: 'pii' }); continue; }
+    // Тасдахаас өмнө ч (агуулгын хаана ч утас байвал бүхэлд нь хасна), тасалсны дараа ч шалгана
+    if (hasPii(raw)) { excluded.push({ id, kind: 'kb', reason: 'pii' }); continue; }
     if (facts.filter((f) => f.kind === 'kb').length >= KB_LIMITS.entries) { excluded.push({ id, kind: 'kb', reason: 'limit' }); continue; }
     const text = raw.slice(0, KB_LIMITS.entryChars);
+    if (hasPii(text)) { excluded.push({ id, kind: 'kb', reason: 'pii' }); continue; }
     if (text.length < raw.length) truncated.push(id);
     if (kbTotal + text.length > KB_LIMITS.totalChars) { excluded.push({ id, kind: 'kb', reason: 'total_limit' }); continue; }
     kbTotal += text.length;
@@ -157,13 +165,14 @@ export function buildSocialCatalog(input) {
   }
 
   // Брэнд дуу хоолой, нэмэлт заавар (admin-ийн тусгай `voice` бичлэг) — PII илэрвэл хасна
-  const voiceRaw = String(input.voiceBrief ?? '').trim();
+  const voiceRaw = squash(input.voiceBrief);
   let voiceBrief = '';
   if (voiceRaw) {
-    if (findPii(voiceRaw).length) excluded.push({ id: 'kb:voice', kind: 'voice', reason: 'pii' });
+    const v = voiceRaw.slice(0, KB_LIMITS.voiceChars);
+    if (hasPii(voiceRaw) || hasPii(v)) excluded.push({ id: 'kb:voice', kind: 'voice', reason: 'pii' });
     else {
-      voiceBrief = squash(voiceRaw).slice(0, KB_LIMITS.voiceChars);
-      if (voiceBrief.length < squash(voiceRaw).length) truncated.push('kb:voice');
+      voiceBrief = v;
+      if (v.length < voiceRaw.length) truncated.push('kb:voice');
     }
   }
 
@@ -174,16 +183,18 @@ export function buildSocialCatalog(input) {
     allowedAmounts: [...amounts].sort((a, b) => a - b),
     // SkinAid-ийн каталогт хувийн хөнгөлөлт байхгүй — % зөвхөн НИЙТЭЛСЭН мэдлэгт бичигдсэн бол (эс бөгөөс invented_percent)
     allowedPercents: [...percents].sort((a, b) => a - b),
-    // Мэдлэгийн текстэд байгаа тоо (үйлчилгээний нэр «Glutathione 1200», «REJURAN 2ml» г.м.) — policy-ийн валютгүй дүнгийн
-    // шалгалтад зөвшөөрөгдөнө; бүх текст — хөнгөлөлт/бэлэг гэх үг мэдлэгт байгаа эсэх
-    knownNumbers: [...new Set(facts.flatMap((f) => numberMentions(f.text)))].sort((a, b) => a - b),
+    // Мэдлэгийн текстэд байгаа МӨНГӨН ДҮН БИШ тоо (үйлчилгээний нэр «Glutathione 1200», «REJURAN 2ml» г.м.) — policy-ийн
+    // валютгүй дүнгийн шалгалтад зөвшөөрөгдөнө. Үнэ (₮) энд орохгүй — ИШ ТАТСАН баримтын үнэ л (policy.js, аудит 2026-11-27).
+    knownNumbers: [...new Set(facts.flatMap((f) => { const money = new Set(moneyMentions(f.text)); return numberMentions(f.text).filter((n) => !money.has(n)); }))].sort((a, b) => a - b),
     knowledgeText: facts.map((f) => f.text).join('\n'),
     voiceBrief,
     excluded,
     truncated,
   };
-  // Давхар хамгаалалт: LLM рүү явах бүх зүйл PII-гүй, хориотой эх сурвалжийн нэргүй
-  assertNoPii(catalog);
+  // Давхар хамгаалалт: LLM рүү ЯВАХ зүйл л (нэр, баримт, дуу хоолой) PII-гүй, хориотой эх сурвалжийн нэргүй. Тоон массивууд
+  // (allowedAmounts, knownNumbers) LLM-д очдоггүй — тэдгээрийг JSON болгоход «60 сая» = 60000000 утас мэт харагдаж бүх ноорогийг
+  // зогсоодог байсан (аудит 2026-11-27).
+  assertNoPii({ clinicName: catalog.clinicName, facts: catalog.facts, voiceBrief: catalog.voiceBrief });
   assertNoForbiddenSources(catalog);
   return catalog;
 }

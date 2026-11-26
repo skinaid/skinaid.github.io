@@ -523,8 +523,12 @@ body.has-savebar .snackbar { bottom: 92px; }
 /* 6 цэс 360px-ийн утсанд багтах (Messenger AI нэмэгдсэн) */
 @media (max-width: 380px) { .menu a { font-size: 10px; padding-inline: 1px; } }
 /* Messenger AI → «Сургалт» (2-р үе шат) */
-.ms-tabs { overflow-x: auto; scrollbar-width: none; }
 .ms-tabs [role="tab"] { flex: none; }
+.btn[aria-disabled="true"] { opacity: .6; cursor: progress; }
+.toolbar__meta.is-warn { color: var(--warn); font-weight: 700; }
+.ms-privacy { padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn); font-size: 13.5px; line-height: 1.45; }
+.ms-privacy strong { display: block; }
+@media (max-width: 380px) { .ms-tabs [role="tab"] { padding-inline: 10px; } }
 .ms-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .ms-check input { width: 18px; height: 18px; accent-color: var(--purple); }
 .ms-editor { display: grid; gap: 12px; margin: 4px 0 16px; padding: 14px; border: 1.5px solid var(--purple-200); border-radius: 16px; background: var(--cream-50); }
@@ -541,6 +545,7 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ms-item__act { display: flex; gap: 6px; flex-wrap: wrap; }
 .ms-exrow { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
 .ms-ex-done { font-weight: 800; color: var(--ok); }
+.ms-ex-stale { font-weight: 800; color: var(--warn); }
 .ms-try-out { margin-top: 14px; }
 .ms-try-out:empty { display: none; }
 .ms-sub { font-size: 14px; font-weight: 800; color: var(--purple-900); margin: 4px 0 6px; }

@@ -9,9 +9,9 @@
    ========================================================================== */
 import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
-import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=70a601a4';
-import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft } from './messenger-lib.js?v=0b39c3fd';
-import * as training from './m-messenger-train.js?v=fb2e4bd0';
+import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=5acdb312';
+import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft } from './messenger-lib.js?v=93f1be2b';
+import * as training from './m-messenger-train.js?v=3d9a0dbd';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };
@@ -73,13 +73,18 @@ const EX_HINT = {
   edited: 'Таны бичсэн зөв хариу сайн жишээ болно.',
   wrong: 'AI-ийн энэ хариу муу жишээ болно (тэмдэглэл = яагаад буруу).',
 };
+/** Ноорогийн картын «Жишээ» мөр: боломжгүй бол юу ч үгүй; хуучирсан бол «шинэчлэх» */
 function exampleRow(d) {
-  if (!d.rating || !d.userText) return '';
+  const st = training.draftExampleState(d);
+  if (st === 'none') return '';
   const id = esc(d.id);
-  return training.hasExample(exampleIdForDraft(d.id))
-    ? `<div class="ms-exrow"><span class="ms-ex-done">✓ Жишээнд орсон</span> <button class="btn btn--ghost btn--sm" type="button" data-ex-edit="${id}">Жишээг засах</button></div>`
-    : `<div class="ms-exrow"><button class="btn btn--outline btn--sm" type="button" data-ex="${id}"${busy.has(d.id) ? ' disabled' : ''}>Жишээ болгох</button> <small class="muted">${esc(EX_HINT[d.rating] || '')}</small></div>`;
+  if (st === 'same') return `<div class="ms-exrow"><span class="ms-ex-done">✓ Жишээнд орсон</span> <button class="btn btn--ghost btn--sm" type="button" data-ex-edit="${id}">Жишээг засах</button></div>`;
+  if (st === 'stale') return `<div class="ms-exrow"><span class="ms-ex-stale">Үнэлгээ өөрчлөгдсөн</span> <button class="btn btn--outline btn--sm" type="button" data-ex="${id}">Жишээг шинэчлэх</button></div>`;
+  return `<div class="ms-exrow"><button class="btn btn--outline btn--sm" type="button" data-ex="${id}">Жишээ болгох</button> <small class="muted">${esc(EX_HINT[d.rating] || '')}</small></div>`;
 }
+/** Энэ картын үнэлгээ/тэмдэглэл ХАДГАЛСАН утгаас ялгаатай эсэх (утгаар — буцааж бичсэн бол зөрөхгүй) */
+const cardDirty = (d) => (ratingPick.has(d.id) && ratingPick.get(d.id) !== (d.rating || ''))
+  || (noteDraft.has(d.id) && noteDraft.get(d.id).trim() !== String(d.note || '').trim());
 
 const noteLabel = (required) => (required ? 'Зөв хариу <span class="req">*</span> <small>(AI-ийн оронд юу гэж хариулах байсан)</small>' : 'Тэмдэглэл <small>(заавал биш)</small>');
 const turnHtml = (t) => `<li><span class="ms-who">${esc(ROLE_TEXT[t.role] || t.role)}</span> ${t.text ? esc(t.text) : `<em class="muted">(${esc((t.attachments || []).join(', ') || 'хоосон')})</em>`}</li>`;
@@ -184,19 +189,13 @@ list.addEventListener('click', async (e) => {
   if (x) {
     const d = drafts.find((r) => r.id === x.dataset.ex);
     // Хадгалаагүй үнэлгээтэй бол эхлээд хадгалуулна (жишээ нь ХАДГАЛСАН үнэлгээнээс үүснэ)
-    if (d && (ratingPick.has(d.id) || noteDraft.has(d.id))) { showCardErr(d.id, 'Эхлээд «Үнэлгээ хадгалах» дарна уу.'); return; }
-    if (d) {
-      x.disabled = true;
-      await training.exampleFromDraftAction(d);
-      if (x.isConnected) x.disabled = false;
-      // Мөр шинэчлэгдсэн (товч солигдсон) — фокусыг тэр картын жишээний товч руу
-      const card = $(`.ms-card[data-id="${CSS.escape(d.id)}"]`, list);
-      if (!x.isConnected && card && $('#msPanelDrafts').hidden === false) $('.ms-exrow button', card)?.focus();
-    }
+    if (d && cardDirty(d)) { showCardErr(d.id, 'Эхлээд «Үнэлгээ хадгалах» дарна уу.'); x.focus(); return; }
+    // Урьдчилан бөглөсөн засварлагч «Сургалт» табд нээгдэнэ (хувийн мэдээллийг арилгаад хадгална)
+    if (d) await training.exampleFromDraftAction(d, x);
     return;
   }
   const xe = e.target.closest('[data-ex-edit]');
-  if (xe) training.editExample(exampleIdForDraft(xe.dataset.exEdit));
+  if (xe) training.editExample(exampleIdForDraft(xe.dataset.exEdit), xe);
 });
 list.addEventListener('change', (e) => {
   const r = e.target.closest('input[type="radio"]');
@@ -455,8 +454,11 @@ form.addEventListener('change', refreshDirty);
 // isDirty нь үнэлгээг ч тооцно — гарах/хаахад анхааруулга гарна.
 registerForm('messenger', {
   isDirty,
+  // Харагдаж буй табын маягтыг ЭХЛЭЭД хадгална (Сургалт таб дээр Ctrl+S = мэдлэг/жишээ)
   save: async () => {
-    if (settingsDirty()) await save();
+    const onTrain = !$('#msPanelTrain').hidden;
+    if (onTrain && training.isDirty()) await training.save();
+    else if (settingsDirty()) await save();
     else if (training.isDirty()) { selectTab('train'); await training.save(); }
     else if (notesDirty()) {
       selectTab('drafts');
@@ -468,13 +470,14 @@ registerForm('messenger', {
   },
   discard: () => {
     if (saving) return;
+    if (training.discard() === false) { snack('Хадгалалт дуусаагүй байна — дуусахыг хүлээнэ үү.'); return; }
     if (saved) fill(saved);
     ratingPick.clear(); noteDraft.clear(); cardErr.clear();
-    training.discard();
     clearErrors(form); renderDrafts(); refreshDirty();
   },
   reset: () => { teardown(); },
-  anchor: $('#msActions'),
+  // Таб бүрийн «Хадгалах» мөр — харагдаж байвал доод хадгалах мөрийг давхар гаргахгүй
+  anchors: [$('#msActions'), $('#msKbActions'), $('#msExActions')],
 });
 
 /* ---------- Нээх / хаах ---------- */

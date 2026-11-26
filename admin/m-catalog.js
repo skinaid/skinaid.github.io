@@ -5,7 +5,7 @@
    ========================================================================== */
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, str, fmtDate, errText, session, setStatus, DEFAULTS, CATS, scrollMode } from './core.js?v=2c361933';
-import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow, captureFocus } from './ui.js?v=70a601a4';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow, captureFocus } from './ui.js?v=5acdb312';
 import { normSearch } from './lib.js?v=a9638bd3';
 import { renderPages } from './m-pages.js?v=26a525a2';
 

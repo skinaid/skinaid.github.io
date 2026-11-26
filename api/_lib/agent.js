@@ -7,6 +7,7 @@
  */
 import { anthropicConfigured } from './config.js';
 import { bookingUrl, slugForSources } from './booking-link.js';
+import { PAGES } from './generated/pages-knowledge.js';
 import { costMicroUsd, MESSENGER_MODEL } from './claude.js';
 import { CLINIC } from './clinic-facts.js';
 import { ubMonth } from './store.js';
@@ -49,13 +50,15 @@ function templateFor(intent, signals, phone) {
 /**
  * @param {{ store: ReturnType<import('./store.js').createStore>, knowledge: ReturnType<import('./knowledge.js').createKnowledge>,
  *   callClaude: ReturnType<import('./claude.js').createClaudeCaller>, env?: Record<string, string|undefined>, now?: () => Date,
- *   log?: (msg: string) => void }} deps
+ *   log?: (msg: string) => void, pages?: readonly { slug: string, catalogIds?: readonly string[] }[] }} deps
  */
 export function createAgent(deps) {
   const env = deps.env ?? process.env;
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? ((m) => console.warn(m));
   const { store, knowledge, callClaude } = deps;
+  /** Нийтлэгдсэн эмчилгээний хуудас (захиалгын холбоосын ?svc=) — тест тарьна */
+  const pages = deps.pages ?? PAGES;
 
   /** Нийтлэг ноорогийн талбар */
   function baseDraft(psidHash, replyToEventId, turns) {
@@ -68,8 +71,7 @@ export function createAgent(deps) {
    * @returns {Promise<{ status: 'error', code: string, retry: boolean, run: object }
    *   | { status: 'ok'|'fallback', fields: Record<string, any>, run: object }>}
    */
-  async function generate({ k, turns, userText, thread, mode, runBase }) {
-    const t0 = Date.now();
+  async function generate({ k, turns, userText, thread, mode, runBase, t0 = Date.now() }) {
     const signals = detectRiskSignals(userText);
     const req = buildSocialRequest({ catalog: k.catalog, examples: k.examples, turns });
     const result = await callClaude(req);
@@ -113,9 +115,12 @@ export function createAgent(deps) {
       allowedPercents: catalog.allowedPercents,
       knownNumbers: catalog.knownNumbers,
       knowledgeText: catalog.knowledgeText,
+      // Дүн, хувь, хөнгөлөлт — ЗӨВХӨН иш татсан баримтаас (policy.js citedAllowance)
+      facts: catalog.facts,
     });
     const sendable = decision.route === 'auto_candidate' || decision.route === 'draft';
-    const link = sendable && LINK_INTENTS.has(decision.intent) ? bookingUrl(slugForSources(decision.sourceIds) ?? undefined) : null;
+    const slug = slugForSources(decision.sourceIds, pages);
+    const link = sendable && LINK_INTENTS.has(decision.intent) ? bookingUrl(slug ?? undefined, pages.map((p) => p.slug)) : null;
     const templateReply = decision.route === 'handoff' ? templateFor(decision.intent, decision.signals, k.phone) : null;
     let wouldSend = null;
     if (decision.route === 'auto_candidate') {
@@ -176,6 +181,7 @@ export function createAgent(deps) {
     async replyDraft({ psidHash, replyToEventId, thread, eventStatus }) {
       const settings = await store.readSettings();
       if (!settings.active) return { skipped: 'inactive', finalized: false };
+      const t0 = Date.now();
       const month = ubMonth(now());
       const runBase = { kind: 'messenger_reply', model: MESSENGER_MODEL, promptVersion: SOCIAL_PROMPT_VERSION, threadId: psidHash };
 
@@ -205,7 +211,7 @@ export function createAgent(deps) {
         return { route: 'handoff', reason: 'cap_reached', finalized: true };
       }
 
-      const g = await generate({ k, turns, userText: base.userText, thread, mode: settings.mode, runBase });
+      const g = await generate({ k, turns, userText: base.userText, thread, mode: settings.mode, runBase, t0 });
       if (g.status === 'error') {
         // Ноорог бичихгүй — бүртгэл + статус. Түр зуурын алдаа бол event pending үлдэж дахин оролдоно (MAX_ATTEMPTS).
         await store.saveDraft({ draft: null, run: g.run, month, eventStatus: g.retry ? null : eventStatus });

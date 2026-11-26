@@ -80,10 +80,21 @@ const ruleBlock = (name) => {
   return RULES.slice(at, RULES.indexOf('\n    }', at));
 };
 
-test('сургалт: мэдлэг, жишээний хязгаар = firestore.rules; voice id = сервер; id-ууд rules-ийн хэлбэрт', async () => {
+test('сургалт: мэдлэг, жишээний хязгаар ≤ firestore.rules, = серверийн prompt хязгаар; voice/_rev id = сервер; id-ууд rules-ийн хэлбэрт', async () => {
   const kbRule = ruleBlock('messenger_kb');
   assert.match(kbRule, new RegExp(`isStr\\(incoming\\(\\)\\.get\\('title', ''\\), 1, ${A.KB_LIMITS.title}\\)`));
-  assert.match(kbRule, new RegExp(`isStr\\(incoming\\(\\)\\.get\\('body', ''\\), 1, ${A.KB_LIMITS.body}\\)`));
+  // Агуулга: rules 4000 хүртэл; admin нь AI-ийн уншдаг хэмжээгээр (1500) хязгаарлана (аудит 2026-11-27)
+  const rulesBody = Number(kbRule.match(/isStr\(incoming\(\)\.get\('body', ''\), 1, (\d+)\)/)[1]);
+  assert.ok(A.KB_LIMITS.body <= rulesBody);
+  const { KB_LIMITS: SRV_KB } = await import('../../api/_lib/social/catalog-safe.js');
+  const { EXAMPLE_LIMITS } = await import('../../api/_lib/social/examples.js');
+  const { KB_IDS } = await import('../../api/_lib/store.js');
+  assert.ok(A.KB_LIMITS.title + 3 + A.KB_LIMITS.body <= SRV_KB.entryChars, 'admin-ий хязгаарт багтсан бичлэг AI-д тасрахгүй');
+  assert.ok(A.KB_LIMITS.body <= SRV_KB.voiceChars, 'брэнд дуу хоолой тасрахгүй');
+  assert.deepEqual(A.KB_BUDGET, { chars: SRV_KB.totalChars, entries: SRV_KB.entries, entryChars: SRV_KB.entryChars });
+  assert.deepEqual(A.EX_BUDGET, { items: EXAMPLE_LIMITS.items, customer: EXAMPLE_LIMITS.customerChars, reply: EXAMPLE_LIMITS.replyChars, why: EXAMPLE_LIMITS.whyChars, total: EXAMPLE_LIMITS.totalChars });
+  assert.equal(A.KB_REV_ID, KB_IDS.rev);
+  assert.match(A.KB_REV_ID, /^[A-Za-z0-9_-]{1,40}$/, 'тэмдгийн id rules-ийн хэлбэрт');
   assert.match(kbRule, /hasOnly\(\['title', 'body', 'status', 'updatedAt', 'updatedBy'\]\)/);
   assert.deepEqual([...kbRule.match(/get\('status', ''\) in \[([^\]]+)\]/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]), A.KB_STATUS.map((s) => s.key));
   const exRule = ruleBlock('messenger_examples');
@@ -141,13 +152,42 @@ test('сургалт: m-messenger-train.js — текстийг esc()-ээр; Fi
   for (const f of ['r.userText', 'r.reply', 'r.note', 'r.body', 'r.aiReason']) {
     assert.ok(!src.includes(`\${${f}}`), `${f} esc-гүй`);
   }
-  assert.match(src, /setDoc\(doc\(db, 'messenger_kb', id\), data\)/);
   assert.match(src, /const data = \{ title: v\.title\.slice\(0, KB_LIMITS\.title\), body: v\.body, status: v\.status, updatedAt: serverTimestamp\(\), updatedBy: session\.user\.email \};/);
-  const exData = [...src.matchAll(/const data = \{ userText: v\.userText, reply: v\.reply, kind: v\.kind, note: v\.note, updatedAt: serverTimestamp\(\), updatedBy: session\.user\.email \};/g)];
-  assert.equal(exData.length, 2, 'гараар болон ноорогоос — ижил талбарууд');
+  assert.match(src, /const data = \{ userText: v\.userText, reply: v\.reply, kind: v\.kind, note: v\.note, updatedAt: serverTimestamp\(\), updatedBy: session\.user\.email \};/);
+  // Бичилт бүр мэдлэгийн тэмдэгтэй НЭГ batch-д; тэмдэг = rules-ийн мэдлэгийн талбарууд (ноорог — AI-д орохгүй)
+  assert.match(src, /const revData = \(\) => \(\{ title: '[^']+', body: new Date\(\)\.toISOString\(\), status: 'draft', updatedAt: serverTimestamp\(\), updatedBy: session\.user\.email \}\);/);
+  assert.equal((src.match(/commitWithRev\(/g) || []).length, 5, 'тодорхойлолт + мэдлэг/жишээ хадгалах, устгах');
+  assert.ok(!/\bsetDoc\(|\bdeleteDoc\(/.test(src), 'тэмдэггүй шууд бичилт алга');
+  // Ноорогоос жишээ ШУУД хадгалагдахгүй — урьдчилан бөглөсөн засварлагч (хувийн мэдээллийг арилгуулна)
+  const fromDraft = src.slice(src.indexOf('export async function exampleFromDraftAction'), src.indexOf('export function editExample'));
+  assert.ok(/openEx\(/.test(fromDraft) && !/commitWithRev/.test(fromDraft));
   assert.match(src, /Authorization: `Bearer \$\{token\}`/);
   assert.match(src, /fetch\('\/api\/admin'/);
   assert.ok(!/localStorage|sessionStorage/.test(src), 'token хадгалахгүй');
   const ms = readFileSync(new URL('../../admin/m-messenger.js', import.meta.url), 'utf8');
-  assert.match(ms, /training\.exampleFromDraftAction\(d\)/);
+  assert.match(ms, /training\.exampleFromDraftAction\(d, x\)/);
+});
+
+test('сургалт (аудит 2026-11-27): ноорогийн жишээний төлөв — үнэлгээ өөрчлөгдвөл «stale»; мэдлэг/жишээний AI-д орох хэмжээ; жижиг зардал', () => {
+  const d = { id: 'd_1', userText: 'Үзлэг хэд вэ?', reply: 'Үзлэг ₮45,000', rating: 'good', note: '' };
+  assert.equal(A.exampleState({ ...d, reply: '', rating: 'good' }), 'none', 'AI-ийн хариугүй «Зөв» — товч гарахгүй');
+  assert.equal(A.exampleState(d, null), 'new');
+  const cur = { kind: 'good', reply: 'Үзлэг ₮45,000' };
+  assert.equal(A.exampleState(d, cur), 'same');
+  assert.equal(A.exampleState({ ...d, rating: 'wrong', note: 'Буруу үнэ' }, cur), 'stale', 'Зөв → Буруу');
+  assert.equal(A.exampleState({ ...d, rating: 'edited', note: 'Арьсны үзлэг ₮50,000.' }, cur), 'stale', 'Зөв → Засвартай (жишээ AI-ийн хуучин хариутай)');
+  assert.equal(A.exampleState({ ...d, rating: 'edited', note: 'Арьсны үзлэг ₮50,000.' }, { kind: 'good', reply: 'Арьсны үзлэг ₮50,000 (нэргүй болгосон).' }), 'same', 'ажилтан зассан жишээ — хуучирсан биш');
+  const kb = A.kbBudget([
+    { id: 'k_1', title: 'а'.repeat(10), body: 'б'.repeat(100), status: 'published' },
+    { id: 'k_2', title: 'x', body: 'y', status: 'draft' },
+    { id: 'voice', title: 'v', body: 'v'.repeat(1000), status: 'published' },
+    { id: '_rev', title: 't', body: 'r', status: 'draft' },
+  ]);
+  assert.deepEqual(kb, { published: 1, chars: 113, over: false });
+  assert.equal(A.kbBudget(Array.from({ length: 20 }, (_, i) => ({ id: `k_${i}`, title: 'Т', body: 'б'.repeat(1500), status: 'published' }))).over, true);
+  const rows = Array.from({ length: 35 }, (_, i) => ({ userText: 'а', reply: 'б', note: '', updatedAt: new Date(i * 1000) }));
+  assert.equal(A.exampleBudget(rows).used, 30, 'тооны хязгаар');
+  assert.equal(A.exampleBudget(Array.from({ length: 25 }, () => ({ userText: 'а'.repeat(500), reply: 'б'.repeat(600), note: '' }))).used, 10, 'нийт 12,000 тэмдэгт');
+  assert.equal(A.usd3(14_200), '$0.014');
+  assert.equal(A.sortKb([{ id: '_rev', title: 'z', status: 'draft' }, { id: 'k_1', title: 'a', status: 'draft' }]).length, 1, 'тэмдэг жагсаалтад харагдахгүй');
 });

@@ -237,7 +237,7 @@ test('prompt: 2 system блок хоёулаа кэштэй; тогтмол бл
   const c = buildSocialCatalog(catalogInput);
   const r = buildSocialRequest({ catalog: c, turns: [{ role: 'user', text: 'Сайн байна уу' }] });
   assert.equal(r.system.length, 2);
-  for (const b of r.system) assert.deepEqual(b.cache_control, { type: 'ephemeral' });
+  for (const b of r.system) assert.deepEqual(b.cache_control, { type: 'ephemeral', ttl: '1h' }, '1 цагийн кэш (сийрэг урсгал — аудит 2026-11-27)');
   assert.equal(r.system[0].text, SOCIAL_SYSTEM_STATIC);
   assert.ok(!SOCIAL_SYSTEM_STATIC.includes('SkinAid'));
   assert.ok(!/\d{4}-\d{2}-\d{2}/.test(SOCIAL_SYSTEM_STATIC));

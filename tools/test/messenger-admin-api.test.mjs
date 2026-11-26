@@ -183,8 +183,8 @@ test('admin API knowledge: нийтэлсэн FAQ орно; ноорог, ута
   kb(s.fake, 'k_draft', { title: 'Шинэ', body: 'Ноорог мэдлэг', status: 'draft' });
   kb(s.fake, 'k_pii', { title: 'Утас', body: 'Манай утас 9911 2233', status: 'published' });
   kb(s.fake, 'voice', { title: 'Брэнд', body: 'Найрсаг, товч, мэргэжлийн.', status: 'published' });
-  s.fake.seed('messenger_examples/x_1', { kind: 'good', userText: 'Сайн уу', reply: 'Сайн байна уу! Юугаар туслах вэ?', note: '' }, encodeFields);
-  s.fake.seed('messenger_examples/x_2', { kind: 'bad', userText: 'Үнэ?', reply: 'Ботокс 350,000₮', note: 'Нийтлээгүй үнэ' }, encodeFields);
+  s.fake.seed('messenger_examples/x_1', { kind: 'good', userText: 'Сайн уу', reply: 'Сайн байна уу! Юугаар туслах вэ?', note: '', updatedAt: new Date(NOW - 2000) }, encodeFields);
+  s.fake.seed('messenger_examples/x_2', { kind: 'bad', userText: 'Үнэ?', reply: 'Ботокс 350,000₮', note: 'Нийтлээгүй үнэ', updatedAt: new Date(NOW - 1000) }, encodeFields);
   const res = await s.call({ action: 'knowledge' });
   assert.equal(res.status, 200);
   const k = (await res.json()).knowledge;
@@ -192,6 +192,7 @@ test('admin API knowledge: нийтэлсэн FAQ орно; ноорог, ута
   assert.equal(k.voice, true);
   assert.deepEqual(k.examples, [{ id: 'x_1', kind: 'good' }, { id: 'x_2', kind: 'bad' }]);
   assert.ok(k.excluded.some((e) => e.id === 'kb:k_pii' && e.reason === 'pii'));
+  assert.ok(k.excluded.some((e) => e.id === 'kb:k_draft' && e.reason === 'draft'), 'admin харах үед ноорог «ороогүй» гэж жагсагдана');
   assert.ok(!k.blocks.join('\n').includes('9911'), 'утастай FAQ prompt-д үгүй');
   assert.deepEqual(k.allowedAmounts, [20000, 50000]);
   assert.deepEqual(k.allowedPercents, [10]);
@@ -227,7 +228,13 @@ test('admin API test: үйлдвэрлэлийн prompt + бодлого → н�
   assert.equal(run.kind, 'admin_test');
   assert.ok(!JSON.stringify(run).includes('үзлэг хэд'), 'ai_runs-д текст үгүй');
   assert.equal(s.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).runs, 1);
+  assert.equal(s.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).tests, 1);
   assert.equal(s.fake.read(`messenger_usage/${ubDay(new Date(NOW))}`).tests, 1);
+  assert.ok(s.fake.read(`messenger_usage/${ubDay(new Date(NOW))}`).expireAt instanceof Date, 'өдрийн тоологч cron-оор устна');
+  // Туршилтын бүртгэл (ai_runs + сарын зардал) НЭГ commit-д
+  const commits = s.fake.calls.filter((c) => c.url.endsWith(':commit'));
+  const runCommit = commits.find((c) => c.body.writes.some((w) => w.update?.name.includes('/ai_runs/')));
+  assert.ok(runCommit.body.writes.some((w) => w.update?.name.endsWith(`/messenger_usage/${ubMonth(new Date(NOW))}`)));
 });
 
 test('admin API test: яаралтай зогсоолт 409, сар/өдрийн хязгаар 429, түлхүүргүй 503, хоосон/урт текст 400, Claude алдаа 502 (тоологдоно)', async () => {
@@ -255,7 +262,37 @@ test('admin API test: яаралтай зогсоолт 409, сар/өдрийн
   assert.equal(r.status, 502);
   assert.equal((await r.json()).code, 'api_529');
   assert.equal(err.fake.read(`messenger_usage/${ubDay(new Date(NOW))}`).tests, 1, 'алдаатай туршилт ч өдрийн тоонд');
-  assert.equal(err.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`), null, 'төлбөргүй (usage null) — сарын тоологч хөдлөхгүй');
+  assert.equal(err.fake.read(`messenger_usage/${ubMonth(new Date(NOW))}`).runs, undefined, 'төлбөргүй (usage null) — сарын AI тоо хөдлөхгүй');
+  // Сарын туршилтын хязгаар (сарын AI хязгаарын 20%, ≥ 100) — үйлдвэрлэлийн ноорогт үлдээнэ
+  const mt = setup();
+  mt.fake.seed(`messenger_usage/${ubMonth(new Date(NOW))}`, { runs: 0, tests: 600 }, encodeFields);
+  assert.deepEqual(await code(await mt.call({ action: 'test', text: 'Сайн уу' })), [429, 'month_tests']);
+  assert.equal(mt.claudeCalls.length, 0);
+});
+
+test('admin API test: тоог Claude-ээс ӨМНӨ атомаар нөөцөлнө — зэрэг 2 хүсэлт 99-өөс 100 хүрэхэд нэг л Claude; инстанст нэг удаад нэг', async () => {
+  const s = setup();
+  s.fake.seed(`messenger_usage/${ubDay(new Date(NOW))}`, { tests: ADMIN_TESTS_PER_DAY - 1 }, encodeFields);
+  const [a, b] = await Promise.all([s.call({ action: 'test', text: 'Сайн уу' }), s.call({ action: 'test', text: 'Сайн уу' })]);
+  assert.deepEqual([a.status, b.status].sort(), [200, 429]);
+  assert.equal(s.claudeCalls.length, 1);
+  assert.equal(s.fake.read(`messenger_usage/${ubDay(new Date(NOW))}`).tests, ADMIN_TESTS_PER_DAY);
+  // Зэрэг бичилт (precondition зөрчил) → дахин уншиж оролдоно
+  const r = setup();
+  r.fake.failNext.push({ match: (u) => u.endsWith(':commit'), status: 400, body: { error: { code: 400, status: 'FAILED_PRECONDITION', message: 'x' } } });
+  assert.equal((await r.call({ action: 'test', text: 'Сайн уу' })).status, 200);
+  assert.equal(r.fake.read(`messenger_usage/${ubDay(new Date(NOW))}`).tests, 1);
+});
+
+test('admin API test: ноорогтой туршилт үйлдвэрлэлийн кэшийг бохирдуулахгүй (ноорог → энгийн дараалал)', async () => {
+  const claude = () => ({ status: 'ok', text: reply({ intent: 'promotion', reply: 'Урьдчилгаа ₮20,000.', source_ids: ['kb:k_new'] }), model: MESSENGER_MODEL, usage: { input_tokens: 1, output_tokens: 1 } });
+  const s = setup({ claude });
+  kb(s.fake, 'k_new', { title: 'Урьдчилгаа', body: 'Цаг захиалахад ₮20,000 урьдчилгаа.', status: 'draft' });
+  const dr = await (await s.call({ action: 'test', text: 'Урьдчилгаа хэд вэ?', includeDrafts: true })).json();
+  assert.equal(dr.result.route, 'auto_candidate');
+  const pub = await (await s.call({ action: 'test', text: 'Урьдчилгаа хэд вэ?' })).json();
+  assert.equal(pub.result.route, 'handoff', 'ноорог мэдлэг үйлдвэрлэлийн мэдлэгт орохгүй');
+  assert.ok(!s.claudeCalls[1].system[1].text.includes('kb:k_new'));
 });
 
 test('admin API test: ноорог FAQ-г зөвхөн «нийтлээгүйг хамт турших» үед; FAQ-ийн үнэ зөвшөөрөгдөнө', async () => {
@@ -268,4 +305,19 @@ test('admin API test: ноорог FAQ-г зөвхөн «нийтлээгүйг 
   const dr = await (await s.call({ action: 'test', text: 'Урьдчилгаа хэд вэ?', includeDrafts: true })).json();
   assert.equal(dr.result.route, 'auto_candidate');
   assert.deepEqual(dr.result.sourceIds, ['kb:k_new']);
+});
+
+test('cron: ноорогоос үүссэн жишээ (x_) 180 хоногийн дараа устна, гараар бичсэн (e_) хэвээр; мэдлэгийн тэмдэг шинэчлэгдэнэ; өдрийн тоологч устна', async () => {
+  const s = setup();
+  const old = new Date(NOW - 200 * 86_400_000);
+  s.fake.seed('messenger_examples/x_old', { kind: 'good', userText: 'a', reply: 'b', note: '', updatedAt: old }, encodeFields);
+  s.fake.seed('messenger_examples/e_old', { kind: 'good', userText: 'a', reply: 'b', note: '', updatedAt: old }, encodeFields);
+  s.fake.seed('messenger_examples/x_new', { kind: 'good', userText: 'a', reply: 'b', note: '', updatedAt: new Date(NOW) }, encodeFields);
+  assert.equal(await s.store.purgeDraftExamples(), 1);
+  assert.deepEqual(s.fake.list('messenger_examples').sort(), ['messenger_examples/e_old', 'messenger_examples/x_new']);
+  const rev = s.fake.read('messenger_kb/_rev');
+  assert.equal(rev.status, 'draft', 'тэмдэг нь нийтлэгдээгүй бичлэг — AI-д орохгүй');
+  const src = readFileSync(new URL('../../api/_lib/cron.js', import.meta.url), 'utf8');
+  assert.match(src, /COL\.usage\]/);
+  assert.match(src, /purgeDraftExamples/);
 });

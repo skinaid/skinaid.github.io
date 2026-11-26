@@ -2,37 +2,57 @@
    SKIN AID admin — Messenger AI → «Сургалт» (2-р үе шат). m-messenger.js импортолж холбоно (initTraining).
    · Туршилтын асуулт — POST /api/admin {action:'test'} (Firebase ID token): ноорогтой ижил хариу, хадгалахгүй, илгээхгүй.
    · Мэдлэг (messenger_kb: FAQ, бодлого; тусгай id «voice» = брэнд дуу хоолой) — ноорог / нийтэлсэн.
-   · Жишээ (messenger_examples: сайн/муу) — ноорогоос нэг товчоор (exampleFromDraftAction) эсвэл гараар.
+   · Жишээ (messenger_examples: сайн/муу) — ноорогоос (exampleFromDraftAction: урьдчилан бөглөсөн засварлагч — хувийн
+     мэдээллийг арилгаад хадгална) эсвэл гараар.
    · AI-д юу орж байна — POST /api/admin {action:'knowledge'} (LLM-гүй).
+   Бичилт бүр `messenger_kb/_rev` тэмдгийг НЭГ batch-д шинэчилнэ — сервер мэдлэгийг ≤ 1 минутад дахин ачаална.
    Firestore-д ЗӨВХӨН rules-ийн зөвшөөрсөн талбар (title/body/status, userText/reply/kind/note + updatedAt/updatedBy).
-   Квот: таб анх нээхэд ≤ 100 + 100 read. Бүх текстийг esc()-ээр (XSS).
+   Квот: таб анх нээхэд ≤ 100 + 100 read (жишээг ноорогийн цэс аль хэдийн уншсан бол дахин уншихгүй). Бүх текстийг esc()-ээр.
    ========================================================================== */
-import { collection, query, limit, getDocs, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf } from './core.js?v=2c361933';
-import { dialog, snack, announce, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=70a601a4';
+import { collection, query, limit, getDocs, doc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, DEFAULTS } from './core.js?v=2c361933';
+import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=5acdb312';
 import {
-  ROUTE_TONE, usd, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
-  exampleIdForDraft, validateKb, validateExample, exampleFromDraft, sortKb, apiErrorText, EXCLUDE_TEXT,
-} from './messenger-lib.js?v=0b39c3fd';
+  ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
+  exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, apiErrorText, EXCLUDE_TEXT, usd3,
+  kbBudget, exampleBudget, KB_BUDGET,
+} from './messenger-lib.js?v=93f1be2b';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');
 const tryForm = $('#msTryForm'), tryText = $('#ms-try'), tryDrafts = $('#ms-try-drafts'), tryBtn = $('#btnMsTry'), tryStatus = $('#msTryStatus'), tryOut = $('#msTryOut');
 const kbForm = $('#msKbForm'), kbErr = $('#msKbErr'), kbTitle = $('#ms-kb-title'), kbBody = $('#ms-kb-body'), kbList = $('#msKbList'), kbMeta = $('#msKbMeta'), kbStatusEl = $('#msKbSaveStatus');
-const exForm = $('#msExForm'), exErr = $('#msExErr'), exUser = $('#ms-ex-user'), exReply = $('#ms-ex-reply'), exNote = $('#ms-ex-note'), exList = $('#msExList'), exMeta = $('#msExMeta'), exStatusEl = $('#msExSaveStatus');
-const knowOut = $('#msKnowOut'), knowStatus = $('#msKnowStatus');
+const exForm = $('#msExForm'), exErr = $('#msExErr'), exUser = $('#ms-ex-user'), exReply = $('#ms-ex-reply'), exNote = $('#ms-ex-note'), exList = $('#msExList'), exMeta = $('#msExMeta'), exStatusEl = $('#msExSaveStatus'), exPrivacy = $('#msExPrivacy');
+const knowOut = $('#msKnowOut'), knowStatus = $('#msKnowStatus'), knowBtn = $('#btnMsKnow'), knowDrafts = $('#ms-know-drafts');
+const btnKbNew = $('#btnMsKbNew'), btnVoice = $('#btnMsVoice'), btnExNew = $('#btnMsExNew');
 
-/** m-messenger.js-ийн callback (таб солих, ноорогийн картыг дахин зурах) */
+/** m-messenger.js-ийн callback (таб солих, ноорогийн картын «Жишээ» мөр, хадгалаагүй өөрчлөлтийн тэмдэг) */
 let deps = { selectTab: () => {}, onExamplesChange: () => {}, onDirty: () => {} };
 export function initTraining(d) { deps = { ...deps, ...d }; }
 
 const kb = new Map();          // id → { id, title, body, status, updatedAt, updatedBy }
 const ex = new Map();          // id → { id, kind, userText, reply, note, updatedAt, updatedBy }
-let kbReady = false, exReady = false, opened = false, loading = null;
-let kbEdit = null;             // { id, isNew, snap }
-let exEdit = null;             // { id, isNew, snap }
-let saving = false, trying = false;
+let kbReady = false, exReady = false, opened = false;
+let loadingKb = null, loadingEx = null;
+let kbEdit = null;             // { id, isNew, snap, opener }
+let exEdit = null;             // { id, isNew, snap, opener, fromDraft }
+let busy = '';                 // '' | 'kb' | 'ex' | 'del' | 'draft' — нэг удаад нэг бичилт
+let trying = false, knowing = false;
 let lastTry = null;            // { result, run }
+let gen = 0;                   // teardown бүрт нэмэгдэнэ — гарсны дараах async үр дүнг үл тооно
+const alive = (g) => g === gen && !!session.user;
+
+/** role=status элементэд ижил текстийг дахин бичихгүй (дэлгэц уншигч давтахгүй) */
+const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
+const busyMsg = () => snack('Өмнөх хадгалалт дуусаагүй байна — хэдэн секунд хүлээнэ үү.');
+const MS = (v) => msOf(v) ?? (v instanceof Date ? v.getTime() : 0);
+
+/** Нээх товчнууд: ачаалагдаагүй, алдаатай, хадгалж байх үед идэвхгүй (хоосон засварлагч бодит бичлэгийг дарж бичихгүй) */
+function syncOpeners() {
+  btnKbNew.disabled = !kbReady || !!busy;
+  btnVoice.disabled = !kbReady || !!busy;
+  btnExNew.disabled = !exReady || !!busy;
+}
 
 /* ---------- Сервер (/api/admin) ---------- */
 const codeErr = (code, body) => Object.assign(new Error(code), { apiCode: code, body });
@@ -46,38 +66,65 @@ async function api(action, payload = {}) {
   } catch (_) { throw codeErr('network'); }
   let j = null;
   try { j = await res.json(); } catch (_) { j = null; }
-  if (!j || typeof j !== 'object') throw codeErr(res.status === 404 || res.status === 405 ? 'no_server' : 'server_error');
-  if (!res.ok || !j.ok) throw codeErr(typeof j.error === 'string' ? j.error : 'server_error', j);
+  // JSON биш хариу (GitHub Pages / localhost / өөр сервер) = функц энэ хаяг дээр алга
+  if (!j || typeof j !== 'object' || (!j.ok && typeof j.error !== 'string')) throw codeErr('no_server');
+  if (!res.ok || !j.ok) throw codeErr(j.error, j);
   return j;
 }
 const apiMsg = (e) => (e && e.apiCode ? apiErrorText(e.apiCode) : errText(e));
+
+/* ---------- Бичилт: баримт + мэдлэгийн тэмдэг (`_rev`) НЭГ batch-д ---------- */
+const revData = () => ({ title: 'Кэшийн тэмдэг (систем)', body: new Date().toISOString(), status: 'draft', updatedAt: serverTimestamp(), updatedBy: session.user.email });
+async function commitWithRev(ops) {
+  const b = writeBatch(db);
+  for (const [kind, ref, data] of ops) {
+    if (kind === 'set') b.set(ref, data);
+    else b.delete(ref);
+  }
+  b.set(doc(db, 'messenger_kb', KB_REV_ID), revData());
+  await b.commit();
+}
 
 /* ---------- Ачаалах ---------- */
 async function loadCol(name, into) {
   const snap = await getDocs(query(collection(db, name), limit(READ_LIMIT)));
   into.clear();
-  snap.docs.forEach((s) => into.set(s.id, { id: s.id, ...s.data() }));
-  return snap.docs.length;
+  snap.docs.forEach((s) => { if (s.id !== KB_REV_ID) into.set(s.id, { id: s.id, ...s.data() }); });
 }
-/** Жишээний жагсаалт (ноорогийн карт «Жишээнд орсон»-ыг харуулахад ч) */
+/** Жишээний жагсаалт (ноорогийн карт «Жишээнд орсон»-ыг харуулахад ч) — нэг удаа */
 export function loadExamples() {
-  return loadCol('messenger_examples', ex).then(() => { exReady = true; renderEx(); deps.onExamplesChange(); });
+  if (exReady) return Promise.resolve();
+  if (loadingEx) return loadingEx;
+  const g = gen;
+  loadingEx = loadCol('messenger_examples', ex)
+    .then(() => { if (!alive(g)) return; exReady = true; renderEx(); syncOpeners(); deps.onExamplesChange(); })
+    .finally(() => { loadingEx = null; });
+  return loadingEx;
+}
+function loadKb() {
+  if (kbReady) return Promise.resolve();
+  if (loadingKb) return loadingKb;
+  const g = gen;
+  loadingKb = loadCol('messenger_kb', kb)
+    .then(() => { if (!alive(g)) return; kbReady = true; renderKb(); syncOpeners(); })
+    .finally(() => { loadingKb = null; });
+  return loadingKb;
 }
 function load() {
-  if (loading) return loading;
+  const g = gen;
   loadBox.hidden = true;
-  kbMeta.textContent = 'Ачаалж байна…';
-  exMeta.textContent = 'Ачаалж байна…';
-  loading = Promise.all([loadCol('messenger_kb', kb).then(() => { kbReady = true; }), loadExamples()])
-    .then(() => { renderKb(); renderEx(); })
-    .catch((e) => {
-      kbMeta.textContent = ''; exMeta.textContent = '';
-      loadMsg.textContent = `${errText(e)} Мэдлэг, жишээг уншиж чадсангүй.`;
-      loadBox.hidden = false;
-      opened = false;
-    })
-    .finally(() => { loading = null; });
-  return loading;
+  if (!kbReady) setText(kbMeta, 'Ачаалж байна…');
+  if (!exReady) setText(exMeta, 'Ачаалж байна…');
+  syncOpeners();
+  return Promise.all([loadKb(), loadExamples()]).catch((e) => {
+    if (!alive(g)) return;
+    if (!kbReady) setText(kbMeta, '');
+    if (!exReady) setText(exMeta, '');
+    loadMsg.textContent = `${errText(e)} Мэдлэг, жишээг уншиж чадсангүй — засварлахыг түр хаалаа.`;
+    loadBox.hidden = false;
+    syncOpeners();
+    opened = false;
+  });
 }
 $('#btnMsTrRetry').addEventListener('click', () => { opened = true; load(); });
 /** «Сургалт» таб анх нээгдэхэд (m-messenger.js) */
@@ -86,25 +133,38 @@ export function openTraining() {
   opened = true;
   load();
 }
-export const hasExample = (id) => ex.has(id);
-export const examplesReady = () => exReady;
+/** Ноорогийн картын «Жишээ» мөр (m-messenger.js): 'none' | 'new' | 'same' | 'stale' | 'unknown' */
+export const draftExampleState = (d) => (exReady ? exampleState(d, ex.get(exampleIdForDraft(d.id))) : exampleFromDraft(d) ? 'unknown' : 'none');
 
 /* ---------- Туршилтын асуулт ---------- */
 const block = (label, text, cls = '') => (text ? `<div class="ms-block ${cls}"><span class="ms-label">${esc(label)}</span><p class="ms-text">${esc(text)}</p></div>` : '');
+/** Ишийн id → ойлгомжтой нэр (service:exam-1 → «Арьсны үзлэг, оношлогоо») */
+function sourceLabel(id) {
+  const [kind, rest] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+  if (id === 'hours') return 'Ажлын цаг';
+  if (id === 'address') return 'Хаяг';
+  if (id === 'clinic') return 'Эмнэлэг';
+  if (kind === 'service') return (DEFAULTS.treatments || []).find((t) => t.id === rest)?.n || 'Үйлчилгээ';
+  if (kind === 'package') return (DEFAULTS.packages || []).find((t) => t.id === rest)?.name || 'Багц';
+  if (kind === 'kb') return `Мэдлэг «${(kb.get(rest) || {}).title || rest}»`;
+  if (kind === 'page') return `Эмчилгээний хуудас «${rest}»`;
+  return id;
+}
 function tryHtml(r, run) {
   const l = r.labels || {};
   const tone = ROUTE_TONE[r.route] || 'muted';
   const reasons = (l.reasons || []).filter(Boolean);
-  const cache = run.cacheReadTokens ? ` · кэш ${Math.round((100 * run.cacheReadTokens) / Math.max(1, run.cacheReadTokens + run.inputTokens + run.cacheWriteTokens))}%` : '';
-  const src = (r.sourceIds || []).length ? `Иш: ${r.sourceIds.map(esc).join(', ')}. ` : '';
+  const total = Number(run.cacheReadTokens) + Number(run.inputTokens) + Number(run.cacheWriteTokens);
+  const cache = run.cacheReadTokens ? ` · кэш ${Math.round((100 * Number(run.cacheReadTokens)) / Math.max(1, total))}%` : '';
+  const src = (r.sourceIds || []).length ? `Ашигласан мэдлэг: ${r.sourceIds.map((id) => esc(sourceLabel(id))).join(', ')}. ` : '';
   return `<article class="ms-card" aria-labelledby="msTryResH">
     <header class="ms-card__head">
       <h3 id="msTryResH" class="ms-card__title" tabindex="-1"><span class="ms-tone ms-tone--${tone}">${esc(l.route || r.route)}</span> ${esc(l.intent || r.intent || '')}</h3>
-      <span class="muted">${esc(usd(run.costMicroUsd))} · ${esc(String(Math.round((run.durationMs || 0) / 100) / 10))} с${esc(cache)}</span>
+      <span class="muted">${esc(usd3(run.costMicroUsd))} · ${esc(String(Math.round((Number(run.durationMs) || 0) / 100) / 10))} с${esc(cache)}</span>
     </header>
     ${block('Үйлчлүүлэгч (нууцалсан)', r.userText)}
     ${block('AI-ийн санал', r.reply, 'ms-block--ai')}
-    ${block('Автомат горимд илгээгдэх байсан', r.wouldSend, 'ms-block--send')}
+    ${block('Автомат горимд (3-р үе шат) илгээгдэх байсан', r.wouldSend, 'ms-block--send')}
     <p class="ms-why">${reasons.length ? `Шалтгаан: ${reasons.map(esc).join('; ')}. ` : ''}${typeof r.confidence === 'number' ? `AI итгэл: ${Math.round(r.confidence * 100)}%. ` : ''}${src}${r.aiReason ? `AI-ийн тайлбар: ${esc(r.aiReason)}` : ''}</p>
     <div class="actions"><button class="btn btn--outline btn--sm" type="button" data-try-ex="good">Сайн жишээ болгох</button><button class="btn btn--outline btn--sm" type="button" data-try-ex="bad">Муу жишээ болгох</button></div>
   </article>`;
@@ -119,25 +179,33 @@ async function runTry() {
     return;
   }
   tryText.removeAttribute('aria-invalid');
+  const g = gen;
   trying = true;
-  tryBtn.disabled = true;
+  // disabled биш aria-disabled: фокус товчин дээр үлдэнэ (WCAG 2.4.3)
+  tryBtn.setAttribute('aria-disabled', 'true');
   setStatus(tryStatus, 'AI бичиж байна… (10–30 секунд)', '');
   tryOut.setAttribute('aria-busy', 'true');
   try {
     const j = await api('test', { text, includeDrafts: tryDrafts.checked });
+    if (!alive(g)) return;
     lastTry = { result: j.result, run: j.run };
     tryOut.innerHTML = tryHtml(j.result, j.run);
-    setStatus(tryStatus, `Бэлэн. Өнөөдөр ${j.testsToday}/${j.testsLimit} туршилт.`, 'ok');
+    setStatus(tryStatus, `Бэлэн. Өнөөдөр ${Number(j.testsToday)}/${Number(j.testsLimit)} туршилт.`, 'ok');
     $('#msTryResH', tryOut)?.focus();
   } catch (e) {
+    if (!alive(g)) return;
     lastTry = null;
     tryOut.innerHTML = '';
-    setStatus(tryStatus, apiMsg(e), 'err');
-    announce(apiMsg(e), true);
+    const b = e.body || {};
+    const extra = b.run && b.run.costMicroUsd ? ` Зарцуулсан: ${usd3(b.run.costMicroUsd)}.` : '';
+    const count = b.testsToday ? ` Өнөөдөр ${Number(b.testsToday)}/${Number(b.testsLimit)}.` : '';
+    setStatus(tryStatus, `${apiMsg(e)}${extra}${count}`, 'err');
   } finally {
-    trying = false;
-    tryBtn.disabled = false;
-    tryOut.setAttribute('aria-busy', 'false');
+    if (alive(g)) {
+      trying = false;
+      tryBtn.removeAttribute('aria-disabled');
+      tryOut.setAttribute('aria-busy', 'false');
+    }
   }
 }
 attachCounters(tryForm);
@@ -147,18 +215,24 @@ tryOut.addEventListener('click', (e) => {
   const b = e.target.closest('[data-try-ex]');
   if (!b || !lastTry) return;
   const r = lastTry.result;
-  openEx(null, { kind: b.dataset.tryEx, userText: r.userText || '', reply: r.reply || '', note: '' }, b.dataset.tryEx === 'bad' ? exNote : exReply);
+  openEx(null, { prefill: { kind: b.dataset.tryEx, userText: r.userText || '', reply: r.reply || '', note: '' }, focusEl: b.dataset.tryEx === 'bad' ? exNote : exReply, opener: b });
 });
 
 /* ---------- Мэдлэг (messenger_kb) ---------- */
 $('#msKbStatus').innerHTML = KB_STATUS.map((s) => `<label class="ms-mode"><input type="radio" name="ms-kb-status" value="${s.key}"> <span><strong>${esc(s.label)}</strong><small>${esc(s.hint)}</small></span></label>`).join('');
 const excerpt = (s, n) => { const a = Array.from(String(s || '').replace(/\s+/g, ' ').trim()); return a.length > n ? `${a.slice(0, n).join('')}…` : a.join(''); };
 const meta = (r) => `${esc(fmtDate(r.updatedAt))}${r.updatedBy ? ` · ${esc(r.updatedBy)}` : ''}`;
+const fmtN = (n) => Number(n).toLocaleString('en-US');
 
 function renderKb() {
   const rows = sortKb([...kb.values()]);
-  const pub = rows.filter((r) => r.status === 'published' && r.id !== KB_VOICE_ID).length;
-  kbMeta.textContent = kbReady ? (rows.length ? `${rows.length} бичлэг · нийтэлсэн ${pub}${rows.length >= READ_LIMIT ? ` (эхний ${READ_LIMIT})` : ''}` : '') : '';
+  if (kbReady) {
+    const b = kbBudget(rows);
+    setText(kbMeta, rows.length
+      ? `${rows.length} бичлэг · нийтэлсэн ${b.published} · AI-д орох хэмжээ ${fmtN(b.chars)} / ${fmtN(KB_BUDGET.chars)} тэмдэгт${b.over ? ' — ХЭТЭРСЭН: зарим бичлэг AI-д орохгүй' : ''}${rows.length >= READ_LIMIT ? ` (эхний ${READ_LIMIT})` : ''}`
+      : '');
+    kbMeta.classList.toggle('is-warn', b.over);
+  }
   kbList.innerHTML = !kbReady ? '' : rows.length ? rows.map((r) => {
     const voice = r.id === KB_VOICE_ID;
     const title = voice ? KB_VOICE_TITLE : r.title;
@@ -182,11 +256,17 @@ const readKb = () => ({
   status: ($('input[name="ms-kb-status"]:checked', kbForm) || {}).value || '',
 });
 const kbDirty = () => !!kbEdit && JSON.stringify(readKb()) !== kbEdit.snap;
-function openKb(id, { voice = false } = {}) {
-  const cur = id ? kb.get(id) : voice ? kb.get(KB_VOICE_ID) : null;
-  const realId = id || (voice ? KB_VOICE_ID : newKbId());
-  const isVoice = realId === KB_VOICE_ID;
-  kbEdit = { id: realId, isNew: !cur, snap: '' };
+async function openKb(id, { voice = false, opener = null } = {}) {
+  if (busy) { busyMsg(); return; }
+  const realId = id || (voice ? KB_VOICE_ID : null);
+  // Засаж буй бичлэгийнхээ «Засах»-ыг дахин дарвал хадгалаагүй засварыг ХАЯХГҮЙ — маягт руу аваачна
+  if (kbEdit && realId && kbEdit.id === realId) { kbForm.scrollIntoView({ block: 'start' }); (realId === KB_VOICE_ID ? kbBody : kbTitle).focus({ preventScroll: true }); return; }
+  if (kbEdit && !(await closeKb({ refocus: false }))) return;
+  if (!kbReady) return;
+  const cur = realId ? kb.get(realId) : null;
+  const finalId = realId || newKbId();
+  const isVoice = finalId === KB_VOICE_ID;
+  kbEdit = { id: finalId, isNew: !cur, snap: '', opener: opener || (isVoice ? btnVoice : btnKbNew) };
   $('#msKbFormH').textContent = isVoice ? KB_VOICE_TITLE : cur ? 'Мэдлэг засах' : 'Шинэ мэдлэг';
   $('#msKbTitleField').hidden = isVoice;
   kbTitle.value = isVoice ? KB_VOICE_TITLE : cur ? cur.title || '' : '';
@@ -208,91 +288,124 @@ function openKb(id, { voice = false } = {}) {
   (isVoice ? kbBody : kbTitle).focus({ preventScroll: true });
   deps.onDirty();
 }
-async function closeKb({ force = false } = {}) {
+/** @returns {Promise<boolean>} хаасан эсэх */
+async function closeKb({ force = false, refocus = true } = {}) {
+  if (!kbEdit) return true;
   if (!force && kbDirty() && !(await dialog({ title: 'Хадгалаагүй өөрчлөлт байна', body: 'Мэдлэгийн засварыг хадгалахгүй хаах уу?', confirm: 'Хадгалалгүй хаах', cancel: 'Үлдэх', danger: true }))) return false;
-  const id = kbEdit && kbEdit.id;
+  const { id, opener } = kbEdit;
   kbEdit = null;
   kbForm.hidden = true;
   clearErrors(kbForm);
   renderKb();
-  const btn = id && $(`[data-kb-edit="${CSS.escape(id)}"]`, kbList);
-  (btn || $('#btnMsKbNew')).focus();
+  if (refocus) {
+    const btn = id && $(`[data-kb-edit="${CSS.escape(id)}"]`, kbList);
+    const target = btn || (opener && opener.isConnected && !opener.disabled ? opener : btnKbNew);
+    target.focus();
+  }
   deps.onDirty();
   return true;
 }
+function setBusy(op, form) {
+  busy = op;
+  if (form) form.inert = !!op;
+  syncOpeners();
+}
 async function saveKb() {
-  if (!kbEdit || saving || !session.user) return;
+  if (!kbEdit || !session.user) return;
+  if (busy) { busyMsg(); return; }
   const v = readKb();
   const errs = validateKb(v);
   if (errs.length) {
     const el = { title: kbTitle, body: kbBody, status: $('input[name="ms-kb-status"]', kbForm) };
-    showErrors(kbErr, errs.map((e) => ({ msg: e.msg, el: el[e.field] })), kbForm);
+    showErrors(kbErr, errs.map((e) => ({ msg: e.msg, el: el[e.field] })), kbForm, { level: 4 });
     return;
   }
   clearErrors(kbForm);
-  saving = true;
-  const id = kbEdit.id;
-  $$('button', kbForm).forEach((b) => { b.disabled = true; });
+  const ed = kbEdit;
+  const g = gen;
+  setBusy('kb', kbForm);
   setStatus(kbStatusEl, 'Хадгалж байна…', '');
   try {
+    const ref = doc(db, 'messenger_kb', ed.id);
+    // Шинэ бичлэг (ялангуяа «Брэнд дуу хоолой») — өөр таб/цонхонд аль хэдийн үүссэн бол дарж бичихгүй
+    if (ed.isNew && (await getDoc(ref)).exists()) {
+      if (!alive(g)) return;
+      setStatus(kbStatusEl, 'Энэ бичлэг аль хэдийн үүссэн байна (өөр цонхноос). «Дахин ачаалах» дараад засна уу.', 'err');
+      return;
+    }
     const data = { title: v.title.slice(0, KB_LIMITS.title), body: v.body, status: v.status, updatedAt: serverTimestamp(), updatedBy: session.user.email };
-    await setDoc(doc(db, 'messenger_kb', id), data);
-    kb.set(id, { id, ...data, updatedAt: new Date() });
-    kbEdit.snap = JSON.stringify(readKb());
-    await closeKb({ force: true });
-    snack(v.status === 'published' ? 'Мэдлэг нийтлэгдлээ — AI 5 минутын дотор ашиглана' : 'Мэдлэг ноорог хэлбэрээр хадгалагдлаа');
+    await commitWithRev([['set', ref, data]]);
+    if (!alive(g)) return;
+    kb.set(ed.id, { id: ed.id, ...data, updatedAt: new Date() });
+    if (kbEdit === ed) { setBusy('', kbForm); await closeKb({ force: true }); }
+    else renderKb();
+    snack(v.status === 'published' ? 'Мэдлэг нийтлэгдлээ — AI 1 минутын дотор ашиглана' : 'Мэдлэг ноорог хэлбэрээр хадгалагдлаа');
   } catch (e) {
+    if (!alive(g)) return;
     setStatus(kbStatusEl, errText(e), 'err');
-    snack(errText(e), { error: true });
   } finally {
-    saving = false;
-    $$('button', kbForm).forEach((b) => { b.disabled = false; });
-    deps.onDirty();
+    if (alive(g)) {
+      setBusy('', kbForm);
+      // inert болсон маягтаас фокус алдагдсан бол «Хадгалах» руу
+      if (kbEdit === ed && (document.activeElement === document.body || !document.activeElement)) $('#btnMsKbSave').focus();
+      deps.onDirty();
+    }
   }
 }
-async function delKb(id) {
+async function delKb(id, btn) {
   const r = kb.get(id);
-  if (!r || saving) return;
+  if (!r) return;
+  if (busy) { busyMsg(); return; }
   const title = id === KB_VOICE_ID ? KB_VOICE_TITLE : r.title;
-  if (!(await dialog({ title: 'Мэдлэг устгах уу?', body: [`«${title}» бүр мөсөн устгагдана. AI 5 минутын дотор ашиглахаа болино.`, 'Түр нуух бол «Засах» → «Ноорог» болгож хадгална уу.'], confirm: 'Устгах', cancel: 'Болих', danger: true }))) return;
-  saving = true;
+  if (!(await dialog({ title: 'Мэдлэг устгах уу?', body: [`«${title}» бүр мөсөн устгагдана. AI 1 минутын дотор ашиглахаа болино.`, 'Түр нуух бол «Засах» → «Ноорог» болгож хадгална уу.'], confirm: 'Устгах', cancel: 'Болих', danger: true }))) return;
+  const g = gen;
+  setBusy('del');
   try {
-    await deleteDoc(doc(db, 'messenger_kb', id));
+    await commitWithRev([['delete', doc(db, 'messenger_kb', id)]]);
+    if (!alive(g)) return;
     kb.delete(id);
     if (kbEdit && kbEdit.id === id) { kbEdit = null; kbForm.hidden = true; }
     renderKb();
     snack(`«${title}» устгагдлаа`);
-    $('#btnMsKbNew').focus();
-  } catch (e) { snack(errText(e), { error: true }); }
-  finally { saving = false; deps.onDirty(); }
+    btnKbNew.focus();
+  } catch (e) {
+    if (!alive(g)) return;
+    snack(errText(e), { error: true });
+    if (btn && btn.isConnected) btn.focus();
+  } finally { if (alive(g)) { setBusy(''); deps.onDirty(); } }
 }
-$('#btnMsKbNew').addEventListener('click', async () => { if (kbEdit && !(await closeKb())) return; openKb(null); });
-$('#btnMsVoice').addEventListener('click', async () => { if (kbEdit && !(await closeKb())) return; openKb(null, { voice: true }); });
+btnKbNew.addEventListener('click', () => openKb(null, { opener: btnKbNew }));
+btnVoice.addEventListener('click', () => openKb(null, { voice: true, opener: btnVoice }));
 $('#btnMsKbCancel').addEventListener('click', () => closeKb());
 kbForm.addEventListener('submit', (e) => { e.preventDefault(); saveKb(); });
 kbForm.addEventListener('input', (e) => { clearFieldError(e.target); deps.onDirty(); });
 kbForm.addEventListener('change', () => deps.onDirty());
-kbList.addEventListener('click', async (e) => {
+kbList.addEventListener('click', (e) => {
   const ed = e.target.closest('[data-kb-edit]');
-  if (ed) { if (kbEdit && kbEdit.id !== ed.dataset.kbEdit && !(await closeKb())) return; openKb(ed.dataset.kbEdit); return; }
+  if (ed) { openKb(ed.dataset.kbEdit, { opener: ed }); return; }
   const del = e.target.closest('[data-kb-del]');
-  if (del) delKb(del.dataset.kbDel);
+  if (del) delKb(del.dataset.kbDel, del);
 });
 
 /* ---------- Жишээ (messenger_examples) ---------- */
 $('#msExKinds').innerHTML = EX_KINDS.map((k) => `<label class="ms-mode"><input type="radio" name="ms-ex-kind" value="${k.key}"> <span><strong>${esc(k.label)}</strong><small>${esc(k.hint)}</small></span></label>`).join('');
 
 function renderEx() {
-  const ms = (v) => msOf(v) ?? (v instanceof Date ? v.getTime() : 0);
-  const rows = [...ex.values()].sort((a, b) => ms(b.updatedAt) - ms(a.updatedAt));
-  const good = rows.filter((r) => r.kind === 'good').length;
-  exMeta.textContent = exReady && rows.length ? `${rows.length} жишээ · сайн ${good}, муу ${rows.length - good}${rows.length >= READ_LIMIT ? ` (эхний ${READ_LIMIT})` : ''}` : '';
+  const rows = [...ex.values()].sort((a, b) => MS(b.updatedAt) - MS(a.updatedAt));
+  if (exReady) {
+    const good = rows.filter((r) => r.kind === 'good').length;
+    const b = exampleBudget(rows);
+    setText(exMeta, rows.length
+      ? `${rows.length} жишээ · сайн ${good}, муу ${rows.length - good} · AI-д сүүлийн ${b.used} нь орно${b.used < rows.length ? ` (хуучин ${rows.length - b.used} нь хязгаараас хэтэрсэн тул орохгүй)` : ''}${rows.length >= READ_LIMIT ? ` · эхний ${READ_LIMIT}` : ''}`
+      : '');
+    exMeta.classList.toggle('is-warn', b.used < rows.length);
+  }
   exList.innerHTML = !exReady ? '' : rows.length ? rows.map((r) => `<li class="ms-item${exEdit && exEdit.id === r.id ? ' is-editing' : ''}" data-id="${esc(r.id)}">
       <div class="ms-item__body">
         <p class="ms-item__title"><span class="ms-tone ms-tone--${r.kind === 'good' ? 'ok' : 'warn'}">${esc(exKindLabel(r.kind) || r.kind)}</span> <strong>${esc(excerpt(r.userText, 120))}</strong></p>
         ${r.reply ? `<p class="ms-item__text"><span class="ms-who">Хариу:</span> ${esc(excerpt(r.reply, 220))}</p>` : ''}
         ${r.note ? `<p class="ms-item__text"><span class="ms-who">Тайлбар:</span> ${esc(excerpt(r.note, 160))}</p>` : ''}
-        <p class="ms-item__meta muted">${meta(r)}${/^x_/.test(r.id) ? ' · ноорогоос' : ''}</p>
+        <p class="ms-item__meta muted">${meta(r)}${/^x_/.test(r.id) ? ' · ноорогоос (180 хоногийн дараа автоматаар устна)' : ''}</p>
       </div>
       <div class="ms-item__act">
         <button class="btn btn--outline btn--sm" type="button" data-ex-edit="${esc(r.id)}" aria-label="Засах: ${esc(excerpt(r.userText, 60))}">Засах</button>
@@ -312,24 +425,30 @@ const setExKindText = () => {
   const bad = (($('input[name="ms-ex-kind"]:checked', exForm) || {}).value) === 'bad';
   $('#ms-ex-reply-l').textContent = bad ? 'Буруу хариу (AI ингэж хэлж болохгүй)' : 'Зөв хариу';
 };
-/** @param {string|null} id  @param {object} [prefill]  @param {HTMLElement} [focusEl] */
-function openEx(id, prefill = null, focusEl = null) {
-  if (exEdit && exDirty()) {
-    // Хадгалаагүй засвартай бол дарж бичихгүй — эхлээд хаах эсэхийг асууна
-    closeEx().then((ok) => { if (ok) openEx(id, prefill, focusEl); });
-    return;
-  }
+/**
+ * @param {string|null} id
+ * @param {{ prefill?: object, focusEl?: HTMLElement, opener?: HTMLElement, newId?: string, notice?: string }} [o]
+ *   newId — ноорогоос үүсэх жишээний тогтмол id; prefill-тэй шинэ жишээ = «хадгалаагүй» (хадгалахыг санууна)
+ */
+async function openEx(id, o = {}) {
+  if (busy) { busyMsg(); return; }
+  const targetId = id || o.newId || null;
+  if (exEdit && targetId && exEdit.id === targetId && !o.prefill) { exForm.scrollIntoView({ block: 'start' }); (o.focusEl || exUser).focus({ preventScroll: true }); return; }
+  if (exEdit && !(await closeEx({ refocus: false }))) return;
   deps.selectTab('train');
   const cur = id ? ex.get(id) : null;
-  exEdit = { id: id || newExampleId(), isNew: !cur, snap: '' };
-  const v = cur || prefill || { kind: 'good', userText: '', reply: '', note: '' };
+  exEdit = { id: targetId || newExampleId(), isNew: !cur, snap: '', opener: o.opener || btnExNew, fromDraft: /^x_/.test(targetId || '') };
+  const v = o.prefill || cur || { kind: 'good', userText: '', reply: '', note: '' };
   $('#msExFormH').textContent = cur ? 'Жишээ засах' : 'Шинэ жишээ';
   $$('input[name="ms-ex-kind"]', exForm).forEach((r) => { r.checked = r.value === v.kind; });
   exUser.value = v.userText || '';
   exReply.value = v.reply || '';
   exNote.value = v.note || '';
   setExKindText();
-  exEdit.snap = cur || !prefill ? JSON.stringify(readEx()) : '';   // урьдчилан бөглөсөн шинэ жишээ = хадгалаагүй
+  // Ноорогоос: үйлчлүүлэгчийн бодит текст — хадгалахаас өмнө хувийн мэдээллийг арилгуулна
+  exPrivacy.hidden = !exEdit.fromDraft;
+  setText($('#msExPrivacyMsg'), o.notice || '');
+  exEdit.snap = o.prefill ? '' : JSON.stringify(readEx());
   clearErrors(exForm);
   setStatus(exStatusEl, '', '');
   exForm.hidden = false;
@@ -337,117 +456,140 @@ function openEx(id, prefill = null, focusEl = null) {
   refreshCounters(exForm);
   renderEx();
   exForm.scrollIntoView({ block: 'start' });
-  (focusEl || exUser).focus({ preventScroll: true });
+  (o.focusEl || exUser).focus({ preventScroll: true });
   deps.onDirty();
 }
-async function closeEx({ force = false } = {}) {
+async function closeEx({ force = false, refocus = true } = {}) {
+  if (!exEdit) return true;
   if (!force && exDirty() && !(await dialog({ title: 'Хадгалаагүй өөрчлөлт байна', body: 'Жишээний засварыг хадгалахгүй хаах уу?', confirm: 'Хадгалалгүй хаах', cancel: 'Үлдэх', danger: true }))) return false;
-  const id = exEdit && exEdit.id;
+  const { id, opener } = exEdit;
   exEdit = null;
   exForm.hidden = true;
+  exPrivacy.hidden = true;
   clearErrors(exForm);
   renderEx();
-  const btn = id && $(`[data-ex-edit="${CSS.escape(id)}"]`, exList);
-  (btn || $('#btnMsExNew')).focus();
+  if (refocus) {
+    const btn = id && $(`[data-ex-edit="${CSS.escape(id)}"]`, exList);
+    const target = btn || (opener && opener.isConnected && !opener.disabled ? opener : btnExNew);
+    target.focus();
+  }
   deps.onDirty();
   return true;
 }
 async function saveEx() {
-  if (!exEdit || saving || !session.user) return;
+  if (!exEdit || !session.user) return;
+  if (busy) { busyMsg(); return; }
   const v = readEx();
   const errs = validateExample(v);
   if (errs.length) {
     const el = { kind: $('input[name="ms-ex-kind"]', exForm), userText: exUser, reply: exReply, note: exNote };
-    showErrors(exErr, errs.map((e) => ({ msg: e.msg, el: el[e.field] })), exForm);
+    showErrors(exErr, errs.map((e) => ({ msg: e.msg, el: el[e.field] })), exForm, { level: 4 });
     return;
   }
   clearErrors(exForm);
-  saving = true;
-  const id = exEdit.id;
-  $$('button', exForm).forEach((b) => { b.disabled = true; });
+  const ed = exEdit;
+  const g = gen;
+  setBusy('ex', exForm);
   setStatus(exStatusEl, 'Хадгалж байна…', '');
   try {
+    const ref = doc(db, 'messenger_examples', ed.id);
+    if (ed.isNew && !ed.fromDraft && (await getDoc(ref)).exists()) {
+      if (!alive(g)) return;
+      setStatus(exStatusEl, 'Энэ жишээ аль хэдийн үүссэн байна. «Дахин ачаалах» дараад засна уу.', 'err');
+      return;
+    }
     const data = { userText: v.userText, reply: v.reply, kind: v.kind, note: v.note, updatedAt: serverTimestamp(), updatedBy: session.user.email };
-    await setDoc(doc(db, 'messenger_examples', id), data);
-    ex.set(id, { id, ...data, updatedAt: new Date() });
-    exEdit.snap = JSON.stringify(readEx());
-    await closeEx({ force: true });
+    await commitWithRev([['set', ref, data]]);
+    if (!alive(g)) return;
+    ex.set(ed.id, { id: ed.id, ...data, updatedAt: new Date() });
+    if (exEdit === ed) { setBusy('', exForm); await closeEx({ force: true }); }
+    else renderEx();
     deps.onExamplesChange();
-    snack(`${exKindLabel(v.kind)} хадгалагдлаа — AI 5 минутын дотор ашиглана`);
+    const b = exampleBudget([...ex.values()]);
+    snack(`${exKindLabel(v.kind)} хадгалагдлаа — AI 1 минутын дотор ашиглана${b.used < ex.size ? '. Анхаар: жишээний хязгаар хэтэрсэн — хамгийн хуучин нь AI-д орохгүй.' : ''}`);
   } catch (e) {
+    if (!alive(g)) return;
     setStatus(exStatusEl, errText(e), 'err');
-    snack(errText(e), { error: true });
   } finally {
-    saving = false;
-    $$('button', exForm).forEach((b) => { b.disabled = false; });
-    deps.onDirty();
+    if (alive(g)) {
+      setBusy('', exForm);
+      if (exEdit === ed && (document.activeElement === document.body || !document.activeElement)) $('#btnMsExSave').focus();
+      deps.onDirty();
+    }
   }
 }
-async function delEx(id) {
+async function delEx(id, btn) {
   const r = ex.get(id);
-  if (!r || saving) return;
+  if (!r) return;
+  if (busy) { busyMsg(); return; }
   if (!(await dialog({ title: 'Жишээ устгах уу?', body: `«${excerpt(r.userText, 80)}» жишээ бүр мөсөн устгагдана.`, confirm: 'Устгах', cancel: 'Болих', danger: true }))) return;
-  saving = true;
+  const g = gen;
+  setBusy('del');
   try {
-    await deleteDoc(doc(db, 'messenger_examples', id));
+    await commitWithRev([['delete', doc(db, 'messenger_examples', id)]]);
+    if (!alive(g)) return;
     ex.delete(id);
     if (exEdit && exEdit.id === id) { exEdit = null; exForm.hidden = true; }
     renderEx();
     deps.onExamplesChange();
     snack('Жишээ устгагдлаа');
-    $('#btnMsExNew').focus();
-  } catch (e) { snack(errText(e), { error: true }); }
-  finally { saving = false; deps.onDirty(); }
+    btnExNew.focus();
+  } catch (e) {
+    if (!alive(g)) return;
+    snack(errText(e), { error: true });
+    if (btn && btn.isConnected) btn.focus();
+  } finally { if (alive(g)) { setBusy(''); deps.onDirty(); } }
 }
-$('#btnMsExNew').addEventListener('click', () => openEx(null));
+btnExNew.addEventListener('click', () => openEx(null, { opener: btnExNew }));
 $('#btnMsExCancel').addEventListener('click', () => closeEx());
 exForm.addEventListener('submit', (e) => { e.preventDefault(); saveEx(); });
 exForm.addEventListener('input', (e) => { clearFieldError(e.target); deps.onDirty(); });
 exForm.addEventListener('change', (e) => { if (e.target.name === 'ms-ex-kind') setExKindText(); deps.onDirty(); });
 exList.addEventListener('click', (e) => {
   const ed = e.target.closest('[data-ex-edit]');
-  if (ed) { openEx(ed.dataset.exEdit); return; }
+  if (ed) { openEx(ed.dataset.exEdit, { opener: ed }); return; }
   const del = e.target.closest('[data-ex-del]');
-  if (del) delEx(del.dataset.exDel);
+  if (del) delEx(del.dataset.exDel, del);
 });
 
-/** «Ноорог» карт → жишээ (нэг товч). Аль хэдийн байвал засах цонхыг нээнэ (дарж бичихгүй). */
-export async function exampleFromDraftAction(d) {
-  if (!session.user || saving) return;
+/**
+ * «Ноорог» карт → жишээ. Шууд хадгалахгүй (аудит 2026-11-27: үйлчлүүлэгчийн бодит текст бүх ярианы prompt-д орно) —
+ * урьдчилан бөглөсөн засварлагчийг нээж, нэр, нас, эрүүл мэндийн мэдээллийг арилгуулаад хадгалуулна. Аль хэдийн байвал
+ * засна; үнэлгээ өөрчлөгдсөн бол шинэ үнэлгээгээр бөглөнө.
+ */
+export async function exampleFromDraftAction(d, opener) {
+  if (!session.user) return;
+  if (busy) { busyMsg(); return; }
   const v = exampleFromDraft(d);
-  if (!v) { snack('Энэ ноорогоос жишээ үүсгэх боломжгүй (текстгүй, эсвэл «Засвартай»-д зөв хариу бичээгүй).', { error: true }); return; }
+  if (!v) { snack('Энэ ноорогоос жишээ үүсгэх боломжгүй (AI-ийн хариу эсвэл таны зөв хариу алга).', { error: true }); return; }
   const id = exampleIdForDraft(d.id);
-  if (ex.has(id)) { openEx(id); return; }
-  saving = true;
-  try {
-    const ref = doc(db, 'messenger_examples', id);
-    const cur = await getDoc(ref);   // жагсаалт 100-аар хязгаарлагдсан — давхар бичихээс сэргийлнэ
-    if (cur.exists()) {
-      ex.set(id, { id, ...cur.data() });
-      renderEx();
-      deps.onExamplesChange();
-      saving = false;
-      openEx(id);
+  const g = gen;
+  let cur = ex.get(id);
+  if (!cur) {
+    setBusy('draft');
+    try {
+      const snap = await getDoc(doc(db, 'messenger_examples', id));   // жагсаалт 100-аар хязгаарлагдсан
+      if (!alive(g)) return;
+      if (snap.exists()) { cur = { id, ...snap.data() }; ex.set(id, cur); renderEx(); deps.onExamplesChange(); }
+    } catch (e) {
+      if (alive(g)) snack(errText(e), { error: true });
       return;
-    }
-    const data = { userText: v.userText, reply: v.reply, kind: v.kind, note: v.note, updatedAt: serverTimestamp(), updatedBy: session.user.email };
-    await setDoc(ref, data);
-    ex.set(id, { id, ...data, updatedAt: new Date() });
-    renderEx();
-    deps.onExamplesChange();
-    snack(`${exKindLabel(v.kind)} болж нэмэгдлээ — AI 5 минутын дотор ашиглана`, { action: 'Засах', onAction: () => openEx(id) });
-  } catch (e) {
-    snack(errText(e), { error: true });
-  } finally {
-    saving = false;
+    } finally { if (alive(g)) setBusy(''); }
   }
+  const state = exampleState(d, cur);
+  const notice = state === 'stale'
+    ? 'Ноорогийн үнэлгээ өөрчлөгдсөн тул жишээг шинэ үнэлгээгээр бөглөлөө. Нэр, нас, эрүүл мэндийн хувийн мэдээллийг арилгаад хадгална уу.'
+    : 'Үйлчлүүлэгчийн бодит мессеж — нэр, нас, эрүүл мэндийн хувийн мэдээллийг арилгаад хадгална уу. Жишээ AI-ийн БҮХ ярианд ашиглагдана.';
+  if (state === 'same') openEx(id, { opener });
+  else openEx(cur ? id : null, { newId: id, prefill: v, notice, opener });
 }
 /** «Жишээнд орсон» карт → засах */
-export function editExample(id) { openEx(id); }
+export function editExample(id, opener) { openEx(id, { opener }); }
 
 /* ---------- AI-д юу орж байна ---------- */
-function knowHtml(k) {
+function knowHtml(k, withDrafts) {
   const f = k.facts || {};
+  const N = (x) => Number(x) || 0;
   const label = (id) => {
     const [kind, rest] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
     if (kind === 'kb') return rest === KB_VOICE_ID ? KB_VOICE_TITLE : `Мэдлэг «${(kb.get(rest) || {}).title || rest}»`;
@@ -455,33 +597,40 @@ function knowHtml(k) {
     if (kind === 'page') return `Эмчилгээний хуудас «${rest}»`;
     return id;
   };
-  const excluded = (k.excluded || []).map((e) => `<li>${esc(label(e.id))} — ${esc(EXCLUDE_TEXT[e.reason] || e.reason)}</li>`).join('');
-  const truncated = (k.truncated || []).map((id) => `<li>${esc(label(id))} — урт тул эхний хэсгийг л оруулсан</li>`).join('');
+  const excluded = (k.excluded || []).map((e) => `<li>${esc(label(String(e.id)))} — ${esc(EXCLUDE_TEXT[e.reason] || e.reason)}</li>`).join('');
+  const truncated = (k.truncated || []).map((id) => `<li>${esc(label(String(id)))} — урт тул эхний хэсгийг л оруулсан</li>`).join('');
+  const examples = k.examples || [];
   return `<dl class="ms-kv">
-      <div><dt>Сайтын үйлчилгээ / багц</dt><dd>${f.service || 0} / ${f.package || 0}</dd></div>
-      <div><dt>Эмчилгээний хуудас</dt><dd>${f.page || 0}</dd></div>
-      <div><dt>Нийтэлсэн мэдлэг</dt><dd>${f.kb || 0}</dd></div>
-      <div><dt>Жишээ (сайн / муу)</dt><dd>${(k.examples || []).filter((x) => x.kind === 'good').length} / ${(k.examples || []).filter((x) => x.kind === 'bad').length}</dd></div>
+      <div><dt>Сайтын үйлчилгээ / багц</dt><dd>${N(f.service)} / ${N(f.package)}</dd></div>
+      <div><dt>Эмчилгээний хуудас</dt><dd>${N(f.page)}</dd></div>
+      <div><dt>${withDrafts ? 'Мэдлэг (ноорог ч)' : 'Нийтэлсэн мэдлэг'}</dt><dd>${N(f.kb)}</dd></div>
+      <div><dt>Жишээ (сайн / муу)</dt><dd>${examples.filter((x) => x.kind === 'good').length} / ${examples.filter((x) => x.kind === 'bad').length}</dd></div>
       <div><dt>Брэнд дуу хоолой</dt><dd>${k.voice ? 'тохируулсан' : 'алга'}</dd></div>
-      <div><dt>Хэмжээ (тэмдэгт)</dt><dd>${((k.chars?.knowledge || 0) + (k.chars?.examples || 0)).toLocaleString('en-US')}</dd></div>
+      <div><dt>Хэмжээ (тэмдэгт)</dt><dd>${fmtN(N(k.chars?.knowledge) + N(k.chars?.examples))}</dd></div>
     </dl>
     ${excluded || truncated ? `<h3 class="ms-sub">Анхаарах</h3><ul class="ms-notes">${excluded}${truncated}</ul>` : '<p class="muted">Бүх бичлэг AI-д орж байна.</p>'}
-    <p class="muted ms-small">AI хэлж болох дүн: ${(k.allowedAmounts || []).map((n) => `₮${Number(n).toLocaleString('en-US')}`).map(esc).join(', ') || '—'}${(k.allowedPercents || []).length ? `; хувь: ${k.allowedPercents.map((n) => `${esc(String(n))}%`).join(', ')}` : ''}. Хувилбар ${esc(k.promptVersion || '')} · ${esc(k.knowledgeRev || '')}</p>
-    <details class="ms-ctx"><summary>AI-д очих мэдлэгийн бүтэн текст</summary>${(k.blocks || []).map((b) => `<pre class="ms-pre">${esc(b)}</pre>`).join('')}</details>`;
+    <p class="muted ms-small">AI хэлж болох дүн (зөвхөн тухайн баримтыг иш татахад): ${(k.allowedAmounts || []).map((n) => `₮${fmtN(n)}`).map(esc).join(', ') || '—'}${(k.allowedPercents || []).length ? `; хувь: ${k.allowedPercents.map((n) => `${esc(String(n))}%`).join(', ')}` : ''}. Хувилбар ${esc(k.promptVersion || '')} · ${esc(k.knowledgeRev || '')}</p>
+    <details class="ms-ctx"><summary>AI-д очих мэдлэгийн бүтэн текст</summary>${(k.blocks || []).map((b, i) => `<pre class="ms-pre" tabindex="0" role="region" aria-label="${i === 0 ? 'Мэдлэгийн блок' : 'Жишээний блок'}">${esc(b)}</pre>`).join('')}</details>`;
 }
-$('#btnMsKnow').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  if (btn.disabled) return;
-  btn.disabled = true;
+knowBtn.addEventListener('click', async () => {
+  if (knowing || !session.user) return;
+  const g = gen;
+  const withDrafts = knowDrafts.checked;
+  knowing = true;
+  knowBtn.setAttribute('aria-disabled', 'true');
   setStatus(knowStatus, 'Шалгаж байна…', '');
   try {
-    const j = await api('knowledge', { includeDrafts: $('#ms-know-drafts').checked });
-    knowOut.innerHTML = knowHtml(j.knowledge);
+    const j = await api('knowledge', { includeDrafts: withDrafts });
+    if (!alive(g)) return;
+    knowOut.innerHTML = knowHtml(j.knowledge, withDrafts);
     setStatus(knowStatus, 'Шалгалаа.', 'ok');
   } catch (err) {
+    if (!alive(g)) return;
     knowOut.innerHTML = '';
     setStatus(knowStatus, apiMsg(err), 'err');
-  } finally { btn.disabled = false; }
+  } finally {
+    if (alive(g)) { knowing = false; knowBtn.removeAttribute('aria-disabled'); }
+  }
 });
 
 /* ---------- Хадгалаагүй өөрчлөлт, гарах ---------- */
@@ -491,18 +640,33 @@ export async function save() {
   if (kbDirty()) await saveKb();
   else if (exDirty()) await saveEx();
 }
+/** Хадгалах мөрийн «Болих» — хадгалж байх үед хийхгүй (false) */
 export function discard() {
+  if (busy) return false;
   kbEdit = null; exEdit = null;
-  kbForm.hidden = true; exForm.hidden = true;
+  kbForm.hidden = true; exForm.hidden = true; exPrivacy.hidden = true;
   clearErrors(kbForm); clearErrors(exForm);
   renderKb(); renderEx();
+  return true;
 }
 export function teardown() {
-  opened = false; kbReady = false; exReady = false; loading = null; lastTry = null;
+  gen++;
+  opened = false; kbReady = false; exReady = false; loadingKb = null; loadingEx = null; lastTry = null;
+  busy = ''; trying = false; knowing = false;
+  kbForm.inert = false; exForm.inert = false;
+  tryBtn.removeAttribute('aria-disabled'); knowBtn.removeAttribute('aria-disabled');
   kb.clear(); ex.clear();
-  discard();
+  kbEdit = null; exEdit = null;
+  kbForm.hidden = true; exForm.hidden = true; exPrivacy.hidden = true;
+  clearErrors(kbForm); clearErrors(exForm);
+  kbList.innerHTML = ''; exList.innerHTML = '';
+  tryText.value = ''; tryDrafts.checked = false; knowDrafts.checked = false;
+  tryText.removeAttribute('aria-invalid');
+  refreshCounters(tryForm);
   tryOut.innerHTML = ''; knowOut.innerHTML = '';
   setStatus(tryStatus, '', ''); setStatus(knowStatus, '', '');
-  kbMeta.textContent = ''; exMeta.textContent = '';
+  setText(kbMeta, ''); setText(exMeta, '');
   loadBox.hidden = true;
+  syncOpeners();
 }
+syncOpeners();

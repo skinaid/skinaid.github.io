@@ -5,7 +5,9 @@
  *   · гарын үсэг (RSA-SHA256) — claim-уудыг гарын үсгийн ДАРАА л итгэнэ
  *   · aud = skinaid-mn, iss = https://securetoken.google.com/skinaid-mn, sub хоосон биш (≤ 128),
  *     exp ирээдүйд, iat/auth_time өнгөрсөнд (60 с цагийн зөрүү)
- * Нэмэлт (firestore.rules isAdmin()-тэй ИЖИЛ): email_verified === true, email ∈ ADMIN_EMAILS, Google-ээр нэвтэрсэн.
+ * Нэмэлт (firestore.rules isAdmin()-тэй ИЖИЛ): email_verified === true, email ∈ ADMIN_EMAILS, Google-ээр нэвтэрсэн
+ * (rules-ээс хатуу — зөвхөн Google). Token-ийг цуцалсан эсэхийг (revocation) шалгахгүй — rules болон firebase-admin-ий
+ * анхдагчтай ижил; token 1 цаг хүчинтэй тул admin-ийг хассаны дараа ≤ 1 цаг ажиллаж болно (allowlist-ээс хасах нь шууд).
  * Token-ийг лог, алдааны мессеж, Firestore-д ХЭЗЭЭ Ч гаргахгүй (зөвхөн тогтмол код).
  */
 import { createPublicKey, verify as cryptoVerify } from 'node:crypto';

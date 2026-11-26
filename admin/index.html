@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=624f1c7f">
-  <link rel="stylesheet" href="/admin/admin.css?v=b7afd7db">
+  <link rel="stylesheet" href="/admin/admin.css?v=d0a9b7a6">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -243,13 +243,13 @@
 
           <section class="panel" aria-labelledby="msTryH">
             <h2 id="msTryH">Туршилтын асуулт</h2>
-            <p>Үйлчлүүлэгч асуусан мэт бичээд AI ямар ноорог бичихийг шалгана. <strong>Хэнд ч юу ч илгээхгүй</strong>, ноорог хадгалагдахгүй. Нэг удаа ойролцоогоор $0.01–0.02, сарын хязгаарт тоологдоно (өдөрт 100 хүртэл).</p>
+            <p>Үйлчлүүлэгч асуусан мэт бичээд AI ямар ноорог бичихийг шалгана. <strong>Хэнд ч юу ч илгээхгүй</strong>, ноорог хадгалагдахгүй. Нэг удаа ойролцоогоор $0.01–0.02, сарын хязгаарт тоологдоно (өдөрт 100 хүртэл). Хадгалсан мэдлэг 1 минутын дотор тусна. Горим «Унтраалттай» үед ч туршина; яаралтай зогсоолт асаалттай бол туршихгүй.</p>
             <form id="msTryForm" novalidate>
               <div class="field">
                 <label for="ms-try">Үйлчлүүлэгчийн мессеж</label>
                 <textarea id="ms-try" maxlength="1000" rows="3" data-count-chars aria-describedby="msTryStatus" placeholder="жишээ: Арьсны үзлэг хэд вэ? Хэдэн цагт ажилладаг вэ?"></textarea>
               </div>
-              <label class="ms-check"><input type="checkbox" id="ms-try-drafts"> <span>Нийтлээгүй (ноорог) мэдлэгийг хамт турших</span></label>
+              <label class="ms-check"><input type="checkbox" id="ms-try-drafts"> <span>Ноорог (нийтлээгүй) мэдлэгийг хамт турших</span></label>
               <div class="actions"><button class="btn btn--primary" type="submit" id="btnMsTry">AI-аас ноорог авах</button><span class="status" id="msTryStatus" role="status"></span></div>
             </form>
             <div class="ms-list ms-try-out" id="msTryOut"></div>
@@ -263,7 +263,7 @@
                 <button class="btn btn--primary btn--sm" type="button" id="btnMsKbNew">Шинэ мэдлэг</button>
               </div>
             </div>
-            <p>Зогсоол, төлбөрийн хэлбэр, цуцлах нөхцөл гэх мэт. «Нийтэлсэн» мэдлэгийг AI 5 минутын дотор ашиглаж эхэлнэ, энд бичсэн үнэ, хөнгөлөлтийг ч хэлж болно. Утас, имэйл бүү бич — систем яаралтай үед өөрөө нэмдэг (тийм бичлэг AI-д орохгүй).</p>
+            <p>Зогсоол, төлбөрийн хэлбэр, цуцлах нөхцөл гэх мэт. «Нийтэлсэн» мэдлэгийг AI 1 минутын дотор ашиглаж эхэлнэ; энд бичсэн үнэ, хөнгөлөлтийг AI тухайн бичлэгийг иш татан хэлж болно. Утас, имэйл бүү бич — систем яаралтай үед өөрөө нэмдэг (тийм бичлэг AI-д орохгүй).</p>
             <form id="msKbForm" class="ms-editor" novalidate hidden aria-labelledby="msKbFormH">
               <h3 id="msKbFormH" class="ms-editor__title" tabindex="-1">Шинэ мэдлэг</h3>
               <div class="err-summary" id="msKbErr" hidden></div>
@@ -274,9 +274,9 @@
               <div class="field">
                 <label for="ms-kb-body" id="ms-kb-body-l">Агуулга</label>
                 <p class="hint" id="ms-kb-body-hint">AI энэ текстийг баримт болгон иш татна. Товч, тодорхой бичнэ үү.</p>
-                <textarea id="ms-kb-body" maxlength="4000" rows="5" data-count-chars aria-describedby="ms-kb-body-hint"></textarea>
+                <textarea id="ms-kb-body" maxlength="1500" rows="5" data-count-chars aria-describedby="ms-kb-body-hint"></textarea>
               </div>
-              <fieldset class="ms-modes" id="ms-kb-status"><legend>Төлөв</legend><div class="ms-radios" id="msKbStatus"></div></fieldset>
+              <fieldset class="ms-modes field" id="ms-kb-status"><legend>Төлөв</legend><div class="ms-radios" id="msKbStatus"></div></fieldset>
               <div class="actions" id="msKbActions">
                 <button class="btn btn--primary" type="submit" id="btnMsKbSave">Хадгалах</button>
                 <button class="btn btn--ghost" type="button" id="btnMsKbCancel">Болих</button>
@@ -292,11 +292,12 @@
               <h2 id="msExH">Жишээ — сайн ба муу хариу</h2>
               <button class="btn btn--primary btn--sm" type="button" id="btnMsExNew">Шинэ жишээ</button>
             </div>
-            <p>AI-д хэв маяг, өнгө аяс заана (үнэ, баримтыг мэдлэгээс л авна). «Ноорог» хэсэгт үнэлсэн ноорогоос «Жишээ болгох» товчоор нэг дор нэмж болно. Хадгалсан жишээг AI 5 минутын дотор ашиглана.</p>
+            <p>AI-д хэв маяг, өнгө аяс заана (үнэ, баримтыг мэдлэгээс л авна). «Ноорог» хэсэгт үнэлсэн ноорогоос «Жишээ болгох» товчоор бөглөөд хадгална. Хадгалсан жишээг AI 1 минутын дотор ашиглана; хязгаар хэтэрвэл хамгийн шинэ 30 нь орно.</p>
             <form id="msExForm" class="ms-editor" novalidate hidden aria-labelledby="msExFormH">
               <h3 id="msExFormH" class="ms-editor__title" tabindex="-1">Шинэ жишээ</h3>
               <div class="err-summary" id="msExErr" hidden></div>
-              <fieldset class="ms-modes" id="ms-ex-kind"><legend>Төрөл</legend><div class="ms-radios" id="msExKinds"></div></fieldset>
+              <div class="ms-privacy" id="msExPrivacy" role="note" hidden><strong>Хувийн мэдээлэл</strong> <span id="msExPrivacyMsg"></span></div>
+              <fieldset class="ms-modes field" id="ms-ex-kind"><legend>Төрөл</legend><div class="ms-radios" id="msExKinds"></div></fieldset>
               <div class="field">
                 <label for="ms-ex-user">Үйлчлүүлэгчийн асуулт</label>
                 <textarea id="ms-ex-user" maxlength="2000" rows="2" data-count-chars></textarea>
@@ -452,6 +453,6 @@
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=695218e6"></script>
-  <script type="module" src="/admin/admin.js?v=8bf354a8"></script>
+  <script type="module" src="/admin/admin.js?v=f3fecc7d"></script>
 </body>
 </html>

@@ -10,11 +10,11 @@
  *   · Гаралт = САНАЛ (бүтэцтэй JSON) — илгээх эсэхийг код (policy.js) шийднэ.
  *   · Prompt caching: system = 2–3 блок — (1) тогтмол заавар, (2) эмнэлгийн мэдлэг (каталог + эмчилгээний хуудас + admin-д
  *     нийтэлсэн FAQ; admin засах хүртэл өөрчлөгдөхгүй), (3) ажилтны баталсан жишээ (байвал). Бүгд `cache_control: ephemeral`
- *     (Opus 5.5: breakpoint ≤ 4, доод хэмжээ 512 токен). Огноо, санамсаргүй утгыг system-д БҮҮ оруул (кэш чимээгүй
+ *     (1 цаг; Opus 5.5: breakpoint ≤ 4, доод хэмжээ 512 токен). Огноо, санамсаргүй утгыг system-д БҮҮ оруул (кэш чимээгүй
  *     хүчингүй) — дараалал тогтмол (id-аар эрэмбэлсэн). Шалгах = ai_runs.cacheReadTokens.
  */
 import { createHash } from 'node:crypto';
-import { assertNoForbiddenSources, assertNoPii } from '../guardrails.js';
+import { assertNoForbiddenSources, assertNoPii, findPii } from '../guardrails.js';
 import { INTENT_KEYS } from './intents.js';
 
 export const SOCIAL_PROMPT_VERSION = 'skinaid-messenger-2026-11-27';
@@ -67,13 +67,16 @@ export const SOCIAL_SYSTEM_STATIC = [
   '- reason: яагаад ингэж хариулсныг ажилтанд зориулж 1 өгүүлбэр.',
 ].join('\n');
 
+/** JSON-ийг prompt-ийн шошго дотор: «<» escape — өгөгдөл доторх «</examples>» шошгыг хааж чадахгүй (аудит 2026-11-27) */
+export const jsonForPrompt = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+
 /** Эмнэлгийн каталог (кэшлэгдэнэ) — тогтмол дараалал, огноо/санамсаргүй утгагүй */
 export function clinicKnowledgeBlock(catalog) {
   const facts = catalog.facts.map((f) => ({ id: f.id, text: f.text }));
   return [
     `Эмнэлэг: ${catalog.clinicName}`,
     '<clinic_knowledge>',
-    JSON.stringify(facts),
+    jsonForPrompt(facts),
     '</clinic_knowledge>',
     '',
     'Эмнэлгийн брэнд дуу хоолой, нэмэлт заавар:',
@@ -94,7 +97,7 @@ export function examplesBlock(items) {
   return [
     'Ажилтны баталсан хариуны жишээ (хэв маяг, өнгө аясын үлгэр — баримт биш; type: сайн = ингэж бич, муу = ингэж бүү бич, why = ажилтны тайлбар):',
     '<examples>',
-    JSON.stringify(rows),
+    jsonForPrompt(rows),
     '</examples>',
   ].join('\n');
 }
@@ -119,10 +122,13 @@ export function buildSocialRequest(input) {
     };
   });
   const knowledge = clinicKnowledgeBlock(input.catalog);
-  const examples = examplesBlock(input.examples ?? []);
+  // Жишээ нь бичлэг бүрээр шалгагдсан (examples.js); давхар хамгаалалт — илэрвэл ЗӨВХӨН жишээний блокыг хасна
+  // (нэг жишээ бүх ноорогийг зогсоохгүй — аудит 2026-11-27)
+  let examples = examplesBlock(input.examples ?? []);
+  if (examples && findPii(examples).length) examples = '';
   const user = [
     '<conversation>',
-    JSON.stringify(turns),
+    jsonForPrompt(turns),
     '</conversation>',
     'Дээрх ярианы ҮЙЛЧЛҮҮЛЭГЧИЙН сүүлийн мессеж(үүд)-д хариуны санал бич.',
   ].join('\n');
@@ -130,11 +136,14 @@ export function buildSocialRequest(input) {
   assertNoPii({ knowledge, examples, turns });
   assertNoForbiddenSources({ knowledge, examples, turns });
   const lastUser = [...turns].reverse().find((t) => t.from === FROM.user);
+  // 1 цагийн кэш: эмнэлгийн Messenger-т мессеж ихэвчлэн 5 минутаас удаан завсартай ирдэг — 5 минутын кэш бараг бүр дуудлагад
+  // дахин бичигдэж (1.25×) үнэтэй болно; 1 цаг (2× бичих, 0.05× унших) нь цагт ≥ 2 мессежэд хямд (аудит 2026-11-27).
+  const cache = { type: 'ephemeral', ttl: '1h' };
   const system = [
-    { type: 'text', text: SOCIAL_SYSTEM_STATIC, cache_control: { type: 'ephemeral' } },
-    { type: 'text', text: knowledge, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: SOCIAL_SYSTEM_STATIC, cache_control: cache },
+    { type: 'text', text: knowledge, cache_control: cache },
   ];
-  if (examples) system.push({ type: 'text', text: examples, cache_control: { type: 'ephemeral' } });
+  if (examples) system.push({ type: 'text', text: examples, cache_control: cache });
   const kinds = (k) => input.catalog.facts.filter((f) => f.kind === k).length;
   return {
     system,
@@ -145,7 +154,7 @@ export function buildSocialRequest(input) {
       facts: input.catalog.facts.length,
       kb: kinds('kb'),
       pages: kinds('page'),
-      examples: input.examples?.length ?? 0,
+      examples: examples ? input.examples.length : 0,
       knowledgeRev: knowledgeRev(knowledge, examples),
       lastUserChars: (lastUser?.text ?? '').length,
       promptVersion: SOCIAL_PROMPT_VERSION,
