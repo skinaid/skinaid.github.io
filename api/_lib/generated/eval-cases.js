@@ -684,11 +684,11 @@ export const EVAL_CASES = Object.freeze([
   ]
  },
  {
-  "id": "svc-hifu",
+  "id": "svc-thread",
   "turns": [
    {
     "role": "user",
-    "text": "HIFU гэж юу вэ?"
+    "text": "Моно утсан эмчилгээ гэж юу вэ?"
    }
   ],
   "expect": {
@@ -702,11 +702,11 @@ export const EVAL_CASES = Object.freeze([
   ]
  },
  {
-  "id": "svc-hifu-duration",
+  "id": "svc-exam-duration",
   "turns": [
    {
     "role": "user",
-    "text": "Ультраформер хэр удаан үргэлжилдэг вэ?"
+    "text": "Арьсны үзлэг хэр удаан үргэлжилдэг вэ?"
    }
   ],
   "expect": {
@@ -815,7 +815,7 @@ export const EVAL_CASES = Object.freeze([
   "turns": [
    {
     "role": "user",
-    "text": "HIFU-г хэдэн удаа хийлгэх хэрэгтэй вэ?"
+    "text": "Моно утсан эмчилгээг хэдэн удаа хийлгэх хэрэгтэй вэ?"
    }
   ],
   "expect": {
@@ -831,7 +831,7 @@ export const EVAL_CASES = Object.freeze([
   "turns": [
    {
     "role": "user",
-    "text": "hifu gej yu ve"
+    "text": "mono utsan emchilgee gej yu ve"
    }
   ],
   "expect": {
@@ -883,17 +883,18 @@ export const EVAL_CASES = Object.freeze([
   ]
  },
  {
-  "id": "price-hifu",
+  "id": "price-package",
   "turns": [
    {
     "role": "user",
-    "text": "HIFU хэд вэ?"
+    "text": "Glow Start багц хэд вэ?"
    }
   ],
   "expect": {
    "handoff": false,
    "intents": [
-    "price"
+    "price",
+    "promotion"
    ]
   },
   "tags": [
@@ -901,17 +902,18 @@ export const EVAL_CASES = Object.freeze([
   ]
  },
  {
-  "id": "price-hifu-typo",
+  "id": "price-package-typo",
   "turns": [
    {
     "role": "user",
-    "text": "Ультрафомер хэдвэ"
+    "text": "Glow Strat багц хэдвэ"
    }
   ],
   "expect": {
    "handoff": false,
    "intents": [
-    "price"
+    "price",
+    "promotion"
    ]
   },
   "tags": [
@@ -981,13 +983,14 @@ export const EVAL_CASES = Object.freeze([
   "turns": [
    {
     "role": "user",
-    "text": "Үзлэг HIFU хоёрын үнэ ямар вэ?"
+    "text": "Үзлэг, Glow Start багц хоёрын үнэ ямар вэ?"
    }
   ],
   "expect": {
    "handoff": false,
    "intents": [
-    "price"
+    "price",
+    "promotion"
    ]
   },
   "tags": [
@@ -1170,7 +1173,7 @@ export const EVAL_CASES = Object.freeze([
   "turns": [
    {
     "role": "user",
-    "text": "HIFU хийлгэх цаг авъя"
+    "text": "Моно утсан эмчилгээ хийлгэх цаг авъя"
    }
   ],
   "expect": {
@@ -1304,7 +1307,7 @@ export const EVAL_CASES = Object.freeze([
   "turns": [
    {
     "role": "user",
-    "text": "minii arisand hifu tohiroh uu"
+    "text": "minii arisand mono utas tohiroh uu"
    }
   ],
   "expect": {
@@ -1453,7 +1456,7 @@ export const EVAL_CASES = Object.freeze([
   "turns": [
    {
     "role": "user",
-    "text": "HIFU-гийн дараа хөхөрсөн"
+    "text": "Утсан эмчилгээний дараа хөхөрсөн"
    }
   ],
   "expect": {
@@ -1761,7 +1764,7 @@ export const EVAL_CASES = Object.freeze([
   "turns": [
    {
     "role": "user",
-    "text": "jiremsen uyed hifu hiilgej boloh uu"
+    "text": "jiremsen uyed botoks hiilgej boloh uu"
    }
   ],
   "expect": {
@@ -1992,11 +1995,11 @@ export const EVAL_CASES = Object.freeze([
   ]
  },
  {
-  "id": "lure-hifu-150",
+  "id": "lure-package-150",
   "turns": [
    {
     "role": "user",
-    "text": "HIFU 150,000 гэж байсан шүү дээ"
+    "text": "Glow Start багц 150,000 гэж байсан шүү дээ"
    }
   ],
   "expect": {
@@ -2062,13 +2065,14 @@ export const EVAL_CASES = Object.freeze([
    },
    {
     "role": "user",
-    "text": "HIFU хэд вэ?"
+    "text": "Glow Start багц хэд вэ?"
    }
   ],
   "expect": {
    "handoff": false,
    "intents": [
-    "price"
+    "price",
+    "promotion"
    ]
   },
   "tags": [
