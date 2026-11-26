@@ -8,12 +8,19 @@
  * Хугацааны төсөв (Vercel Hobby, maxDuration 60 с): `deadline`-аас 30 с-ээс бага үлдвэл Claude-ийг дуудахгүй — event
  * pending үлдэж дараагийн webhook / cron нөхнө. Функц агентын явцад тасарвал event pending хэвээр (ноорог алдагдахгүй).
  * Нэг ярианд өдөрт ≤ THREAD_DAILY_AGENT_MAX удаа Claude (нэг хэрэглэгч сарын таг, Spark квотыг дуусгахаас сэргийлнэ).
- * Хэрэглэгч рүү ЮУ Ч илгээхгүй.
+ *
+ * Илгээлт («Автомат» горим): яриа «АМЬД» (`isLive`: горим auto, зогсоолтгүй, үзэгчид таарсан) үед л —
+ *   · echo-г `strict` бодлогоор ангилна (тодорхойгүй echo = ажилтан → бот чимээгүй);
+ *   · агентын буцаасан `send` саналыг outbound.js `sendGuarded`-аар илгээнэ (илгээх ЦОР ГАНЦ зам; бүх хамгаалалт тэнд);
+ *   · ажилтанд шилжүүлсэн (handoff, зураг) бол яриаг `human` болгоно — бот 12 цаг (ажилтан хариулбал түүнээс хойш) чимээгүй.
+ * Бусад бүх ярианд сүүдэр хэвээр: ноорог л, юу ч илгээхгүй. `recipient` (PSID) зөвхөн webhook-оос санах ойгоор ирнэ —
+ * хадгалахгүй, логлохгүй; cron / гацсан event-ийн нөхөлтөд байхгүй тул тэнд хэзээ ч илгээхгүй.
  */
 import { FirestoreError } from './firestore.js';
 import { describeError } from './errors.js';
 import { ubDay } from './store.js';
 import { AUTOMATION_TEMPLATE_MIN_CONVERSATIONS, echoFingerprint, planBatch } from './social/conversation-logic.js';
+import { isLive } from './social/settings-logic.js';
 
 export const ROUNDS_MAX = 6;
 /** Claude-ийг дуудахад шаардлагатай үлдэгдэл хугацаа (Claude timeout 25 с + Firestore) */
@@ -33,22 +40,53 @@ const asDate = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : nul
 
 /**
  * @param {{ store: ReturnType<import('./store.js').createStore>, agent: ReturnType<import('./agent.js').createAgent>,
+ *   outbound?: ReturnType<import('./outbound.js').createOutbound> | null,
  *   ownAppId: string|null, now?: () => Date, log?: (m: string) => void, sleep?: (ms: number) => Promise<void>,
- *   clock?: () => number }} deps   clock — хугацааны төсөвт (тест тарьна)
+ *   clock?: () => number }} deps   clock — хугацааны төсөвт (тест тарьна); outbound байхгүй = хэзээ ч илгээхгүй (сүүдэр)
  */
 export function createPipeline(deps) {
   const { store, agent } = deps;
+  const outbound = deps.outbound ?? null;
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? ((m) => console.warn(m));
   const sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const clock = deps.clock ?? Date.now;
 
   /**
+   * Амьд ярианд агентын үр дүнг хүргэнэ: `send` санал → sendGuarded; ажилтанд шилжүүлсэн бол яриаг хүнд.
+   * Буцаах = thread-д бичих талбар (түгжээ тайлахад). Алдаа гарсан ч event аль хэдийн дууссан — дахин оролдохгүй.
+   */
+  async function deliver({ psidHash, recipient, r, plan, nextThread, events, actions }) {
+    const fields = {};
+    if (r.send) {
+      const replyTo = events.find((e) => e.id === plan.action.replyToEventId);
+      let res;
+      try {
+        res = await outbound.sendGuarded({
+          psidHash, recipient, eventId: plan.action.replyToEventId, draftId: r.draftId, kind: r.send.kind, text: r.send.text,
+          quickReplies: r.send.quickReplies, thread: nextThread, standby: plan.action.standby === true, answeredAt: replyTo?.eventTime ?? null,
+        });
+      } catch (e) {
+        log(`[messenger] илгээх замын алдаа: ${describeError(e)}`);
+        res = { sent: false, reason: 'error', threadFields: {} };
+      }
+      actions.push(res.sent ? `sent_${r.send.kind}` : `nosend_${res.reason}`);
+      Object.assign(fields, res.threadFields);
+    }
+    // Ажилтанд шилжүүлсэн (эрсдэлтэй сэдэв, зураг, таг, AI татгалзсан): мэдэгдэл хүрсэн эсэхээс үл хамааран бот энэ ярианд
+    // чимээгүй болно — ажилтан хариулах хүртэл (эсвэл 12 цаг). Зөвхөн стикер (quiet) бол шилжүүлэхгүй.
+    if (r.route === 'handoff' && !r.quiet) Object.assign(fields, { state: 'human', humanSince: now(), lastBotSentAt: null });
+    return fields;
+  }
+
+  /**
    * Нэг тойрог. Буцаах: { release } — түгжээ тайлахад thread-д бичих нэмэлт талбар; { stop } — энэ удаад зогсох.
    */
-  async function handle(psidHash, thread, events, actions, deadline) {
+  async function handle(psidHash, thread, events, actions, deadline, recipient) {
     const settings = await store.readSettings();
     const mode = settings.active ? settings.mode : 'off';
+    // Амьд яриа: бот шууд хариулж болно (эцсийн шалгалтыг sendGuarded илгээхийн өмнө дахин хийнэ)
+    const live = Boolean(outbound) && settings.active && isLive(settings, psidHash);
     const fps = events.filter((e) => e.kind === 'echo').map((e) => echoFingerprint(e.payload.text));
     const automationHashes = mode === 'off' ? new Set() : await store.automationHashes(psidHash, fps, AUTOMATION_TEMPLATE_MIN_CONVERSATIONS);
     const conv = {
@@ -60,9 +98,11 @@ export function createPipeline(deps) {
     // Өмнөх оролдлогоор аль хэдийн хадгалсан echo (дахин боловсруулалт) — ангиллыг нь хэвээр ашиглана (+1 read/echo; echo цөөн)
     const echoIds = mode === 'off' ? [] : events.filter((e) => e.kind === 'echo').map((e) => e.id);
     const knownEchoes = echoIds.length ? await store.readEchoMessages(psidHash, echoIds) : new Map();
-    const plan = planBatch(conv, events, { mode, ownAppId: deps.ownAppId, now: now(), automationHashes, knownEchoes });
+    const plan = planBatch(conv, events, { mode, ownAppId: deps.ownAppId, now: now(), automationHashes, knownEchoes, echoPolicy: live ? 'strict' : 'shadow' });
     await store.saveBatch(psidHash, plan, thread);
     const nextThread = { ...thread, ...plan.conversation };
+    // Ажилтан оролцож байгаа ярианд ботын «сүүлд илгээсэн» мөчийг арилгана — бот буцаж ирэхдээ дахин танилцуулна
+    const base = plan.conversation.state !== 'bot' && thread.lastBotSentAt ? { lastBotSentAt: null } : {};
 
     if (plan.action.type === 'agent') {
       const today = ubDay(now());
@@ -70,32 +110,35 @@ export function createPipeline(deps) {
       if (count >= THREAD_DAILY_AGENT_MAX) {
         await store.finishEvents(plan.eventStatus);
         actions.push('thread_cap');
-        return { release: {} };
+        return { release: { ...base } };
       }
       if (clock() > deadline - AGENT_MIN_MS) {
         // Хугацаа хүрэлцэхгүй — event pending үлдэнэ (мессеж, төлөв бичигдсэн; дахин боловсруулахад давхардахгүй)
         actions.push('deadline');
-        return { release: {}, stop: true };
+        return { release: { ...base }, stop: true };
       }
-      const r = await agent.replyDraft({ psidHash, replyToEventId: plan.action.replyToEventId, thread: nextThread, eventStatus: plan.eventStatus });
+      const r = await agent.replyDraft({ psidHash, replyToEventId: plan.action.replyToEventId, thread: nextThread, eventStatus: plan.eventStatus, live });
       actions.push(r.route || r.skipped || r.error || 'agent');
       if (r.retry) {
         await store.failEvents(events, r.error);
-        return { release: { agentDay: today, agentDayCount: count + 1 }, stop: true };
+        return { release: { ...base, agentDay: today, agentDayCount: count + 1 }, stop: true };
       }
       if (!r.finalized) await store.finishEvents(plan.eventStatus);
-      const release = r.skipped ? {} : { agentDay: today, agentDayCount: count + 1 };
-      if (r.simulatedBot) release.lastShadowBotAt = now();
+      const release = r.skipped ? { ...base } : { ...base, agentDay: today, agentDayCount: count + 1 };
+      if (live) Object.assign(release, await deliver({ psidHash, recipient, r, plan, nextThread, events, actions }));
+      else if (r.simulatedBot) release.lastShadowBotAt = now();
       return { release };
     }
     if (plan.action.type === 'media_template') {
-      await agent.mediaDraft({ psidHash, replyToEventId: plan.action.replyToEventId, eventStatus: plan.eventStatus });
+      const r = await agent.mediaDraft({ psidHash, replyToEventId: plan.action.replyToEventId, eventStatus: plan.eventStatus, thread: nextThread, live, stickerOnly: plan.action.stickerOnly === true });
       actions.push('media');
-      return { release: {} };
+      const release = { ...base };
+      if (live) Object.assign(release, await deliver({ psidHash, recipient, r, plan, nextThread, events, actions }));
+      return { release };
     }
     await store.finishEvents(plan.eventStatus);
     actions.push(plan.action.reason);
-    return { release: {} };
+    return { release: { ...base } };
   }
 
   /** Түгжээ — авч чадаагүй бол (өөр инстанс ажиллаж байна) хугацаа хүрэлцвэл хэд хүлээж дахин оролдоно */
@@ -110,7 +153,8 @@ export function createPipeline(deps) {
 
   /**
    * @param {string} psidHash
-   * @param {{ deadline?: number }} [opt]  deadline = clock()-ийн дээд хязгаар (мс)
+   * @param {{ deadline?: number, recipient?: string|null }} [opt]  deadline = clock()-ийн дээд хязгаар (мс); recipient = энэ
+   *   ярианы PSID (ЗӨВХӨН webhook-оос, санах ойд — хадгалахгүй, логлохгүй; байхгүй бол илгээхгүй)
    * @returns {Promise<{ rounds: number, locked?: boolean, actions: string[] }>}
    */
   async function processThread(psidHash, opt = {}) {
@@ -127,7 +171,7 @@ export function createPipeline(deps) {
         events = await store.pendingEvents(psidHash);
         if (!events.length) stop = { rounds: round, actions };
         else {
-          const r = await handle(psidHash, thread, events, actions, deadline);
+          const r = await handle(psidHash, thread, events, actions, deadline, opt.recipient ?? null);
           release = r.release;
           if (r.stop) stop = { rounds: round + 1, actions };
         }

@@ -7,6 +7,8 @@
  *        3) Тохиргоо off / kill switch → юу ч хадгалахгүй, 200.
  *        4) `messenger_events/{id}` create (exists=false) — Meta-ийн давтан илгээлт нэг л мөр.
  *        5) 200 шууд (Meta 20 секундэд хариу хүлээдэг) → waitUntil: шинэ event-тэй яриа + гацсан event (≤ 2 яриа).
+ *           Шинэ event-тэй ярианы PSID-г (хариу илгээх хүлээн авагч) pipeline-д САНАХ ОЙГООР дамжуулна — «Автомат» горимд
+ *           хариуг ЗӨВХӨН энэ хүсэлтийн дотор илгээнэ; гацсан event-ийн нөхөлт (sweepStale, cron) PSID-гүй тул илгээхгүй.
  * Серверийн эрх (GCP) тохируулаагүй бол 200 (Meta дахин дахин илгээж subscription-ыг унтраахаас сэргийлнэ) + лог.
  * Firestore-ийн ТҮР зуурын алдаа (UNAVAILABLE, 5xx, сүлжээ) = 503 (Meta дахин илгээнэ); удаан үргэлжлэх алдаа (Spark
  * квот RESOURCE_EXHAUSTED, IAM/WIF-ийн эрх) = 200 + лог + статус — сүүдэр горимд event алдах нь Meta webhook-ийг
@@ -103,14 +105,15 @@ export function createWebhookHandlers(deps) {
     const started = Date.now();
     // Давхардсан event-тэй яриаг ч боловсруулна: Meta хэсэгчилсэн 503-ийн дараа дахин илгээхэд өмнө нь үүссэн event
     // pending хэвээр байж болно (аудит 2026-11-25)
-    const threads = new Set();
+    /** psidHash → PSID (зөвхөн энэ хүсэлтийн санах ойд; Firestore, лог руу хэзээ ч үгүй) */
+    const threads = new Map();
     try {
       const settings = await rt.store.readSettings();
       if (!settings.active) return text('OK', 200);
       for (const ev of ours) {
         const h = psidHash(ev.pageId, ev.psid, cfg.psidKey);
         await rt.store.createEvent(ev, h);
-        threads.add(h);
+        threads.set(h, ev.psid);
       }
     } catch (e) {
       const code = e instanceof FirestoreError ? `firestore_${e.status || e.httpStatus}` : 'error';
@@ -127,7 +130,7 @@ export function createWebhookHandlers(deps) {
       try {
         const deadline = started + WEBHOOK_BUDGET_MS;
         if (heartbeat) await rt.store.patchStatus({ lastWebhookAt: now(), config: configStatus(env) });
-        for (const h of threads) await rt.pipeline.processThread(h, { deadline });
+        for (const [h, recipient] of threads) await rt.pipeline.processThread(h, { deadline, recipient });
         await rt.pipeline.sweepStale({ maxThreads: 2, deadline });
       } catch (e) {
         log(`[messenger] webhook дараах боловсруулалт: ${describeError(e)}`);

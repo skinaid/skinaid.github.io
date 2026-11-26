@@ -2,7 +2,8 @@
  * Өдөр бүрийн cron (vercel.json → /api/cron/daily, УБ 04:00). Vercel нь `Authorization: Bearer <CRON_SECRET>`
  * толгойг автоматаар илгээнэ. Хийх ажил (хугацааны төсөв ~55 с, maxDuration 60):
  *   1. Гацсан event-тэй яриа (retryAt өнгөрсөн) — webhook-ийн waitUntil тасарсан бол нөхнө
- *   2. Хадгалах хугацаа: event 30, ноорог 180, ai_runs 400, echo загвар 90, өдрийн тоологч 90, орхисон eval 7 хоног; мессеж 180;
+ *   2. Хадгалах хугацаа: event 30, ноорог 180, илгээсэн мессежийн бүртгэл 180, ai_runs 400, echo загвар 90, өдрийн тоологч 90,
+ *      орхисон eval 7 хоног; мессеж 180;
  *      ноорогоос үүссэн жишээ (`x_`) сүүлд засснаас хойш 180 хоног (200-аар хуудаслан, хугацаа дуустал)
  *   3. messenger_status/main: lastCronAt, env «тохируулсан эсэх» (boolean), Meta token-ийн шалгалт (байвал)
  * Хариунд зөвхөн тоо (хувийн мэдээлэлгүй).
@@ -40,7 +41,7 @@ export function createCronHandler(deps) {
     try {
       out.sweptThreads = await rt.pipeline.sweepStale({ maxThreads: 20, deadline: sweepUntil });
       // Хуудаслан устгана (өдрийн хязгааргүй — хоцрогдол хуримтлагдахгүй), хугацаа дуустал
-      for (const c of [COL.events, COL.drafts, COL.runs, COL.echo, COL.usage, COL.status]) {
+      for (const c of [COL.events, COL.drafts, COL.runs, COL.echo, COL.usage, COL.status, COL.outbound]) {
         let n = 0;
         for (let page = 200; page === 200 && Date.now() < deadline - 3000;) {
           page = await rt.store.purgeExpired(c, 200);

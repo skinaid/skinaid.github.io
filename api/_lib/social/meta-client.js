@@ -2,10 +2,10 @@
  * Meta Graph API клиент — хувилбар БЭХЭЛСЭН (`GRAPH_VERSION`). Runtime import-гүй (fetch-ийг тарьж болно).
  * Эх сурвалж: skinaid/ubbeauty@1a43c95c src/lib/social/meta-client.ts.
  *
- * SkinAid 1-р үе шат (сүүдэр): ЗӨВХӨН уншдаг/бүртгэлийн дуудлага — `getPage` (cron-ын token шалгалт), `subscribeApp`
- * (пэйжийг webhook-д бүртгэх). Үйлчлүүлэгч рүү хандсан бүх дуудлага (Send API `sendText`, `senderAction`
- * mark_seen/typing, pass/take/release thread control) ЭНЭ ФАЙЛААС ХАСАГДСАН — 3-р үе шатанд `sendToUser()`-ийн ард
- * нэмэгдэнэ. tools/test/messenger-architecture.test.mjs нь `api/**`-д тэдгээр байхгүйг шалгана.
+ * Энэ файл: ЗӨВХӨН уншдаг/бүртгэлийн дуудлага — `getPage` (cron-ын token шалгалт), `subscribeApp` (пэйжийг webhook-д
+ * бүртгэх) + алдааны ангилал. Үйлчлүүлэгч рүү мессеж илгээх нь ./meta-send.js (зөвхөн ../outbound.js дуудна).
+ * senderAction (mark_seen/typing), pass/take/release thread control хаана ч БАЙХГҮЙ —
+ * tools/test/messenger-architecture.test.mjs шалгана.
  *
  * Нууц: Page token-ийг `Authorization: Bearer` толгойд л — URL, лог, алдааны мессежид ХЭЗЭЭ Ч үгүй.
  */

@@ -366,8 +366,13 @@
                 <h2>Горим</h2>
                 <button class="btn btn--danger btn--sm" type="button" id="btnMsStop">Яаралтай зогсоох</button>
               </div>
-              <p>Шат дараалан нэмэгдэнэ: Унтраалттай → Сүүдэр → (3-р үе шат) Туслах → зөвшөөрсөн сэдвээр Автомат. Одоогоор зөвхөн эхний хоёр.</p>
+              <p>Шат дараалан: Унтраалттай → Сүүдэр (ноорог л) → Автомат (зөвшөөрсөн сэдэвт шууд хариулна). «Автомат»-ыг эхлээд зөвхөн туршилтын акаунтаар шалгана.</p>
               <fieldset class="ms-modes"><legend class="sr-only">Горим</legend><div id="msModes"></div></fieldset>
+              <fieldset class="ms-modes ms-aud" id="msAudience" hidden>
+                <legend>«Автомат» горимд хэнд шууд хариулах вэ</legend>
+                <div id="msAudiences"></div>
+                <p class="ms-banner" id="msAudWarn" role="status" hidden></p>
+              </fieldset>
               <div class="switches">
                 <label class="switch"><input type="checkbox" role="switch" id="ms-kill"><span class="switch__track" aria-hidden="true"></span><span><strong>Яаралтай зогсоолт</strong><small>Асаалттай бол горимоос үл хамааран AI ажиллахгүй, мессеж хадгалагдахгүй.</small></span></label>
               </div>
@@ -391,6 +396,12 @@
             <div class="actions" id="msActions">
               <button class="btn btn--primary" type="submit" id="btnMsSave">Хадгалах</button>
               <span class="status" id="msSaveStatus"></span>
+            </div>
+            <div class="panel">
+              <h2>Туршилтын акаунт</h2>
+              <p>«Автомат» горимыг «Зөвхөн туршилтын акаунт» гэж асаахад AI зөвхөн эдгээр ярианд шууд хариулна. Нэмэх: өөрийн Facebook акаунтаар пэйж рүү мессеж бичээд, «Ноорог» таб дээрх тэр ноорогийн «Туршилтын акаунт болгох» товчийг дарна (10 хүртэл). Жагсаалтын өөрчлөлт шууд хадгалагдана.</p>
+              <ul class="ms-items" id="msTestThreads"></ul>
+              <span class="status" id="msTestStatus" role="status"></span>
             </div>
             <div class="panel">
               <h2>Серверийн төлөв</h2>
