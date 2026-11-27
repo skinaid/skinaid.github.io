@@ -230,8 +230,10 @@ node tools/ub-mock-server.mjs
 - `settings/site` — `hours, phone, email, promoEnabled, bookingEnabled` — нийтэд уншигдана, admin бичнэ.
 - `settings/catalog` — `services[] (id,c,n,d,t,p,hidden), packages[] (id,name,price,hidden)` — нийтэд уншигдана, admin бичнэ.
 - `settings/home` — `hero{badge,titlePre,titleEm,titlePost,text,btnPrimary,btnSecondary,stats[≤3]{num,suffix,label}}, posts[≤12]{id,cat,title,text,by,img,url,hidden}, baseRev` —
-  нийтэд уншигдана (зөвхөн нүүр хуудас; нүүр нээх бүрт 3 read болно), admin «Нүүр хуудас» бичнэ. Хязгаар: `assets/js/home-render.js`
-  LIMITS = `firestore.rules` validHero/validPost. `baseRev` = хадгалах үеийн `content/home.json`-ийн хувилбар (index.html `data-home-rev`).
+  нийтэд уншигдана (зөвхөн нүүр хуудас; нүүр нээх бүрт 3 read болно), admin «Нүүр хуудас» бичнэ. Урт, төрөл, escape: `assets/js/home-render.js`
+  LIMITS + norm() (сайт, admin, build бүгд дамжуулна). `firestore.rules` validHero/validPost нь зөвхөн бүтэц (түлхүүр, ≤3 / ≤12) ба
+  зураг/холбоосын схемийг шалгана — Firestore дүрэм нэг хүсэлтэд ≤ 1000 илэрхийлэл үнэлдэг тул талбар бүрийг шалгадаг хувилбар
+  хадгалалт бүрийг «Эрх хүрэхгүй» болгож байсан (2026-11-26). `baseRev` = хадгалах үеийн `content/home.json`-ийн хувилбар (index.html `data-home-rev`).
 
 - `messenger_*`, `ai_runs` — Messenger AI (доорх «Messenger AI» хэсэг).
 
