@@ -1,7 +1,7 @@
 // SKIN AID — нүүр хуудасны «Видео бичлэг» хэсгийн АНХДАГЧ жагсаалт (tools/build.mjs → index.html-д статикаар).
 // Файл: assets/video/<нэр>.mp4 (540×960, H.264 ~0.8 Мбит/с) + assets/video/<нэр>.jpg (нүүр зураг) — хоёулаа заавал.
 // Эх: «Skinaid - Маркетинг» фолдер (эмчийн асуулт-хариулт, эмчилгээний бичлэг). HIFU бичлэг оруулахгүй (эмнэлэгт байхгүй).
-// Admin → Нүүр хуудас → «Видео бичлэг»-ээс эрэмбэлэх, нуух, YouTube бичлэг нэмж болно (public_content/home → video-items).
+// Нийт 20 хүртэл (site-content.js → MAX_VIDEOS). Admin → Нүүр хуудас → «Видео бичлэг»-ээс эрэмбэлэх, нуух, YouTube бичлэг нэмж болно (public_content/home → video-items).
 export const videos = [
   { url: '/assets/video/qa-vivace-skin-type.mp4', title: 'VIVACE ямар төрлийн арьсанд тохиромжтой вэ?' },
   { url: '/assets/video/qa-acne-scar.mp4', title: 'Батганы дараах сорви өөрөө арилдаг уу?' },

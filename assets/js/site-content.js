@@ -217,8 +217,11 @@ const LOCAL_VIDEO = /^\/assets\/video\/[a-z0-9][a-z0-9-]{0,60}\.mp4(?:\?v=[a-f\d
 export const localVideo = (value) => (typeof value === 'string' && LOCAL_VIDEO.test(value.trim()) ? value.trim() : null);
 export const videoPoster = (src) => src.replace(/\.mp4(?:\?.*)?$/, '.jpg');
 
+/** «Видео бичлэг» хэсгийн дээд тоо (сайт, admin, build) */
+export const MAX_VIDEOS = 20;
+
 export function validVideos(items) {
-  return Array.isArray(items) && items.length <= 12 && items.every((item) =>
+  return Array.isArray(items) && items.length <= MAX_VIDEOS && items.every((item) =>
     item && (youtubeId(item.url) !== null || localVideo(item.url) !== null) &&
     typeof item.title === 'string' && item.title.length <= 120 && typeof item.hidden === 'boolean');
 }

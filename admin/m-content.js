@@ -10,7 +10,7 @@ import { uploadControl, queueImage, imagePreview, queuedImages, writeImages, cle
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, $$, db, session, errText } from './core.js?v=2c361933';
 import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=720127aa';
-import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, youtubeId, localVideo, videoPoster, videoItems, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=544fa061';
+import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, MAX_VIDEOS, youtubeId, localVideo, videoPoster, videoItems, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=252ed684';
 import { findClaims } from './claims.js?v=b71d5c91';
 
 const PATH = '/';
@@ -404,7 +404,7 @@ function renderList(body, spec) {
       if (spec.key === 'service-cards') next.cta = 'Дэлгэрэнгүй';
       items.push({ ...next, hidden: false });
       redraw(items.length - 1);
-    }, items.length >= (isVideo ? 12 : 30));
+    }, items.length >= (isVideo ? MAX_VIDEOS : 30));
     const foot = make('div', 'actions');
     foot.append(add);
     if (ordered) foot.append(button(isFaq ? 'Анхны асуултуудаар дүүргэх' : 'Анхны бичлэгүүдээр дүүргэх', () => {
