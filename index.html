@@ -27,7 +27,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"></noscript>
 
-  <link rel="stylesheet" href="assets/css/style.css?v=06f81891">
+  <link rel="stylesheet" href="assets/css/style.css?v=92a7a592">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="48x48" href="assets/img/favicon-48.png?v=044af2e2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=af82331c">
@@ -54,7 +54,7 @@
         <a href="#promo">Урамшуулал</a>
         <a href="#treatments">Эмчилгээ</a>
         <a href="#about">Бидний тухай</a>
-        <a href="#videos" data-videos-link hidden>Бичлэг</a>
+        <a href="#videos" data-videos-link>Бичлэг</a>
         <a href="#faq">Асуулт</a>
         <a href="#blog">Зөвлөгөө</a>
         <a href="#contact">Холбоо барих</a>
@@ -78,7 +78,7 @@
     <a href="#promo">Шинэ жилийн урамшуулал</a>
     <a href="#treatments">Эмчилгээ</a>
     <a href="#about">Бидний тухай</a>
-    <a href="#videos" data-videos-link hidden>Видео бичлэг</a>
+    <a href="#videos" data-videos-link>Видео бичлэг</a>
     <a href="#faq">Түгээмэл асуулт</a>
     <a href="#blog">Зөвлөгөө</a>
     <a href="#contact">Холбоо барих</a>
@@ -495,15 +495,26 @@
       </div>
     </section>
 
-    <!-- ===================== VIDEOS (admin → Нүүр хуудас → «Видео бичлэг»; бичлэггүй бол нуугдана) ===================== -->
-    <section class="section section--cream" id="videos" hidden>
+    <!-- ===================== VIDEOS (анхдагч: content/videos.mjs; admin → Нүүр хуудас → «Видео бичлэг»; бичлэггүй бол нуугдана) ===================== -->
+    <section class="section section--cream" id="videos">
       <div class="container">
         <div class="section-head section-head--center">
           <span class="eyebrow">Видео бичлэг</span>
           <h2 class="h2">SkinAid-ийн <em>бичлэгүүд</em></h2>
-          <p class="lead">Эмнэлгийн орчин, үйлчилгээний талаарх бичлэгүүдийг эндээс үзээрэй.</p>
+          <p class="lead">Манай эмч нарын зөвлөгөө, эмчилгээний танилцуулга бичлэгүүдийг эндээс үзээрэй.</p>
         </div>
-        <div class="videos" data-videos></div>
+        <div class="videos" data-videos><!-- build:home-videos -->
+  <a class="video video--short" href="/assets/video/qa-vivace-skin-type.mp4" data-video-src="/assets/video/qa-vivace-skin-type.mp4" aria-label="VIVACE ямар төрлийн арьсанд тохиромжтой вэ? — тоглуулах"><span class="video__media"><img src="/assets/video/qa-vivace-skin-type.jpg?v=c952caf7" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">VIVACE ямар төрлийн арьсанд тохиромжтой вэ?</span></a>
+  <a class="video video--short" href="/assets/video/qa-acne-scar.mp4" data-video-src="/assets/video/qa-acne-scar.mp4" aria-label="Батганы дараах сорви өөрөө арилдаг уу? — тоглуулах"><span class="video__media"><img src="/assets/video/qa-acne-scar.jpg?v=800cb9b6" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">Батганы дараах сорви өөрөө арилдаг уу?</span></a>
+  <a class="video video--short" href="/assets/video/qa-laser-devices.mp4" data-video-src="/assets/video/qa-laser-devices.mp4" aria-label="Ямар аппаратаар лазер эмчилгээ хийдэг вэ? — тоглуулах"><span class="video__media"><img src="/assets/video/qa-laser-devices.jpg?v=217f460b" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">Ямар аппаратаар лазер эмчилгээ хийдэг вэ?</span></a>
+  <a class="video video--short" href="/assets/video/qa-mts-redness.mp4" data-video-src="/assets/video/qa-mts-redness.mp4" aria-label="MTS хийлгэсний дараа нүүр хэр удаан улайдаг вэ? — тоглуулах"><span class="video__media"><img src="/assets/video/qa-mts-redness.jpg?v=51cd8a9a" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">MTS хийлгэсний дараа нүүр хэр удаан улайдаг вэ?</span></a>
+  <a class="video video--short" href="/assets/video/qa-recovery.mp4" data-video-src="/assets/video/qa-recovery.mp4" aria-label="Эдгэрэлтийн хугацаа хэд хоног байдаг вэ? — тоглуулах"><span class="video__media"><img src="/assets/video/qa-recovery.jpg?v=f16d9fe3" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">Эдгэрэлтийн хугацаа хэд хоног байдаг вэ?</span></a>
+  <a class="video video--short" href="/assets/video/qa-injection-safety.mp4" data-video-src="/assets/video/qa-injection-safety.mp4" aria-label="Тарилга арьсанд сөрөг нөлөөтэй юу? — тоглуулах"><span class="video__media"><img src="/assets/video/qa-injection-safety.jpg?v=57d579c9" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">Тарилга арьсанд сөрөг нөлөөтэй юу?</span></a>
+  <a class="video video--short" href="/assets/video/salmon-injection.mp4" data-video-src="/assets/video/salmon-injection.mp4" aria-label="Загасан тарилга — тоглуулах"><span class="video__media"><img src="/assets/video/salmon-injection.jpg?v=e3b62f9a" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">Загасан тарилга</span></a>
+  <a class="video video--short" href="/assets/video/carboxy-reasons.mp4" data-video-src="/assets/video/carboxy-reasons.mp4" aria-label="Карбокси хийлгэх 5 шалтгаан — тоглуулах"><span class="video__media"><img src="/assets/video/carboxy-reasons.jpg?v=591e790e" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">Карбокси хийлгэх 5 шалтгаан</span></a>
+  <a class="video video--short" href="/assets/video/vivace-reel.mp4" data-video-src="/assets/video/vivace-reel.mp4" aria-label="VIVACE эмчилгээ — тоглуулах"><span class="video__media"><img src="/assets/video/vivace-reel.jpg?v=1ffd24ad" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">VIVACE эмчилгээ</span></a>
+  <a class="video video--short" href="/assets/video/ipl.mp4" data-video-src="/assets/video/ipl.mp4" aria-label="IPL эмчилгээ — тоглуулах"><span class="video__media"><img src="/assets/video/ipl.jpg?v=18a2db28" alt="" loading="lazy" width="540" height="960"><span class="video__play" aria-hidden="true"></span></span><span class="video__title">IPL эмчилгээ</span></a>
+<!-- /build:home-videos --></div>
       </div>
     </section>
 
@@ -861,7 +872,7 @@
             <li><a href="#promo">Урамшуулал</a></li>
             <li><a href="#treatments">Онцлох эмчилгээ</a></li>
             <li><a href="#about">Бидний тухай</a></li>
-            <li data-videos-link hidden><a href="#videos">Видео бичлэг</a></li>
+            <li data-videos-link><a href="#videos">Видео бичлэг</a></li>
             <li><a href="#faq">Түгээмэл асуулт</a></li>
             <li><a href="#blog">Зөвлөгөө</a></li>
             <li><a href="#contact">Холбоо барих</a></li>
@@ -917,10 +928,10 @@
   <script src="assets/js/catalog-defaults.js?v=b7715041"></script>
   <script src="assets/js/home-render.js?v=a84824d3"></script>
   <script src="assets/js/catalog-render.js?v=b0bb1848"></script>
-  <script src="assets/js/main.js?v=01dfe8cc"></script>
+  <script src="assets/js/main.js?v=6bc83363"></script>
   <!-- Firebase (backend.js: захиалга бүртгэх, admin-ы тохиргоо/каталог) нь хуудас зурагдсаны дараа main.js-ийн loadBackend()-ээр ачаалагдана. -->
   <!-- Онлайн цаг захиалга (UB Beauty вэб суваг). Ачаалагдахгүй бол #bookForm (Firestore хүсэлт) нөөцөөр гарна. -->
   <script type="module" src="assets/js/booking.js?v=e239bac3" onerror="var u=document.getElementById('ubForm'),b=document.getElementById('bookForm');if(u&&b){u.hidden=true;b.hidden=false}"></script>
-  <script type="module" data-site-content src="/assets/js/site-content-live.js?v=35c38ae4"></script>
+  <script type="module" data-site-content src="/assets/js/site-content-live.js?v=51958ec4"></script>
 </body>
 </html>

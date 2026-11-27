@@ -223,15 +223,40 @@
     });
   });
 
-  /* ---------- Видео бичлэг: зураг дээр дарахад YouTube тоглуулагчийг газар дээр нь нээнэ ---------- */
+  /* ---------- Видео бичлэг: зураг дээр дарахад тоглуулагчийг газар дээр нь нээнэ (сайтын бичлэг эсвэл YouTube) ---------- */
   document.addEventListener('click', (event) => {
-    const card = event.target.closest && event.target.closest('a.video[data-video-id]');
+    const card = event.target.closest && event.target.closest('a.video[data-video-id], a.video[data-video-src]');
     if (!card || event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
+    const box = document.createElement('div');
+    box.className = card.className;
+    const src = card.dataset.videoSrc;
+    if (src) {
+      if (!/^\/assets\/video\/[a-z0-9-]+\.mp4(?:\?v=[a-f\d]+)?$/.test(src)) return;
+      event.preventDefault();
+      // Нэг удаад нэг бичлэг тоглоно
+      document.querySelectorAll('#videos video').forEach((v) => v.pause());
+      const video = document.createElement('video');
+      video.src = src;
+      video.controls = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      const poster = card.querySelector('img');
+      if (poster) video.poster = poster.currentSrc || poster.src;
+      video.setAttribute('aria-label', card.getAttribute('aria-label') || 'Видео бичлэг');
+      video.addEventListener('play', () => document.querySelectorAll('#videos video').forEach((v) => { if (v !== video) v.pause(); }));
+      // Холбоосыг (a) div болгоно — тоглуулагчийн товч холбоос дотор байж болохгүй; гарчиг хэвээр доор нь үлдэнэ
+      while (card.firstChild) box.append(card.firstChild);
+      (box.querySelector('.video__media') || box).replaceChildren(video);
+      card.replaceWith(box);
+      const started = video.play();
+      if (started && started.catch) started.catch(() => {});
+      video.focus();
+      return;
+    }
     const id = card.dataset.videoId;
     if (!/^[\w-]{11}$/.test(id)) return;
     event.preventDefault();
-    const box = document.createElement('div');
-    box.className = card.className;
     const frame = document.createElement('iframe');
     frame.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&playsinline=1';
     frame.title = card.getAttribute('aria-label') || 'Видео бичлэг';
@@ -424,7 +449,7 @@
   let backendPromise = null;
   const loadBackend = () => {
     if (!backendPromise) {
-      backendPromise = import('/assets/js/backend.js?v=6038986a')
+      backendPromise = import('/assets/js/backend.js?v=17c2167a')
         .then(() => window.SkinAidBackend || null)
         .catch(() => { document.dispatchEvent(new Event('skinaid:backend-failed')); return null; });
     }

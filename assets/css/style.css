@@ -445,6 +445,24 @@ ul { margin: 0; padding: 0; list-style: none; }
 .video:hover .video__play { transform: scale(1.08); background: var(--purple); }
 .video__title { position: absolute; inset: auto 0 0; padding: 36px 18px 14px; font-weight: 700; font-size: 15px; line-height: 1.35; background: linear-gradient(transparent, rgba(0, 0, 0, .74)); }
 .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+/* Сайтын бичлэг: зураг (.video__media) дээр тоглуулах товч, гарчиг доор нь (бичлэгт шингэсэн эмчийн нэртэй давхцахгүй) */
+.video:has(> .video__media) { aspect-ratio: auto; background: none; box-shadow: none; overflow: visible; border-radius: 0; color: var(--ink); }
+.video__media { position: relative; display: block; aspect-ratio: 9 / 16; border-radius: var(--r); overflow: hidden; background: var(--purple-950); box-shadow: var(--shadow-md); }
+.video:has(> .video__media) > .video__title { position: static; display: block; padding: 10px 2px 0; background: none; color: var(--ink); }
+.video:hover .video__title { color: var(--purple); }
+a.video:focus-visible:has(> .video__media) { outline: none; }
+a.video:focus-visible > .video__media { outline: 3px solid var(--purple); outline-offset: 3px; }
+/* Олон босоо бичлэг: компьютерт мөр мөрөөр (~5 багана), утсанд хажуу тийш гүйлгэнэ */
+.videos:has(> .video--short + .video--short) { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.videos:has(> .video--short + .video--short) > .video--short { max-width: none; }
+.videos:has(> .video--short + .video--short) .video__title { padding: 40px 12px 12px; font-size: 13.5px; }
+.videos:has(> .video--short + .video--short) .video:has(> .video__media) > .video__title { padding: 10px 2px 0; font-size: 14px; line-height: 1.4; }
+.videos:has(> .video--short + .video--short) .video__play { width: 54px; height: 54px; }
+@media (max-width: 640px) {
+  .videos:has(> .video--short + .video--short) { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 62%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; padding-bottom: 6px; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); scroll-padding-inline: var(--gutter); }
+  .videos:has(> .video--short + .video--short) > .video { scroll-snap-align: start; }
+}
 @media (prefers-reduced-motion: reduce) { .video img, .video__play { transition: none; } }
 
 .posts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }

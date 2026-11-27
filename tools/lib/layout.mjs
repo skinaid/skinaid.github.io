@@ -3,13 +3,16 @@
 // Нүүр хуудсанд холбоос "#contact", дэд хуудсанд "/#contact" хэлбэртэй. Зургийн замд ?v=hash-ийг
 // AssetStamper дараа нь тавина. Мөр бүр 0-р баганаас эхэлнэ; build нь region-ий доголоор шилжүүлнэ.
 
+import { videos } from '../../content/videos.mjs';
+/** Цэсний «Бичлэг» холбоос: анхдагч бичлэг байвал харагдана; Firestore-оор нуугдаж/гарч болно (site-content.js → applyVideos) */
+const VIDEO_LINK = ' data-videos-link' + (videos.length ? '' : ' hidden');
+
 const NAV = [
   // [anchor, header-ийн нэр, drawer-ийн нэр, footer «Цэс»-ийн нэр]
   ['services', 'Үйлчилгээ', 'Үйлчилгээ', 'Үйлчилгээ'],
   ['promo', 'Урамшуулал', 'Шинэ жилийн урамшуулал', 'Урамшуулал'],
   ['treatments', 'Эмчилгээ', 'Эмчилгээ', 'Онцлох эмчилгээ'],
   ['about', 'Бидний тухай', 'Бидний тухай', 'Бидний тухай'],
-  // Анхдагчаар нуугдмал: site-content.js → applyVideos бичлэгтэй үед л харуулна (data-videos-link)
   ['videos', 'Бичлэг', 'Видео бичлэг', 'Видео бичлэг'],
   ['faq', 'Асуулт', 'Түгээмэл асуулт', 'Түгээмэл асуулт'],
   ['blog', 'Зөвлөгөө', 'Зөвлөгөө', 'Зөвлөгөө'],
@@ -45,7 +48,7 @@ function hrefs(ctx) {
 const navLink = (h, ctx, [id], label) => {
   const href = id === 'treatments' ? h.treatments : h.a(id);
   const cur = id === 'treatments' && ctx.current === 'hub' ? ' aria-current="page"' : '';
-  const extra = id === 'videos' ? ' data-videos-link hidden' : '';
+  const extra = id === 'videos' ? VIDEO_LINK : '';
   return `<a href="${href}"${cur}${extra}>${label}</a>`;
 };
 
@@ -114,7 +117,7 @@ export function siteFooter(ctx) {
     '      <div>',
     '        <h3>Цэс</h3>',
     '        <ul>',
-    ...navFor(ctx).map((n) => `          <li${n[0] === 'videos' ? ' data-videos-link hidden' : ''}>${navLink(h, ctx, n, n[3]).replace(' data-videos-link hidden', '')}</li>`),
+    ...navFor(ctx).map((n) => `          <li${n[0] === 'videos' ? VIDEO_LINK : ''}>${navLink(h, ctx, n, n[3]).replace(VIDEO_LINK, '')}</li>`),
     '        </ul>',
     '      </div>',
     '      <div>',
