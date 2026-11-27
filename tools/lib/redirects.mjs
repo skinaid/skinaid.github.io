@@ -11,6 +11,30 @@ const isCatchAll = (r) => !r.has && typeof r.source === 'string' && /\/:rest\*$/
 export const isManaged = (r) => typeof r.destination === 'string' && /^\/emchilgee[/#]/.test(r.destination);
 
 /**
+ * Зогссон үйлчилгээний хуучин URL (content/pipeline.mjs `retiredLegacy`) → manageRedirects-ийн оролт (hub-ийн ангилал, 307).
+ * category нь hub дээр ЗУРАГДДАГ хэсэг байх ёстой: tools/lib/pages.mjs renderHub анхдагч каталогт үйлчилгээгүй ангиллын
+ * <section id> гаргадаггүй — тэгвэл /emchilgee#<category> буух зангуугүй болж, зочин хуудасны эхэнд үлдэнэ.
+ * @param {unknown} list
+ * @param {{cats: object, treatments: {c: string}[]}} catalog  catalog-defaults.js
+ * @returns {{entries: {slug: string, legacy: string[], dest: string, permanent: false}[], errors: string[]}}
+ */
+export function retiredRedirects(list, catalog) {
+  const W = 'content/pipeline.mjs: retiredLegacy';
+  const entries = [], errors = [];
+  if (!Array.isArray(list)) return { entries, errors: [`${W} массив байх ёстой`] };
+  const cats = (catalog && catalog.cats) || {};
+  const treatments = (catalog && Array.isArray(catalog.treatments) && catalog.treatments) || [];
+  for (const r of list) {
+    const cat = r && r.category;
+    if (typeof cat !== 'string' || !Object.prototype.hasOwnProperty.call(cats, cat)) { errors.push(`${W} — category "${cat}" catalog-defaults.js cats-д алга`); continue; }
+    if (!treatments.some((t) => t && t.c === cat)) { errors.push(`${W} "${cat}" — анхдагч каталогт энэ ангиллын үйлчилгээ алга: hub дээр #${cat} хэсэг зурагдахгүй`); continue; }
+    if (!Array.isArray(r.legacy) || !r.legacy.length) { errors.push(`${W} "${cat}" — legacy хоосон`); continue; }
+    entries.push({ slug: 'retired:' + cat, legacy: r.legacy, dest: '/emchilgee#' + cat, permanent: false });
+  }
+  return { entries, errors };
+}
+
+/**
  * @param {string} text            одоогийн vercel.json
  * @param {{slug: string, legacy: string[], dest?: string, permanent?: boolean}[]} published
  *        dest — байхгүй бол '/emchilgee/<slug>'; permanent — байхгүй бол true (308)

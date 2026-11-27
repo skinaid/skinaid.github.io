@@ -87,7 +87,7 @@ export async function loadContent(root, { preview = false } = {}) {
   const pipeline = pipeMod.pipeline || [];
   return {
     pages: [...bySlug.values()], doctors: doc.doctors || {}, hub: hubMod.hub || null, pipeline, pipelineSlugs: new Set(pipeline.map((p) => p.slug)),
-    retiredLegacy: pipeMod.retiredLegacy || [],   // зогссон үйлчилгээний хуудасгүй хуучин URL → hub-ийн ангилал
+    retiredLegacy: pipeMod.retiredLegacy ?? [],   // зогссон үйлчилгээний хуудасгүй хуучин URL → hub-ийн ангилал (шалгалт: redirects.mjs)
   };
 }
 

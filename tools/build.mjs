@@ -28,7 +28,7 @@ import { siteHeader, siteFooter } from './lib/layout.mjs';
 import { homeGraph, treatmentGraph, hubGraph } from './lib/schema.mjs';
 import { AssetStamper, BuildError, vercelIgnore } from './lib/assets.mjs';
 import { checkSite, pageMeta, sourceToRegExp } from './lib/check.mjs';
-import { manageRedirects } from './lib/redirects.mjs';
+import { manageRedirects, retiredRedirects } from './lib/redirects.mjs';
 import { loadContent, validatePage, reviewHash, priceInfo } from './lib/content.mjs';
 import { findClaims } from './lib/claims.mjs';
 import { validateHome, homeAdminData } from './lib/home.mjs';
@@ -104,12 +104,10 @@ const contentErrors = [...sdkErrors], contentWarnings = [];
       owner.set(id, p.slug);
     }
   }
-  // retiredLegacy: зогссон үйлчилгээний хуучин URL — category нь hub-ийн хэсэг (буух газар) байх ёстой
-  for (const r of content.retiredLegacy) {
-    if (!r || !Object.prototype.hasOwnProperty.call(catalog.cats, r.category)) contentErrors.push(`content/pipeline.mjs: retiredLegacy — category "${r && r.category}" catalog-defaults.js cats-д алга`);
-    else if (!Array.isArray(r.legacy) || !r.legacy.length) contentErrors.push(`content/pipeline.mjs: retiredLegacy "${r.category}" — legacy хоосон`);
-  }
 }
+// retiredLegacy: зогссон үйлчилгээний хуучин URL — category нь hub дээр зурагддаг хэсэг (буух газар) байх ёстой
+const retiredLegacy = retiredRedirects(content.retiredLegacy, catalog);
+contentErrors.push(...retiredLegacy.errors);
 { // content/hub.mjs: эмнэлгийн мэдэгдэлгүй, тэмдэггүй, бүрэн (эхний хуудастай хамт нийтлэгдэнэ)
   const hub = content.hub;
   if (hub) {
@@ -385,10 +383,7 @@ if (PREVIEW) {
       .map((p) => ({ slug: p.slug, legacy: p.legacy || [], dest: '/emchilgee#' + p.category, permanent: false }))
     : [];
   // Зогссон үйлчилгээ (content/pipeline.mjs retiredLegacy): хуудас гарахгүй тул hub-ийн ангилал руу 307 хэвээр үлдэнэ
-  const retired = hubLive
-    ? content.retiredLegacy.filter((x) => x && Array.isArray(x.legacy))
-      .map((x) => ({ slug: 'retired:' + x.category, legacy: x.legacy, dest: '/emchilgee#' + x.category, permanent: false }))
-    : [];
+  const retired = hubLive ? retiredLegacy.entries : [];
   const r = manageRedirects(read('vercel.json'),
     [...visible.map((pg) => ({ slug: pg.slug, legacy: [...new Set([...(pg.legacy || []), ...pipeLegacy(pg.slug)])] })), ...pending, ...retired],
     sourceToRegExp, { liveSlugs: new Set([...visibleSlugs, ...blockedSlugs]) });
