@@ -72,7 +72,7 @@ export function contentFields(doc, path, { includeCommon = false } = {}) {
       group: path === '/' && el.closest('.marquee') ? 'Технологийн мөр' :
         path === '/' && el.closest('.booking') ? 'Захиалгын маягт' :
         path === '/' && el.closest('#treatments') && el.closest('.scroller-wrap') === null && el.closest('.container')?.querySelector('#treatList') ? 'Үйлчилгээний жагсаалт' : group,
-      label, kind, value, common,
+      label, kind, value, common, el,
       remember() {
         const entries = JSON.parse(el.getAttribute('data-content-original') || '[]');
         if (node) entries.push({ index: [...el.childNodes].indexOf(node), text: node.data });

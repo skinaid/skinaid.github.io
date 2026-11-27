@@ -48,7 +48,16 @@ async function prepare(file) {
   throw new Error('Зургийг бэлдэж чадсангүй. Жижиг хэмжээтэй өөр зураг сонгоно уу.');
 }
 
-export function uploadControl(input, onPick) {
+/** Файлыг шахаж дараалалд оруулаад түр хаягийг буцаана (хадгалах үед Firestore-д бичигдэнэ) */
+export async function queueImage(file) {
+  const image = await prepare(file);
+  const id = crypto.randomUUID();
+  const url = endpoint + id;
+  pending.set(url, { id, ...image });
+  return url;
+}
+
+export function uploadControl(input, onPick, { label = 'Файлаас зураг оруулах' } = {}) {
   const row = document.createElement('div');
   row.className = 'image-upload actions';
   const picker = document.createElement('input');
@@ -58,7 +67,7 @@ export function uploadControl(input, onPick) {
   const select = document.createElement('button');
   select.type = 'button';
   select.className = 'btn btn--outline btn--sm';
-  select.textContent = 'Файлаас зураг оруулах';
+  select.textContent = label;
   const status = document.createElement('span');
   status.className = 'hint';
   status.setAttribute('role', 'status');
@@ -69,11 +78,8 @@ export function uploadControl(input, onPick) {
     select.disabled = true;
     status.textContent = 'Зураг бэлдэж байна…';
     try {
-      const image = await prepare(file);
-      if (!row.isConnected || row.closest('[inert]')) return;
-      const id = crypto.randomUUID();
-      const url = endpoint + id;
-      pending.set(url, { id, ...image });
+      const url = await queueImage(file);
+      if (!row.isConnected || row.closest('[inert]')) { pending.delete(url); return; }
       if (onPick) onPick(url);
       else {
         input.value = url;

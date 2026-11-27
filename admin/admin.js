@@ -8,14 +8,14 @@
    ========================================================================== */
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
-import { ICON, dialog, setCurrentView, anyDirty, busyText, leaveBusy, refreshDirty, resetForms } from './ui.js?v=4ec734c0';
-import * as contentEditor from './m-content.js?v=f960dafb';
-import * as bookings from './m-bookings.js?v=86d18531';
-import * as settings from './m-settings.js?v=7df0705b';
-import * as home from './m-home.js?v=001a9ac0';
-import * as catalog from './m-catalog.js?v=da78a91c';
+import { ICON, dialog, setCurrentView, anyDirty, busyText, leaveBusy, refreshDirty, resetForms } from './ui.js?v=720127aa';
+import * as contentEditor from './m-content.js?v=3952dde7';
+import * as bookings from './m-bookings.js?v=0ad7a194';
+import * as settings from './m-settings.js?v=07329949';
+import * as home from './m-home.js?v=f783747e';
+import * as catalog from './m-catalog.js?v=4ed797c1';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import * as messenger from './m-messenger.js?v=ff05b16d';
+import * as messenger from './m-messenger.js?v=194e69ab';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';
@@ -80,9 +80,10 @@ function teardown() {
 }
 
 /* ---------- Hash routing: #/bookings, #/settings, #/home, #/catalog, #/pages, #/messenger ---------- */
-const VIEWS = ['bookings', 'settings', 'content', 'home', 'catalog', 'pages', 'messenger'];
+const VIEWS = ['bookings', 'settings', 'home', 'catalog', 'pages', 'messenger'];
 let firstRoute = true;
-const viewFromHash = () => { if (location.hash === '#/home/hero') return 'home-hero'; const v = (location.hash.match(/^#\/([a-z]+)/) || [])[1]; return VIEWS.includes(v) ? v : 'bookings'; };
+const viewFromHash = () => { if (location.hash === '#/home/hero') return 'home-hero'; if (location.hash === '#/content') return 'home';   // хуучин «Мэдээлэл засах» холбоос
+  const v = (location.hash.match(/^#\/([a-z]+)/) || [])[1]; return VIEWS.includes(v) ? v : 'bookings'; };
 let currentRoute = '';
 function route() {
   const view = viewFromHash();
@@ -94,7 +95,7 @@ function route() {
   $('#topTitle').textContent = h1 ? h1.textContent : '';
   updateTitle({ view: h1 ? h1.textContent : '' });
   setCurrentView(view === 'home-hero' ? 'home' : view === 'home' ? 'content' : view);
-  if (view === 'home' || view === 'content') contentEditor.mount(view === 'home');
+  if (view === 'home') contentEditor.mount();
   if (!firstRoute && h1) {   // цэс сольсон: шинэ хэсгийн гарчиг руу фокус (дэлгэц уншигч, гарын хэрэглэгч)
     h1.tabIndex = -1;
     h1.focus({ preventScroll: true });

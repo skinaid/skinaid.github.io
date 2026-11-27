@@ -1,4 +1,4 @@
-import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=cf76c2ac';
+import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=a303331c';
 /* ==========================================================================
    SKIN AID admin — Модуль: Нүүр хуудас (settings/home) — hero + «Зөвлөгөө» картууд
    HTML загвар: /assets/js/home-render.js (сайт, build-тэй ижил). Анхны утга, сайтын зургууд, дотоод хуудсууд,
@@ -7,7 +7,7 @@ import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploa
    ========================================================================== */
 import { doc, getDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, scrollMode } from './core.js?v=2c361933';
-import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters, captureFocus } from './ui.js?v=4ec734c0';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters, captureFocus } from './ui.js?v=720127aa';
 
 const HR = window.SKINAID_HOME_RENDER;
 const HOME_DATA = window.SKINAID_HOME_DATA || { rev: '', defaults: null, photos: [], internalPaths: [], claimsAllow: [] };

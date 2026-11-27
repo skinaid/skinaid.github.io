@@ -267,8 +267,7 @@ export function resetForms() {
 export function refreshDirty() {
   const on = !!session.user;
   $$('[data-nav]').forEach((a) => {
-    const f = forms.get(a.dataset.nav);
-    const d = on && !!(f && f.isDirty());
+    const d = on && [a.dataset.nav, a.dataset.navAlso].some((k) => { const f = k && forms.get(k); return !!(f && f.isDirty()); });
     a.classList.toggle('has-dirty', d);
     const sr = $('.nav__dirty', a); if (sr) sr.textContent = d ? ' (хадгалаагүй өөрчлөлттэй)' : '';
   });
