@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=e22f516c">
-  <link rel="stylesheet" href="/admin/admin.css?v=bd7f601c">
+  <link rel="stylesheet" href="/admin/admin.css?v=bd8412d6">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -55,7 +55,7 @@
       <nav class="menu" aria-label="Үндсэн цэс">
         <a href="#/bookings" data-nav="bookings"><span class="nav__ic" data-icon="bookings"></span><span class="nav__label">Захиалга</span><span class="nav__short" aria-hidden="true">Захиалга</span><span class="count" id="newCount"><span class="sr-only">, шинэ: </span><span data-n>0</span></span><span class="nav__dirty sr-only"></span></a>
         <a href="#/settings" data-nav="settings"><span class="nav__ic" data-icon="settings"></span><span class="nav__label">Тохиргоо</span><span class="nav__short" aria-hidden="true">Тохиргоо</span><span class="nav__dirty sr-only"></span></a>
-        <a href="#/home" data-nav="home"><span class="nav__ic" data-icon="home"></span><span class="nav__label">Нүүр хуудас</span><span class="nav__short" aria-hidden="true">Нүүр</span><span class="nav__dirty sr-only"></span></a>
+        <a href="#/home" data-nav="home" data-nav-also="content"><span class="nav__ic" data-icon="home"></span><span class="nav__label">Нүүр хуудас</span><span class="nav__short" aria-hidden="true">Нүүр</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/catalog" data-nav="catalog"><span class="nav__ic" data-icon="catalog"></span><span class="nav__label">Үйлчилгээ / Багц</span><span class="nav__short" aria-hidden="true">Үйлчилгээ</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/pages" data-nav="pages"><span class="nav__ic" data-icon="pages"></span><span class="nav__label">Эмчилгээний хуудас</span><span class="nav__short" aria-hidden="true">Хуудас</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/messenger" data-nav="messenger"><span class="nav__ic" data-icon="chat"></span><span class="nav__label">Messenger AI</span><span class="nav__short" aria-hidden="true">Чат</span><span class="nav__dirty sr-only"></span></a>
@@ -131,30 +131,41 @@
         </form>
       </section>
 
+      <!-- Модуль: Нүүр хуудас — бүх хэсгийн бичвэр, зураг (public_content/home) + сайтын шууд харагдац -->
       <section class="view" id="view-home" aria-labelledby="h-home-all" hidden>
-        <div class="main__head"><div><h1 id="h-home-all">Нүүр хуудас</h1><p>Засах хэсгээ сонгоод бичвэр, зураг, холбоосоо шинэчилнэ үү.</p></div></div>
-        <div class="panel actions" aria-label="Нүүр хуудасны бусад тохиргоо">
-          <a class="btn btn--outline btn--sm" href="#/home/hero">Эхний баннер ба зөвлөгөөний карт</a>
-          <a class="btn btn--outline btn--sm" href="#/catalog">Үйлчилгээ ба багц</a>
-          <a class="btn btn--outline btn--sm" href="#/settings">Холбоо барих ба захиалгын тохиргоо</a>
-        </div>
+        <div class="main__head"><div><h1 id="h-home-all">Нүүр хуудас</h1><p>Бичвэр, зургаа засахад сайт дээр хэрхэн харагдах нь шууд шинэчлэгдэнэ. «Хадгалах» дарах хүртэл зочдод харагдахгүй.</p></div></div>
         <div id="homeEditorMount">
-        <form id="contentForm" novalidate>
-          <div class="panel field" id="contentPagePicker" hidden><label for="contentPage">Хуудас</label><select id="contentPage"></select></div>
+        <form id="contentForm" class="ce" novalidate>
           <datalist id="contentPhotos"></datalist>
-          <div class="actions" id="contentShortcuts" hidden>
-            <button type="button" class="btn btn--outline btn--sm" data-content-photo="Эмчийн үзлэг, оношлогооны зураг">Эмчийн үзлэгийн зураг</button>
-            <button type="button" class="btn btn--outline btn--sm" data-content-photo="Бидний тухай · Жижиг зураг">Бидний тухай · Жижиг зураг</button>
-          </div>
-          <nav id="contentSectionNav" aria-label="Нүүр хуудасны хэсгүүд"></nav>
-          <div id="contentSections"></div>
-          <div id="contentPreviewBox" class="panel" hidden></div>
-          <div class="actions" id="contentActions">
-            <button class="btn btn--primary" id="contentSave" type="submit">Хадгалах</button>
-            <button class="btn btn--outline" id="contentPreview" type="button">Урьдчилан харах</button>
-            <button class="btn btn--outline" id="clinicalExport" type="button" hidden>Хянуулах ноорог татах</button>
-            <button class="btn btn--outline" id="contentRetry" type="button" hidden>Дахин оролдох</button>
-            <span role="status" id="contentStatus"></span>
+          <div class="ce__layout">
+            <div class="ce__edit">
+              <div class="ce__tools">
+                <div class="search">
+                  <span class="search__ic" data-icon="search"></span>
+                  <input type="search" id="contentSearch" placeholder="Сайт дээрх бичвэрээр хайх" aria-label="Нүүр хуудасны бичвэрээс хайх" autocomplete="off" enterkeyhint="search">
+                </div>
+                <p class="hint" id="contentSearchNote" role="status"></p>
+              </div>
+              <div id="contentSections"></div>
+              <div class="actions ce__actions" id="contentActions">
+                <button class="btn btn--primary" id="contentSave" type="submit">Хадгалах</button>
+                <button class="btn btn--outline" id="contentDiscard" type="button" hidden>Өөрчлөлтийг болих</button>
+                <button class="btn btn--outline" id="contentRetry" type="button" hidden>Дахин оролдох</button>
+                <span role="status" id="contentStatus"></span>
+              </div>
+            </div>
+            <aside class="ce__preview" id="contentPreviewBox" aria-label="Сайт дээр харагдах байдал">
+              <div class="ce__prevbar">
+                <strong>Сайт дээр<span class="ce__prevlong"> харагдах байдал</span></strong>
+                <div class="ce__devices" role="group" aria-label="Дэлгэцийн хэмжээ">
+                  <button type="button" class="ce__device" data-device="phone" aria-pressed="true">Утас</button>
+                  <button type="button" class="ce__device" data-device="desktop" aria-pressed="false">Компьютер</button>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm ce__prevtoggle" id="contentPreviewToggle" aria-expanded="true" aria-controls="contentStage">Нуух</button>
+              </div>
+              <div class="ce__stage" id="contentStage"><iframe id="contentFrame" title="Нүүр хуудасны ноорог харагдац" sandbox="allow-same-origin" tabindex="-1"></iframe></div>
+              <p class="hint ce__prevnote">Хадгалаагүй ноорог. Харагдац дээрх бичвэр, зураг дээр дарвал засах талбар нь нээгдэнэ.</p>
+            </aside>
           </div>
         </form>
         </div>
@@ -517,6 +528,6 @@
   <script src="/admin/pages-status.js?v=4a0c2dfa"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=4ea81ec8"></script>
-  <script type="module" src="/admin/admin.js?v=625efb64"></script>
+  <script type="module" src="/admin/admin.js?v=066b20a2"></script>
 </body>
 </html>

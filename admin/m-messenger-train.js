@@ -13,7 +13,7 @@
    ========================================================================== */
 import { collection, query, limit, getDocs, doc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, DEFAULTS } from './core.js?v=2c361933';
-import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=4ec734c0';
+import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters } from './ui.js?v=720127aa';
 import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
   exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, EXCLUDE_TEXT, usd3,
