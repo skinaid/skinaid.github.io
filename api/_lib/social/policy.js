@@ -7,6 +7,7 @@
  * LLM-ийн гаралт = САНАЛ. Илгээх, ноорог үлдээх, хүнд шилжүүлэх эсэхийг ЭНД код шийднэ:
  *   1. Ажилтан ярианд хариулж байвал (state human/paused) бот чимээгүй.
  *   2. Сэдэв (LLM эсвэл кодын дохио) эрсдэлтэй → хүнд. Кодын дохио LLM-ийн ангиллыг ДАРНА.
+ *   2а. «Автомат» горимд кирилл биш бичвэр (латин галиг г.м.) → хүнд: кодын дохио (2) зөвхөн кирилл үг таньдаг.
  *   3. AI итгэл бага, хариу хоосон, мэдлэгт байхгүй ₮/% дүн, валютгүй дүн («25,000-аар», «50 мянгаар»), мэдлэгт
  *      байхгүй хөнгөлөлт/үнэгүй/бэлэг/хувь → хүнд (үнэ, санал ЗӨВХӨН мэдлэгээс; SkinAid аудит 2026-11-25).
  *      `facts` өгвөл (агент үргэлж өгнө): дүн, хувь, хөнгөлөлтийн үг ЗӨВХӨН ИШ ТАТСАН (source_ids) баримтаас; үгүйсгэсэн
@@ -17,10 +18,11 @@
  *      хариу → ноорог.
  *   6. Prompt injection-ий оролдлого → ноорог (автомат хэзээ ч үгүй).
  *   7. Бусад → auto_candidate («автомат горимд явах байсан»).
- * Хүргэлт: 1-р үе шатанд ҮРГЭЛЖ "none" — юу ч илгээхгүй.
+ * Хүргэлт (`delivery`): «Автомат» горимд auto_candidate (AI-ийн хариу) ба handoff (тогтмол текст) = "send", бусад = "none".
+ * Энэ нь зөвхөн БОДЛОГЫН зөвшөөрөл — жинхэнэ илгээлтийг ../outbound.js sendGuarded л шийднэ (үзэгчид, зогсоолт, 24 цаг…).
  */
 import { hasBlocking, lintDraft, moneyMentions, numberMentions, offerMentions, percentMentions } from '../guardrails.js';
-import { detectRiskSignals, intentDef, isIntent, SIGNAL_INTENT } from './intents.js';
+import { detectRiskSignals, intentDef, isForeignScript, isIntent, SIGNAL_INTENT } from './intents.js';
 
 /** Үүнээс доош итгэлтэй саналыг хүнд шилжүүлнэ */
 export const CONFIDENCE_MIN = 0.7;
@@ -33,13 +35,13 @@ export const NO_SOURCE_REPLY_MAX = 400;
 /**
  * @typedef {{ intent: string, confidence: number, needs_human: boolean, reply: string, source_ids: string[],
  *   quick_replies: string[], reason: string }} AgentProposal
- * @typedef {{ mode: 'off'|'shadow', conversationState: 'bot'|'human'|'paused', userText: string, proposal: AgentProposal,
+ * @typedef {{ mode: 'off'|'shadow'|'auto', conversationState: 'bot'|'human'|'paused', userText: string, proposal: AgentProposal,
  *   knownSourceIds: readonly string[], allowedAmounts: readonly number[], allowedPercents: readonly number[],
  *   knownNumbers?: readonly number[], knowledgeText?: string, facts?: readonly { id: string, text: string }[],
  *   bannedPhrases?: readonly string[], allowedHosts?: readonly string[] }} PolicyInput
  *   knownNumbers — мэдлэгийн текстэд байгаа тоо (үйлчилгээний нэр «Glutathione 1200» г.м.); knowledgeText — мэдлэгийн
  *   бүх текст (хөнгөлөлт/бэлэг гэх үг мэдлэгт байгаа эсэхийг шалгахад)
- * @typedef {{ route: import('./labels.js').SocialRoute, delivery: 'none', intent: import('./intents.js').SocialIntent,
+ * @typedef {{ route: import('./labels.js').SocialRoute, delivery: 'none'|'send', intent: import('./intents.js').SocialIntent,
  *   signals: import('./intents.js').RiskSignal[], reasons: string[], lint: import('../guardrails.js').LintIssue[],
  *   sourceIds: string[] }} PolicyDecision
  */
@@ -61,11 +63,12 @@ export function citedAllowance(facts, sourceIds) {
   return { amounts: moneyMentions(text), percents: percentMentions(text).map((n) => Math.round(n)), offerText };
 }
 
-/** Хүргэлт — 1-р үе шатанд ямар ч горимд илгээхгүй (assist/auto = 3-р үе шат) */
+/** Илгээж болох чиглэл: AI-ийн шалгагдсан хариу, эсвэл «ажилтанд дамжууллаа» тогтмол текст. draft/silent хэзээ ч үгүй. */
+export const SENDABLE_ROUTES = Object.freeze(['auto_candidate', 'handoff']);
+
+/** Хүргэлт — зөвхөн «Автомат» горимд, зөвхөн илгээж болох чиглэлд "send"; бусад бүх тохиолдолд "none" (fail-closed) */
 export function deliveryFor(mode, route) {
-  void mode;
-  void route;
-  return 'none';
+  return mode === 'auto' && SENDABLE_ROUTES.includes(route) ? 'send' : 'none';
 }
 
 /** Кодын дохио LLM-ийн ангиллыг дарна (эрсдэлтэй дохио байвал тэр сэдэв). Дараалал intents.js PATTERNS-ийнх. */
@@ -87,10 +90,12 @@ export function decideReply(input) {
   const lint = reply
     ? lintDraft(reply, { allowedHosts: [...(input.allowedHosts ?? DEFAULT_ALLOWED_HOSTS)], bannedPhrases: [...(input.bannedPhrases ?? [])] })
     : [];
-  const base = { delivery: deliveryFor(input.mode, 'draft'), intent, signals, lint, sourceIds };
+  const common = { intent, signals, lint, sourceIds };
+  /** @param {import('./labels.js').SocialRoute} route @param {string[]} reasons */
+  const out = (route, reasons) => ({ ...common, delivery: deliveryFor(input.mode, route), route, reasons });
 
   if (input.conversationState !== 'bot') {
-    return { ...base, route: 'silent', reasons: ['human_active'] };
+    return out('silent', ['human_active']);
   }
 
   // 2–3: хүнд
@@ -99,6 +104,10 @@ export function decideReply(input) {
   if (intentDef(intent).risk === 'human') human.push(`intent_human:${intent}`);
   else if (isIntent(p.intent) && llmDef.risk === 'human') human.push(`intent_human:${llmDef.key}`);
   for (const s of signals) if (s !== 'injection') human.push(`signal:${s}`);
+  // «Автомат» горим: кирилл биш (латин галиг, англи…) мессежид кодын эрсдэлийн дохио ажилладаггүй — AI-ийн ангилалд дан
+  // найдаж шууд хариулахгүй, ажилтанд (аудит 2026-11-26). Сүүдэрт ноорог хэвээр (үнэлгээ, eval өөрчлөгдөхгүй).
+  // Мэдлэгт байгаа латин үг (брэнд, үйлчилгээний нэр) саад биш — танихгүй латин үг нэг л байвал ажилтанд.
+  if (input.mode === 'auto' && isForeignScript(input.userText, input.knowledgeText)) human.push('foreign_script');
   if (p.needs_human) human.push('llm_needs_human');
   if (!(Number(p.confidence) >= CONFIDENCE_MIN)) human.push('low_confidence');
   if (!reply) human.push('empty_reply');
@@ -111,7 +120,7 @@ export function decideReply(input) {
   if (!human.includes('invented_price') && numberMentions(reply).some((n) => !numbers.has(Math.round(n)))) human.push('invented_price');
   const knowledge = cited ? cited.offerText : String(input.knowledgeText ?? '').toLowerCase();
   if (offerMentions(reply).some((w) => !knowledge.includes(w))) human.push('invented_offer');
-  if (human.length) return { ...base, route: 'handoff', reasons: [...new Set(human)] };
+  if (human.length) return out('handoff', [...new Set(human)]);
 
   // 4–6: ноорог
   const draft = [];
@@ -121,9 +130,9 @@ export function decideReply(input) {
   if (intentDef(intent).needsSource && sourceIds.length === 0) draft.push('no_source');
   if (!intentDef(intent).needsSource && reply.length > NO_SOURCE_REPLY_MAX) draft.push('long_reply');
   if (signals.includes('injection')) draft.push('injection');
-  if (draft.length) return { ...base, route: 'draft', reasons: draft };
+  if (draft.length) return out('draft', draft);
 
-  return { ...base, route: 'auto_candidate', reasons: [] };
+  return out('auto_candidate', []);
 }
 
 /** LLM-ийн JSON-ийг төрөл, хязгаараар цэвэрлэнэ (буруу хэлбэр = null) @returns {AgentProposal | null} */

@@ -18,8 +18,8 @@ import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
   exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, EXCLUDE_TEXT, usd3,
   kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText, evalReasonsText, evalHandoffReasons,
-} from './messenger-lib.js?v=2244b555';
-import { api, apiMsg } from './messenger-api.js?v=29db812d';
+} from './messenger-lib.js?v=1b3f2e47';
+import { api, apiMsg } from './messenger-api.js?v=16070f14';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');

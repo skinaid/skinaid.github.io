@@ -116,7 +116,7 @@ service cloud.firestore {
         );
     }
 
-    // ---------- Messenger AI (1-р үе шат: сүүдэр — үйлчлүүлэгч рүү юу ч илгээхгүй) ----------
+    // ---------- Messenger AI (сүүдэр: ноорог л; «Автомат»: зөвшөөрсөн сэдэвт сервер шууд хариулна) ----------
     // Сервер (Vercel функц, api/) Google-ийн service account-аар (IAM, WIF) бичдэг — энэ дүрэм серверт ХАМААРАХГҮЙ.
     // Admin (client) бичих эрх ЗӨВХӨН: тохиргоо (+ нэг batch-д audit), мэдлэг/жишээ (2-р үе шат), ноорогийн үнэлгээ.
     // Хязгаар = api/_lib/social/settings-logic.js, labels.js (tools/test/messenger-rules.test.mjs тулгана).
@@ -126,15 +126,26 @@ service cloud.firestore {
     function messengerSettingsAfter() {
       return getAfter(/databases/$(database)/documents/messenger_settings/main).data;
     }
+    // «Автомат» горимын туршилтын акаунт (testThreads): ярианы id-ийн жагсаалт, ≤ 10. ЭНД ЗӨВХӨН БҮТЭЦ (жагсаалт, тоо) —
+    // элемент бүрийн хэлбэрийг (64 hex) сервер (api/_lib/social/settings-logic.js normalizeSettings) ба admin шүүнэ: буруу
+    // элемент ямар ч яриатай таарахгүй (хэнд ч илгээхгүй). Firestore дүрэм нэг хүсэлтэд ≤ 1000 илэрхийлэл үнэлдэг тул
+    // элемент бүрийг дүрэмд шалгавал (10 × regex) тохиргоо + audit-ийн хадгалалт «Эрх хүрэхгүй» болох эрсдэлтэй
+    // (settings/home-д ийм болсон, 2026-11-26) — «Яаралтай зогсоох» хадгалагдахгүй болно.
+    function validTestThreads(l) {
+      return l is list && l.size() <= 10;
+    }
 
     match /messenger_settings/{doc} {
       allow read: if isAdmin();
-      // Өөрчлөлт бүр ижил batch-д шинэ audit мөртэй (lastAuditId → messenger_audit, at == request.time)
+      // Өөрчлөлт бүр ижил batch-д шинэ audit мөртэй (lastAuditId → messenger_audit, at == request.time).
+      // autoAudience, testThreads — «Автомат» горимын үзэгчид; ЗААВАЛ БИШ (байхгүй = 'test', хоосон жагсаалт: хэнд ч илгээхгүй).
       allow create, update: if isAdmin()
         && doc == 'main'
-        && incoming().keys().hasOnly(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'lastAuditId', 'updatedAt', 'updatedBy'])
+        && incoming().keys().hasOnly(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'autoAudience', 'testThreads', 'lastAuditId', 'updatedAt', 'updatedBy'])
         && incoming().keys().hasAll(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'lastAuditId', 'updatedAt', 'updatedBy'])
-        && incoming().mode in ['off', 'shadow']
+        && incoming().mode in ['off', 'shadow', 'auto']
+        && incoming().get('autoAudience', 'test') in ['test', 'all']
+        && validTestThreads(incoming().get('testThreads', []))
         && incoming().killSwitch is bool
         && incoming().monthlyRunCap is int && incoming().monthlyRunCap >= 0 && incoming().monthlyRunCap <= 100000
         && incoming().monthlyCostCapUsd is number && incoming().monthlyCostCapUsd >= 0 && incoming().monthlyCostCapUsd <= 1000
@@ -156,12 +167,14 @@ service cloud.firestore {
         && incoming().by == request.auth.token.email
         && incoming().at == request.time
         && incoming().detail is map
-        && incoming().detail.keys().hasOnly(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd'])
+        && incoming().detail.keys().hasOnly(['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'autoAudience', 'testThreads'])
         && messengerSettingsAfter().lastAuditId == id
         && incoming().detail.get('mode', '') == messengerSettingsAfter().mode
         && incoming().detail.get('killSwitch', null) == messengerSettingsAfter().killSwitch
         && incoming().detail.get('monthlyRunCap', -1) == messengerSettingsAfter().monthlyRunCap
-        && incoming().detail.get('monthlyCostCapUsd', -1) == messengerSettingsAfter().monthlyCostCapUsd;
+        && incoming().detail.get('monthlyCostCapUsd', -1) == messengerSettingsAfter().monthlyCostCapUsd
+        && incoming().detail.get('autoAudience', 'test') == messengerSettingsAfter().get('autoAudience', 'test')
+        && incoming().detail.get('testThreads', []) == messengerSettingsAfter().get('testThreads', []);
       allow update, delete: if false;
     }
 
@@ -231,6 +244,11 @@ service cloud.firestore {
       allow write: if false;
     }
     match /messenger_echo_templates/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // «Автомат» горимд үйлчлүүлэгч рүү илгээсэн мессежийн бүртгэл — зөвхөн сервер бичнэ (api/_lib/outbound.js)
+    match /messenger_outbound/{id} {
       allow read: if isAdmin();
       allow write: if false;
     }

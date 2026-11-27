@@ -1,7 +1,9 @@
 /**
- * Messenger AI — сүүдрийн агент: мэдлэг → prompt → Claude → бодлого → `messenger_drafts` (эсвэл admin-ийн туршилтын хариу).
- * ҮЙЛЧЛҮҮЛЭГЧ РҮҮ ЮУ Ч ИЛГЭЭХГҮЙ — энд Meta-ийн Send API, илгээх функц огт байхгүй (1-р үе шат).
- * «wouldSend» = автомат горимд (3-р үе шат) явах байсан текст — зөвхөн ажилтан үнэлэхэд харуулна.
+ * Messenger AI — агент: мэдлэг → prompt → Claude → бодлого → `messenger_drafts` (эсвэл admin-ийн туршилтын хариу).
+ * ЭНЭ ФАЙЛ ҮЙЛЧЛҮҮЛЭГЧ РҮҮ ЮУ Ч ИЛГЭЭХГҮЙ — Meta-ийн Send API, outbound.js-ийг импортлохгүй (архитектурын тест).
+ * «wouldSend» = «Автомат» горимд явах текст. Амьд ярианд (`live`: горим «Автомат» + үзэгчид таарсан — pipeline.js шийднэ)
+ * агент `send: { kind, text, quickReplies }` САНАЛЫГ буцаана; жинхэнэ илгээлтийг pipeline → outbound.js sendGuarded хийнэ.
+ * Admin-ийн туршилт/eval (`testDraft`) хэзээ ч `send` буцаахгүй.
  *
  * Fail-safe: тохиргоо/таг/түлхүүр/алдаа гарвал LLM-гүй, хүнд шилжүүлэх ноорог (эсвэл зөвхөн ai_runs-ийн бүртгэл).
  */
@@ -12,7 +14,7 @@ import { costMicroUsd, MESSENGER_MODEL } from './claude.js';
 import { CLINIC } from './clinic-facts.js';
 import { ubMonth } from './store.js';
 import { unansweredUserText } from './social/conversation-logic.js';
-import { composeBotReply, contactLine, HANDOFF_REPLY, MEDIA_REPLY, needsDisclosure, urgentReply } from './social/disclosure.js';
+import { composeBotReply, contactLine, handoffMessage, HANDOFF_REPLY, HUMAN_QUICK_REPLY, MEDIA_REPLY, needsDisclosure, urgentReply } from './social/disclosure.js';
 import { decideReply, parseProposal } from './social/policy.js';
 import { detectRiskSignals } from './social/intents.js';
 import { buildSocialRequest, SOCIAL_PROMPT_VERSION } from './social/prompt.js';
@@ -74,18 +76,42 @@ export function createAgent(deps) {
   /** Нийтлэгдсэн эмчилгээний хуудас (захиалгын холбоосын ?svc=) — тест тарьна */
   const pages = deps.pages ?? PAGES;
 
-  /** Нийтлэг ноорогийн талбар */
-  function baseDraft(psidHash, replyToEventId, turns) {
+  /**
+   * Нийтлэг ноорогийн талбар. mode: 'auto' = амьд яриа (илгээх оролдлоготой), 'shadow' = ноорог л.
+   * `batchText` — ЭНЭ багцын хэрэглэгчийн мессежүүд (pipeline өгнө): ярианы түүхийн сүүл (unansweredUserText) дээр НЭМЖ
+   * эрсдэлийн дохионы оролт болгоно. Дараалал алдагдаж / хоцорч ирсэн мессеж түүхэнд ботын хариуны ӨМНӨ байрлаж сүүлд
+   * орохгүй байж болно — түүнийг шалгалгүй (хоосон текстээр) хариулж болохгүй (аудит 2026-11-26).
+   */
+  function baseDraft(psidHash, replyToEventId, turns, live = false, batchText = []) {
     const ctx = turns.slice(-CONTEXT_TURNS).map((t) => ({ role: t.role, text: String(t.text || '').slice(0, 1000), attachments: t.attachments || [] }));
-    return { threadId: psidHash, replyToEventId, userText: unansweredUserText(turns), context: ctx, mode: 'shadow' };
+    const tail = unansweredUserText(turns);
+    const extra = (Array.isArray(batchText) ? batchText : []).filter((x) => typeof x === 'string' && x && !tail.includes(x));
+    const userText = [...extra, tail].filter(Boolean).join('\n').slice(0, 2000);
+    return { threadId: psidHash, replyToEventId, userText, context: ctx, mode: live ? 'auto' : 'shadow' };
   }
+
+  const dateOf = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : null);
+  /**
+   * AI тодруулга залгах эсэх. Амьд ярианд — бот энэ ярианд сүүлд ЖИНХЭНЭЭР илгээсэн мөчөөс (thread.lastBotSentAt; ажилтан
+   * оролцсон бол pipeline түүнийг арилгадаг → хүнээс буцахад дахин танилцуулна). Сүүдэрт — загварчилсан мөчөөс (хуучнаар).
+   */
+  const disclose = (thread, live) => needsDisclosure({ lastBotAt: dateOf(live ? thread?.lastBotSentAt : thread?.lastShadowBotAt), now: now(), returnedFromHuman: false });
+  /** Загвар (handoff, яаралтай, зураг) текст: амьд ярианд ботын анхны мессеж бол «Би … AI туслах» гэж танилцуулна */
+  const templateText = (tpl, thread, live) => (live ? handoffMessage(tpl, { clinicName: CLINIC.name, withDisclosure: disclose(thread, true) }) : tpl);
+  /** Илгээх санал (зөвхөн амьд ярианд, зөвхөн илгээж болох чиглэлд) — pipeline → outbound.js */
+  const sendFor = (live, route, text, kind = route === 'handoff' ? 'handoff' : 'reply', userText = '') => {
+    if (!live || !text || (route !== 'auto_candidate' && route !== 'handoff')) return null;
+    // AI-ийн хариуг эрсдэлийн шалгалт хийгдээгүй (хоосон) хэрэглэгчийн текст дээр хэзээ ч илгээхгүй
+    if (kind === 'reply' && !String(userText).trim()) return null;
+    return { kind, text, quickReplies: kind === 'reply' ? [{ ...HUMAN_QUICK_REPLY }] : [] };
+  };
 
   /**
    * Мэдлэг + яриа → Claude → бодлого → ноорогийн талбарууд (replyDraft ба testDraft хуваалцана).
    * @returns {Promise<{ status: 'error', code: string, retry: boolean, run: object }
    *   | { status: 'ok'|'fallback', fields: Record<string, any>, run: object }>}
    */
-  async function generate({ k, turns, userText, thread, mode, runBase, t0 = Date.now() }) {
+  async function generate({ k, turns, userText, thread, mode, runBase, t0 = Date.now(), live = false }) {
     const signals = detectRiskSignals(userText);
     const req = buildSocialRequest({ catalog: k.catalog, examples: k.examples, turns });
     const result = await callClaude(req);
@@ -114,7 +140,7 @@ export function createAgent(deps) {
       return {
         status: 'fallback',
         run,
-        fields: { route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, contact: null, quickReplies: [], confidence: null, aiReason: '', model: result.model, promptVersion: SOCIAL_PROMPT_VERSION },
+        fields: { route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: templateText(tpl, thread, live), link: null, contact: null, quickReplies: [], confidence: null, aiReason: '', model: result.model, promptVersion: SOCIAL_PROMPT_VERSION },
       };
     }
 
@@ -143,11 +169,10 @@ export function createAgent(deps) {
     const templateReply = decision.route === 'handoff' ? templateFor(decision.intent, decision.signals, k.phone) : null;
     let wouldSend = null;
     if (decision.route === 'auto_candidate') {
-      const lastBotAt = thread?.lastShadowBotAt instanceof Date ? thread.lastShadowBotAt : null;
       const body = [proposal.reply, contact, link ? `Цаг захиалах: ${link}` : ''].filter(Boolean).join('\n\n');
-      wouldSend = composeBotReply(body, { clinicName: CLINIC.name, withDisclosure: needsDisclosure({ lastBotAt, now: now(), returnedFromHuman: false }) });
+      wouldSend = composeBotReply(body, { clinicName: CLINIC.name, withDisclosure: disclose(thread, live) });
     } else if (decision.route === 'handoff') {
-      wouldSend = templateReply;
+      wouldSend = templateText(templateReply, thread, live);
     }
     return {
       status: 'ok',
@@ -176,30 +201,39 @@ export function createAgent(deps) {
 
   return {
     /**
-     * Зураг/видео/дуу л ирсэн — LLM-гүй загвар ноорог.
+     * Зураг/видео/дуу л ирсэн — LLM-гүй загвар ноорог. Амьд ярианд `send` (зургийн загвар хариу) буцаана; зөвхөн стикер
+     * (👍) бол илгээхгүй, ажилтанд шилжүүлэхгүй (`quiet`).
+     * @param {{ psidHash: string, replyToEventId: string, eventStatus?: Record<string, string>, thread?: Record<string, any>|null,
+     *   live?: boolean, stickerOnly?: boolean }} input
      */
-    async mediaDraft({ psidHash, replyToEventId, eventStatus }) {
+    async mediaDraft({ psidHash, replyToEventId, eventStatus, thread = null, live = false, stickerOnly = false }) {
       const turns = await store.recentTurns(psidHash, CONTEXT_TURNS);
-      await store.saveDraft({
+      const quiet = Boolean(live && stickerOnly);
+      const wouldSend = templateText(MEDIA_REPLY, thread, live);
+      const saved = await store.saveDraftEx({
         replyToEventId,
         eventStatus,
         draft: withLabels({
-          ...baseDraft(psidHash, replyToEventId, turns),
+          ...baseDraft(psidHash, replyToEventId, turns, live),
           route: 'handoff', intent: 'media', signals: [], reasons: ['media'], lint: [], sourceIds: [],
-          reply: '', templateReply: MEDIA_REPLY, wouldSend: MEDIA_REPLY, link: null, contact: null, quickReplies: [],
+          reply: '', templateReply: MEDIA_REPLY, wouldSend, link: null, contact: null, quickReplies: [],
           confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION,
+          ...(quiet ? { sendStatus: 'skipped', sendReason: 'sticker' } : {}),
         }),
         run: null,
       });
-      return { route: 'handoff', finalized: true };
+      return { route: 'handoff', finalized: true, draftId: saved.draftId, quiet, send: saved.created && !quiet ? sendFor(live, 'handoff', wouldSend, 'media') : null };
     },
 
     /**
      * Хэрэглэгчийн текстэд ноорог бичнэ. eventStatus-ийг ноорогтой НЭГ commit-д дуусгана (finalized: true).
      * Түр зуурын Claude алдаа (timeout, 429, 5xx) → { retry: true } — pipeline event-ийг дахин оролдоно.
-     * @param {{ psidHash: string, replyToEventId: string, thread: Record<string, any>, eventStatus?: Record<string, string> }} input
+     * `live` (амьд яриа) үед буцаах `send` = илгээх санал (auto_candidate → AI-ийн хариу; handoff → загвар текст; бусад → null).
+     * Ноорог энэ дуудлагаар ШИНЭЭР үүсээгүй бол `send` = null (хадгалсан ноорогоос өөр текст явахгүй).
+     * @param {{ psidHash: string, replyToEventId: string, thread: Record<string, any>, eventStatus?: Record<string, string>,
+     *   live?: boolean, batchText?: string[] }} input   batchText — энэ багцын хэрэглэгчийн мессежүүд (эрсдэлийн шалгалтад)
      */
-    async replyDraft({ psidHash, replyToEventId, thread, eventStatus }) {
+    async replyDraft({ psidHash, replyToEventId, thread, eventStatus, live = false, batchText = [] }) {
       const settings = await store.readSettings();
       if (!settings.active) return { skipped: 'inactive', finalized: false };
       const t0 = Date.now();
@@ -216,23 +250,24 @@ export function createAgent(deps) {
         knowledge.load(),
         store.readUsage(month),
       ]);
-      const base = baseDraft(psidHash, replyToEventId, turns);
+      const base = baseDraft(psidHash, replyToEventId, turns, live, batchText);
       const signals = detectRiskSignals(base.userText);
 
       // Сарын хязгаар: LLM-гүй, ажилтанд
       if (capReached(usage, settings)) {
         const tpl = templateFor('other', signals, k.phone);
-        await store.saveDraft({
-          draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: ['cap_reached'], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend: tpl, link: null, contact: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION }),
+        const wouldSend = templateText(tpl, thread, live);
+        const saved = await store.saveDraftEx({
+          draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: ['cap_reached'], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend, link: null, contact: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION }),
           run: { ...runBase, status: 'cap', billable: false, durationMs: 0 },
           month,
           replyToEventId,
           eventStatus,
         });
-        return { route: 'handoff', reason: 'cap_reached', finalized: true };
+        return { route: 'handoff', reason: 'cap_reached', finalized: true, draftId: saved.draftId, send: saved.created ? sendFor(live, 'handoff', wouldSend) : null };
       }
 
-      const g = await generate({ k, turns, userText: base.userText, thread, mode: settings.mode, runBase, t0 });
+      const g = await generate({ k, turns, userText: base.userText, thread, mode: settings.mode, runBase, t0, live });
       if (g.status === 'error') {
         // Ноорог бичихгүй — бүртгэл + статус. Түр зуурын алдаа бол event pending үлдэж дахин оролдоно (MAX_ATTEMPTS).
         // retryable — хямралын «дараалсан алдаа»-нд тоологдохгүй (crisis.js)
@@ -243,10 +278,39 @@ export function createAgent(deps) {
         await afterRun(run);
         return { error: g.code, retry: g.retry, finalized: !g.retry };
       }
-      await store.saveDraft({ draft: withLabels({ ...base, ...g.fields }), run: g.run, month, replyToEventId, eventStatus });
+      const saved = await store.saveDraftEx({ draft: withLabels({ ...base, ...g.fields }), run: g.run, month, replyToEventId, eventStatus });
       await afterRun(g.run);
-      if (g.status === 'fallback') return { route: 'handoff', reason: g.fields.reasons[0], finalized: true };
-      return { route: g.fields.route, simulatedBot: g.fields.route === 'auto_candidate', finalized: true };
+      const send = saved.created ? sendFor(live, g.fields.route, g.fields.wouldSend, undefined, base.userText) : null;
+      if (g.status === 'fallback') return { route: 'handoff', reason: g.fields.reasons[0], finalized: true, draftId: saved.draftId, send };
+      return { route: g.fields.route, simulatedBot: g.fields.route === 'auto_candidate', finalized: true, draftId: saved.draftId, send };
+    },
+
+    /**
+     * LLM-гүй «ажилтанд шилжүүлэх» ноорог — АМЬД ярианд AI хариулж чадаагүй үед (Claude-ийн алдаа, ярианы өдрийн хязгаар):
+     * үйлчлүүлэгч чимээгүй орхигдохгүй, «ажилтанд дамжууллаа» мэдэгдэл авна (pipeline → sendGuarded), яриа хүнд шилжинэ.
+     * Мэдлэг (яаралтай утас) уншиж чадаагүй бол ерөнхий загвар. Ноорог аль хэдийн байсан бол `send` = null.
+     * @param {{ psidHash: string, replyToEventId: string, eventStatus?: Record<string, string>, thread?: Record<string, any>|null,
+     *   live?: boolean, reason: 'ai_error'|'thread_cap', batchText?: string[] }} input
+     */
+    async fallbackDraft({ psidHash, replyToEventId, eventStatus, thread = null, live = false, reason, batchText = [] }) {
+      const turns = await store.recentTurns(psidHash, CONTEXT_TURNS);
+      const base = baseDraft(psidHash, replyToEventId, turns, live, batchText);
+      const signals = detectRiskSignals(base.userText);
+      let phone = '';
+      try {
+        phone = (await knowledge.load()).phone;
+      } catch {
+        phone = '';
+      }
+      const tpl = templateFor('other', signals, phone);
+      const wouldSend = templateText(tpl, thread, live);
+      const saved = await store.saveDraftEx({
+        draft: withLabels({ ...base, route: 'handoff', intent: 'other', signals, reasons: [reason], lint: [], sourceIds: [], reply: '', templateReply: tpl, wouldSend, link: null, contact: null, quickReplies: [], confidence: null, aiReason: '', model: null, promptVersion: SOCIAL_PROMPT_VERSION }),
+        run: null,
+        replyToEventId,
+        eventStatus,
+      });
+      return { route: 'handoff', reason, finalized: true, draftId: saved.draftId, send: saved.created ? sendFor(live, 'handoff', wouldSend) : null };
     },
 
     /**

@@ -24,6 +24,8 @@ export const COL = Object.freeze({
   audit: 'messenger_audit',
   kb: 'messenger_kb',
   examples: 'messenger_examples',
+  // «Автомат» горимд үйлчлүүлэгч рүү илгээсэн мессежийн бүртгэл (зөвхөн outbound.js sendGuarded бичнэ; id = o_<хариулсан event>)
+  outbound: 'messenger_outbound',
 });
 /** messenger_kb-ийн тусгай баримт: `voice` = брэнд дуу хоолой; `_rev` = мэдлэг/жишээ өөрчлөгдсөн тэмдэг (admin нэг batch-д бичнэ) */
 export const KB_IDS = Object.freeze({ voice: 'voice', rev: '_rev' });
@@ -60,7 +62,7 @@ function evalUsageWrites(runs, month, t) {
 }
 
 /** Хадгалах хугацаа (хоног) — README «Messenger AI»-тай ижил */
-export const RETENTION_DAYS = Object.freeze({ events: 30, messages: 180, drafts: 180, runs: 400, echo: 90 });
+export const RETENTION_DAYS = Object.freeze({ events: 30, messages: 180, drafts: 180, runs: 400, echo: 90, outbound: 180 });
 /** Шинэ event-ийг энэ хугацааны дотор боловсруулаагүй бол «гацсан» гэж үзэж дараагийн webhook/cron нөхнө */
 export const RETRY_AFTER_MS = 2 * 60_000;
 /** Ярианы түгжээ (нэг ярианы event-үүдийг нэг л инстанс дараалан боловсруулна) */
@@ -70,6 +72,10 @@ export const MAX_ATTEMPTS = 3;
 const DAY = 86_400_000;
 
 export const eventDocId = (pageId, eventKey) => 'e_' + createHash('sha256').update(`${pageId}:${eventKey}`).digest('hex').slice(0, 40);
+/** Илгээлтийн бүртгэлийн id — хариулсан event-ээс тогтмол: нэг хэрэглэгчийн мессежид хамгийн ихдээ НЭГ илгээлт */
+export const outboundDocId = (eventId) => `o_${String(eventId ?? '').replace(/^e_/, '')}`;
+const EVENT_ID_RE = /^e_[0-9a-f]{40}$/;
+const DRAFT_ID_RE = /^d_[0-9a-f]{32,40}$/;
 const newId = (prefix) => `${prefix}_${randomUUID().replace(/-/g, '')}`;
 const asDate = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : null);
 
@@ -370,6 +376,8 @@ export function createStore(fs, opt = {}) {
         writes.push(setWrite(`${threadPath(psidHash)}/${COL.messages}/${m.eventId}`, {
           role: m.role, kind: m.kind, text: m.text, attachments: m.attachments, textHash: m.textHash, sentAt: m.sentAt, expireAt: exp,
           ...(m.echoWhy ? { echoWhy: m.echoWhy } : {}),
+          // Манай ботын өөрийн илгээсэн мөр (finishOutbound бичсэн) — echo ирэхэд тэмдэг, логик байрлал хэвээр
+          ...(m.own ? { own: true } : {}),
         }));
       }
       const c = plan.conversation;
@@ -396,14 +404,19 @@ export function createStore(fs, opt = {}) {
       for (let i = 0; i < writes.length; i += 400) await fs.commit(writes.slice(i, i + 400));
     },
 
-    /** Аль хэдийн хадгалсан echo мессежүүд (event id → { role, echoWhy }) — дахин боловсруулахад ангиллыг хэвээр авна */
+    /**
+     * Аль хэдийн хадгалсан echo мессежүүд (event id → { role, echoWhy, at }) — дахин боловсруулахад ангиллыг хэвээр авна.
+     * `at` — манай ботын өөрийн илгээсэн мөрийн (own) логик байрлал (хариулсан хэрэглэгчийн мессежийн яг дараа); бусдад null.
+     */
     async readEchoMessages(psidHash, eventIds) {
       const paths = eventIds.map((id) => `${threadPath(psidHash)}/${COL.messages}/${id}`);
       const m = await fs.batchGet(paths);
       const out = new Map();
       eventIds.forEach((id, i) => {
         const d = m.get(paths[i])?.data;
-        if (d && typeof d.role === 'string') out.set(id, { role: d.role, echoWhy: typeof d.echoWhy === 'string' ? d.echoWhy : null });
+        if (d && typeof d.role === 'string') {
+          out.set(id, { role: d.role, echoWhy: typeof d.echoWhy === 'string' ? d.echoWhy : null, at: d.own === true && d.role === 'bot' ? asDate(d.sentAt) : null });
+        }
       });
       return out;
     },
@@ -633,12 +646,23 @@ export function createStore(fs, opt = {}) {
      * Ноорогийн id = хариулах event-ээс тогтмол (`d_<event>`): дахин боловсруулахад давхар ноорог үүсэхгүй.
      * @param {{ draft?: object|null, run?: object|null, month?: string, replyToEventId?: string, eventStatus?: Record<string, string> }} p
      */
-    async saveDraft({ draft, run, month, replyToEventId, eventStatus }) {
+    async saveDraft(p) {
+      return (await this.saveDraftEx(p)).draftId;
+    },
+
+    /**
+     * saveDraft-тай ижил; `created` — ноорог ЭНЭ commit-оор шинээр үүссэн эсэх. false (өмнөх оролдлогын ноорог байсан) бол
+     * дуудагч ИЛГЭЭХГҮЙ: хадгалагдсан ноорогоос өөр текст үйлчлүүлэгч рүү явах ёсгүй.
+     * @returns {Promise<{ draftId: string|null, created: boolean }>}
+     */
+    async saveDraftEx({ draft, run, month, replyToEventId, eventStatus }) {
       const t = now();
       const draftId = draft ? `d_${String(replyToEventId || draft.replyToEventId || '').replace(/^e_/, '') || randomUUID().replace(/-/g, '')}` : null;
       const writes = [];
       if (draft) {
         writes.push(setWrite(`${COL.drafts}/${draftId}`, {
+          // Илгээлтийн төлөв (outbound.js шинэчилнэ): null = илгээх оролдлого хийгээгүй (сүүдэр, ноорог чиглэл)
+          sendStatus: null, sendReason: null, sentAt: null,
           ...draft, rating: null, note: '', ratedAt: null, ratedBy: null, createdAt: t,
           expireAt: new Date(t.getTime() + RETENTION_DAYS.drafts * DAY),
         }, { exists: false }));
@@ -670,18 +694,104 @@ export function createStore(fs, opt = {}) {
       }
       if (stats.length) writes.push(this.dayStatsWrite(t, stats));
       writes.push(...this.eventStatusWrites(eventStatus));
-      if (!writes.length) return draftId;
+      if (!writes.length) return { draftId, created: false };
       try {
         await fs.commit(writes);
       } catch (e) {
         // Энэ event-д ноорог аль хэдийн бичигдсэн (өмнөх оролдлого) — event-ийг л дуусгана
         if (draft && e instanceof FirestoreError && e.status === 'ALREADY_EXISTS') {
           await this.finishEvents(eventStatus);
-          return draftId;
+          return { draftId, created: false };
         }
         throw e;
       }
-      return draftId;
+      return { draftId, created: Boolean(draft) };
+    },
+
+    /* ---------- Илгээлт («Автомат» горим) — ЗӨВХӨН outbound.js sendGuarded дуудна ---------- */
+
+    /** Өнөөдрийн (УБ) нийт илгээх оролдлогын тоо — өдрийн таслуур (зөөлөн хязгаар: 1 read) */
+    async readDaySendClaims(t = now()) {
+      const d = await fs.get(`${COL.usage}/${ubDay(t)}`);
+      return Number(d?.data?.sendClaims) || 0;
+    },
+
+    /**
+     * Илгээхийн ӨМНӨ бүртгэлийг эзэмшинэ (exists=false): ижил event-д хоёр дахь оролдлого (давтан webhook, retry, зэрэг
+     * инстанс) = 'duplicate' — Graph руу хэзээ ч хоёр удаа явахгүй. Функц эндээс хойш тасарвал бүртгэл `sending` хэвээр
+     * үлдэж ДАХИН ИЛГЭЭХГҮЙ (хамгийн ихдээ нэг удаа).
+     * @returns {Promise<{ ok: true, id: string } | { ok: false }>}
+     */
+    async claimOutbound({ eventId, psidHash, draftId, kind, text }) {
+      if (!EVENT_ID_RE.test(String(eventId)) || !DRAFT_ID_RE.test(String(draftId))) throw new Error('outbound_bad_id');
+      const t = now();
+      const id = outboundDocId(eventId);
+      try {
+        await fs.commit([
+          setWrite(`${COL.outbound}/${id}`, {
+            status: 'sending', kind, threadId: psidHash, draftId, replyToEventId: eventId, text: String(text).slice(0, 2000),
+            messageDocId: null, error: null, createdAt: t, sentAt: null, expireAt: new Date(t.getTime() + RETENTION_DAYS.outbound * DAY),
+          }, { exists: false }),
+          // Ноорогт «илгээж байна» — үр дүнгийн бичилт хожим унавал ч admin «илгээгээгүй» гэж худал харуулахгүй.
+          // Ноорог байхгүй бол (exists) эзэмшилт бүхэлдээ унана → илгээхгүй.
+          setWrite(`${COL.drafts}/${draftId}`, { sendStatus: 'sending' }, { mask: ['sendStatus'], exists: true }),
+          this.dayStatsWrite(t, [['sendClaims', 1]]),
+        ]);
+        return { ok: true, id };
+      } catch (e) {
+        if (e instanceof FirestoreError && e.status === 'ALREADY_EXISTS') return { ok: false };
+        throw e;
+      }
+    },
+
+    /**
+     * Илгээлтийн үр дүн — НЭГ commit: бүртгэл (sent/failed), ноорогийн төлөв, өдрийн нэгтгэл, ярианы төлөв (`threadFields`:
+     * сүүлд илгээсэн мөч, өдрийн тоо, ажилтанд шилжүүлсэн бол `human` — түгжээ тайлах бичилт унасан ч алдагдахгүй); амжилттай
+     * бол ботын мөрийг thread-д шууд (`botMessage`: id = тухайн mid-ийн echo event-ийн id → echo ирэхэд давхардахгүй, `own` +
+     * логик байрлал); алдаа бол messenger_status/main.lastSendError (ангилал + тоон код л — token, текстгүй).
+     * Meta-ийн мессежийн id-г (mid) ТҮҮХИЙГЭЭР ХАДГАЛАХГҮЙ — зөвхөн ботын мөрийн id (hash): mid + пэйжийн token-оор Graph-аас
+     * хүлээн авагчийн PSID-г гаргаж болох тул ярианы hash-тай зэрэгцүүлж хадгалбал «буцаан тайлах боломжгүй» амлалт зөрчигдөнө.
+     * Дуудагч амжилтгүй бол давтаж дуудаж болно (бичилтүүд тогтмол утгатай; өдрийн тоо давхардаж болзошгүй — зөвхөн статистик).
+     * @param {{ id: string, draftId: string, psidHash: string, kind: string, ok: boolean,
+     *   error?: { kind: string, code?: number|null, subcode?: number|null } | null,
+     *   botMessage?: { id: string, text: string, textHash: string|null, at: Date } | null, threadFields?: Record<string, any> }} p
+     */
+    async finishOutbound({ id, draftId, psidHash, kind, ok, error = null, botMessage = null, threadFields = {} }) {
+      const t = now();
+      const err = ok ? null : { kind: statKey(error?.kind), code: Number.isFinite(error?.code) ? error.code : null, subcode: Number.isFinite(error?.subcode) ? error.subcode : null };
+      const writes = [
+        setWrite(`${COL.outbound}/${id}`, { status: ok ? 'sent' : 'failed', messageDocId: ok && botMessage ? botMessage.id : null, error: err, sentAt: ok ? t : null },
+          { mask: ['status', 'messageDocId', 'error', 'sentAt'], exists: true }),
+        setWrite(`${COL.drafts}/${draftId}`, { sendStatus: ok ? 'sent' : 'failed', sendReason: ok ? null : err.kind, sentAt: ok ? t : null },
+          { mask: ['sendStatus', 'sendReason', 'sentAt'], exists: true }),
+        this.dayStatsWrite(t, [[ok ? `sent.${statKey(kind)}` : `sendFail.${err.kind}`, 1]]),
+      ];
+      if (ok && botMessage) {
+        const exp = new Date(t.getTime() + RETENTION_DAYS.messages * DAY);
+        writes.push(setWrite(`${threadPath(psidHash)}/${COL.messages}/${botMessage.id}`, {
+          role: 'bot', kind: 'text', text: botMessage.text, attachments: [], textHash: botMessage.textHash, sentAt: botMessage.at, expireAt: exp, own: true,
+        }));
+      }
+      if (!ok) writes.push(setWrite(`${COL.status}/main`, { lastSendError: { ...err, at: t } }, { mask: ['lastSendError'] }));
+      const tf = Object.keys(threadFields || {});
+      // Ярианы төлөв (түгжээг хөндөхгүй — mask-д lockUntil алга); thread баримт байгаа үед л
+      if (tf.length) writes.push(setWrite(threadPath(psidHash), { ...threadFields, updatedAt: t }, { mask: [...tf, 'updatedAt'], exists: true }));
+      await fs.commit(writes);
+    },
+
+    /** Илгээгээгүй (хамгаалалт татгалзсан) — ноорогт шалтгаан + өдрийн нэгтгэл. Ноорог байхгүй бол юу ч бичихгүй. */
+    async markSendSkipped({ draftId, reason }) {
+      const t = now();
+      const key = statKey(reason);
+      try {
+        await fs.commit([
+          setWrite(`${COL.drafts}/${draftId}`, { sendStatus: 'skipped', sendReason: key, sentAt: null }, { mask: ['sendStatus', 'sendReason', 'sentAt'], exists: true }),
+          this.dayStatsWrite(t, [[`sendSkip.${key}`, 1]]),
+        ]);
+      } catch (e) {
+        // Ноорог байхгүй (exists=true → NOT_FOUND) — тэмдэглэх зүйл алга
+        if (!(e instanceof FirestoreError && (e.isPrecondition || e.isNotFound))) throw e;
+      }
     },
 
     /** Хадгалах хугацаа дууссан баримтуудыг устгана (нэг collection, ≤ limit) */

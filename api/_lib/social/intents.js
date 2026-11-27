@@ -119,6 +119,35 @@ const PATTERNS = [
 /** «14 настай», «16 настай охин» — 18-аас доош нас дурдсан бол sensitive_group */
 const AGE_RE = /(?<!\d)(\d{1,2})\s*(?:нас|настай|наст)/giu;
 
+/** Аюулгүй, богино гадаад / галиг үг — мэнд, талархал, зөвшөөрөл («ok», «hi», «sain bn uu», «za», «bayarlalaa») гэхэд
+ *  ажилтанд шилжүүлэхгүй. ЗӨВХӨН эрсдэлийн утга авч чадахгүй үг (эмчилгээ, мөнгө, бие, хүсэлтийн үг ЭНД ОРОХГҮЙ). */
+const HARMLESS_FOREIGN = new Set([
+  'ok', 'okay', 'okey', 'hi', 'hello', 'hey', 'thanks', 'thank', 'you', 'thx', 'tnx', 'ty', 'bye', 'yes', 'no', 'pls',
+  'sain', 'sn', 'bn', 'bna', 'baina', 'bnu', 'bnuu', 'uu', 'yy', 'snu', 'sainuu', 'za', 'zaa', 'zaza', 'tiim', 'tim',
+  'bayarlalaa', 'bayarllaa', 'bayrlalaa', 'bayarlaa', 'bayrlaa',
+]);
+
+/**
+ * Мессежид КОД ТАНИХГҮЙ кирилл биш үг (латин галиг, англи, бусад бичиг) байгаа эсэх. Дээрх эрсдэлийн дохионы бүх загвар
+ * кирилл монгол үгээр бичигдсэн тул «nuur havdaad bn», «mungu butsaaj avmaar bn», «нүүр havdsan» зэргийг КОД барьж
+ * чадахгүй (аудит 2026-11-26) — «Автомат» горимд ийм мессежид AI шууд хариулахгүй, ажилтанд шилжүүлнэ (policy.js).
+ * Дүрэм: кирилл биш үг (≥ 2 үсэг) НЭГ л байвал — дараахаас бусад:
+ *   · мэнд/талархал/зөвшөөрлийн аюулгүй үгс (HARMLESS_FOREIGN: «ok», «sain bn uu», «za bayarlalaa»);
+ *   · эмнэлгийн ӨӨРИЙН мэдлэгт (каталог, FAQ, хуудас — `knownText`) байгаа үг: брэнд, үйлчилгээний нэр («Botox», «HIFU»).
+ * Тоон харьцаанд суурилсан таамаг БИШ — холимог бичвэрт ганц эрсдэлтэй латин үг («Сайн уу, havdsan») ч баригдана.
+ * Нууцлалын тэмдэг («[утас]», «[имэйл]») үгэнд тоологдохгүй.
+ * @param {string} text  хэрэглэгчийн (нууцалсан) текст
+ * @param {string} [knownText]  мэдлэгийн бүх текст (доторх кирилл биш үгс «танигдсан» болно)
+ */
+export function isForeignScript(text, knownText = '') {
+  const foreignWords = (t) => (String(t ?? '').replace(/\[[^\]\n]{0,40}\]/g, ' ').match(/\p{L}{2,}/gu) || [])
+    .filter((w) => !/\p{Script=Cyrillic}/u.test(w)).map((w) => w.toLowerCase());
+  const words = foreignWords(text).filter((w) => !HARMLESS_FOREIGN.has(w));
+  if (!words.length) return false;
+  const known = new Set(foreignWords(knownText));
+  return words.some((w) => !known.has(w));
+}
+
 /** Нууцалсан текст дэх эрсдэлийн дохио (давхардалгүй, тогтмол дараалал) @returns {RiskSignal[]} */
 export function detectRiskSignals(text) {
   const s = String(text ?? '');

@@ -1,19 +1,21 @@
 /* ==========================================================================
-   SKIN AID admin — Модуль: Messenger AI (сүүдэр — үйлчлүүлэгч рүү юу ч илгээхгүй)
-   «Ноорог»: AI-ийн бичсэн хариуны санал (messenger_drafts) → «Зөв / Засвартай / Буруу» үнэлгээ → «Жишээ болгох».
+   SKIN AID admin — Модуль: Messenger AI (сүүдэр: ноорог л; «Автомат»: зөвшөөрсөн сэдэвт сервер шууд хариулна)
+   «Ноорог»: AI-ийн бичсэн хариуны санал (messenger_drafts) → «Зөв / Засвартай / Буруу» үнэлгээ → «Жишээ болгох»;
+   «Автомат» горимд илгээсэн эсэх (sendStatus — сервер бичнэ), «Туршилтын акаунт болгох».
    «Сургалт» (2-р үе шат): m-messenger-train.js — туршилтын асуулт, мэдлэг, жишээ, AI-д юу орж байна.
-   «Тохиргоо»: горим (Унтраалттай / Сүүдэр), яаралтай зогсоох, сарын таг (messenger_settings/main + audit нэг batch-д),
-   серверийн төлөв (messenger_status/main, messenger_usage/{сар} — сервер бичнэ).
+   «Тохиргоо»: горим (Унтраалттай / Сүүдэр / Автомат), «Автомат»-ын үзэгчид (туршилтын акаунт / бүгд), яаралтай зогсоох,
+   сарын таг (messenger_settings/main + audit нэг transaction-д), туршилтын акаунтын жагсаалт (шууд хадгалагдана),
+   серверийн төлөв (messenger_status/main, messenger_usage/{сар} — сервер бичнэ). Admin өөрөө үйлчлүүлэгч рүү ЮУ Ч илгээхгүй.
    Квот: ноорог нэг удаад ≤ 30 read («Цааш ачаалах»), тохиргоо 3 read. Цэсийг нээх хүртэл юу ч уншихгүй.
    Хэрэглэгчийн/AI-ийн бүх текстийг esc()-ээр л гаргана (XSS).
    ========================================================================== */
 import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
 import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=4ec734c0';
-import { MODES, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft, AUTO_STOP_TEXT } from './messenger-lib.js?v=2244b555';
-import * as training from './m-messenger-train.js?v=7ee148c8';
-import * as overview from './m-messenger-overview.js?v=8d5ed899';
-import { api } from './messenger-api.js?v=29db812d';
+import { MODES, AUDIENCES, TEST_THREADS_MAX, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft, AUTO_STOP_TEXT, isThreadId, shortThread, isLiveThread, toggleTestThread, sendBadge, sendReasonText, metaTokenText, sendBlocker, settingsDoc } from './messenger-lib.js?v=1b3f2e47';
+import * as training from './m-messenger-train.js?v=37a16a51';
+import * as overview from './m-messenger-overview.js?v=00934e6a';
+import { api } from './messenger-api.js?v=16070f14';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };
@@ -99,6 +101,23 @@ const cardDirty = (d) => (ratingPick.has(d.id) && ratingPick.get(d.id) !== (d.ra
 const noteLabel = (required) => (required ? 'Зөв хариу <span class="req">*</span> <small>(AI-ийн оронд юу гэж хариулах байсан)</small>' : 'Тэмдэглэл <small>(заавал биш)</small>');
 const turnHtml = (t) => `<li><span class="ms-who">${esc(ROLE_TEXT[t.role] || t.role)}</span> ${t.text ? esc(t.text) : `<em class="muted">(${esc((t.attachments || []).join(', ') || 'хоосон')})</em>`}</li>`;
 
+/**
+ * Картын «илгээлт» мөр: илгээсэн эсэх (сервер бичсэн sendStatus) + энэ ярианы «Туршилтын акаунт» товч.
+ * Тохиргоо ачаалагдаагүй бол товчгүй (loadSettings дууссаны дараа refreshSendRows дахин зурна).
+ */
+function sendRow(d) {
+  const b = sendBadge(d, d.sentAt ? fmtDate(d.sentAt) : '');
+  const tid = isThreadId(d.threadId) ? d.threadId : '';
+  const isTest = Boolean(tid && saved && saved.testThreads.includes(tid));
+  const liveNow = Boolean(tid && saved && isLiveThread(saved, tid));
+  const btn = tid && saved
+    ? `<button class="btn btn--ghost btn--sm" type="button" data-tt="${esc(tid)}">${isTest ? 'Туршилтын акаунтаас хасах' : 'Туршилтын акаунт болгох'}</button>`
+    : '';
+  const tag = isTest ? `<span class="ms-tone ms-tone--info">Туршилтын акаунт${liveNow ? ' · AI шууд хариулна' : ''}</span>` : '';
+  if (!b && !btn && !tag) return '';
+  return `<div class="ms-sendline">${b ? `<span class="ms-tone ms-tone--${b.tone}">${esc(b.text)}</span>` : ''}${tag}${btn}</div>`;
+}
+
 function cardHtml(d) {
   const id = esc(d.id);
   const l = d.labels || {};
@@ -118,8 +137,9 @@ function cardHtml(d) {
     <div class="ms-block"><span class="ms-label">Үйлчлүүлэгч</span><p class="ms-text">${d.userText ? esc(d.userText) : '<em class="muted">(текстгүй — зураг/файл)</em>'}</p></div>
     ${earlier.length ? `<details class="ms-ctx"><summary>Ярианы өмнөх хэсэг (${earlier.length})</summary><ol class="ms-turns">${earlier.map(turnHtml).join('')}</ol></details>` : ''}
     ${d.reply ? `<div class="ms-block ms-block--ai"><span class="ms-label">AI-ийн санал</span><p class="ms-text">${esc(d.reply)}</p></div>` : ''}
-    ${d.wouldSend ? `<div class="ms-block ms-block--send"><span class="ms-label">Автомат горимд (3-р үе шат) илгээгдэх байсан</span><p class="ms-text">${esc(d.wouldSend)}</p></div>` : ''}
+    ${d.wouldSend ? `<div class="ms-block ms-block--send"><span class="ms-label">${d.sendStatus === 'sent' ? 'Үйлчлүүлэгчид илгээсэн текст' : '«Автомат» горимд илгээгдэх байсан текст'}</span><p class="ms-text">${esc(d.wouldSend)}</p></div>` : ''}
     ${!d.wouldSend && d.contact ? `<div class="ms-block"><span class="ms-label">Систем хариуны доор нэмэх мөр (утас, имэйлийг AI биш, код бичнэ)</span><p class="ms-text">${esc(d.contact)}</p></div>` : ''}
+    ${sendRow(d)}
     <p class="ms-why">${reasons.length ? `Шалтгаан: ${reasons.map(esc).join('; ')}. ` : ''}${typeof d.confidence === 'number' ? `AI итгэл: ${Math.round(d.confidence * 100)}%. ` : ''}${d.aiReason ? `AI-ийн тайлбар: ${esc(d.aiReason)}` : ''}</p>
     <fieldset class="ms-rate" data-rate="${id}">
       <legend>Энэ ноорог зөв үү?</legend>
@@ -140,7 +160,7 @@ function renderDrafts() {
   $$('.chip', chips).forEach((c) => { $('[data-n]', c).textContent = counts[c.dataset.f] ? `(${counts[c.dataset.f]})` : ''; });
   list.setAttribute('aria-busy', 'false');
   if (!drafts.length) {
-    list.innerHTML = '<div class="empty"><p><strong>Ноорог алга.</strong></p><p class="muted">Meta апп холбогдож, горим «Сүүдэр» болсны дараа Messenger-т ирсэн асуулт бүрт AI ноорог энд гарна. Үйлчлүүлэгч рүү юу ч илгээгдэхгүй.</p></div>';
+    list.innerHTML = '<div class="empty"><p><strong>Ноорог алга.</strong></p><p class="muted">Meta апп холбогдож, горим «Сүүдэр» эсвэл «Автомат» болсны дараа Messenger-т ирсэн асуулт бүрт AI ноорог энд гарна. «Сүүдэр» горимд үйлчлүүлэгч рүү юу ч илгээгдэхгүй.</p></div>';
   } else {
     list.innerHTML = shown.length ? shown.map(cardHtml).join('') : '<div class="empty"><p class="muted">Энэ шүүлтэд ноорог алга.</p></div>';
   }
@@ -215,7 +235,9 @@ list.addEventListener('click', async (e) => {
     return;
   }
   const xe = e.target.closest('[data-ex-edit]');
-  if (xe) training.editExample(exampleIdForDraft(xe.dataset.exEdit), xe);
+  if (xe) { training.editExample(exampleIdForDraft(xe.dataset.exEdit), xe); return; }
+  const tt = e.target.closest('[data-tt]');
+  if (tt) changeTestThread(tt.dataset.tt, 'card');
 });
 list.addEventListener('change', (e) => {
   const r = e.target.closest('input[type="radio"]');
@@ -301,22 +323,49 @@ async function saveRating(id) {
 
 /* ---------- Тохиргоо ---------- */
 $('#msModes').innerHTML = MODES.map((m) => `<label class="ms-mode"><input type="radio" name="ms-mode" value="${m.key}"> <span><strong>${esc(m.label)}</strong><small>${esc(m.hint)}</small></span></label>`).join('');
+$('#msAudiences').innerHTML = AUDIENCES.map((a) => `<label class="ms-mode"><input type="radio" name="ms-aud" value="${a.key}"> <span><strong>${esc(a.label)}</strong><small>${esc(a.hint)}</small></span></label>`).join('');
+const audBox = $('#msAudience'), audWarn = $('#msAudWarn'), ttList = $('#msTestThreads'), ttStatus = $('#msTestStatus');
 
-const readForm = () => ({
-  mode: ($('input[name="ms-mode"]:checked', form) || {}).value || 'off',
-  killSwitch: $('#ms-kill').checked,
-  runs: $('#ms-runs').value,
-  usd: $('#ms-usd').value,
-});
+const readForm = () => {
+  const mode = ($('input[name="ms-mode"]:checked', form) || {}).value || 'off';
+  // Үзэгчдийн сонголт зөвхөн «Автомат» сонгосон үед харагдана — нуугдсан үед ХАДГАЛСАН утгыг л авна (харагдахгүй
+  // сонголт чимээгүй хадгалагдахгүй)
+  const picked = ($('input[name="ms-aud"]:checked', form) || {}).value === 'all' ? 'all' : 'test';
+  return {
+    mode,
+    audience: mode === 'auto' ? picked : (saved ? saved.autoAudience : 'test'),
+    killSwitch: $('#ms-kill').checked,
+    runs: $('#ms-runs').value,
+    usd: $('#ms-usd').value,
+  };
+};
+/** «Автомат» сонгосон үед л үзэгчдийн сонголт харагдана; сонголтоос хамаарсан анхааруулга */
+function syncAudience() {
+  const v = readForm();
+  const auto = v.mode === 'auto';
+  audBox.hidden = !auto;
+  // «Автомат»-аас гарахад үзэгчдийн радиог хадгалсан утга руу буцаана (дараа дахин сонгоход «Бүгд» урьдчилан сонгогдохгүй)
+  if (!auto) $$('input[name="ms-aud"]', form).forEach((r) => { r.checked = r.value === (saved ? saved.autoAudience : 'test'); });
+  const n = saved ? saved.testThreads.length : 0;
+  const msg = !auto ? ''
+    : v.audience === 'all' ? 'Анхаар: пэйж рүү бичсэн ХҮН БҮРД AI шууд хариулна. Өмнө нь туршилтын акаунтаар шалгаж, Meta Business Suite-ийн автомат хариуг (Instant reply, Away message, FAQ) унтраасан байх ёстой — эс бөгөөс үйлчлүүлэгч хоёр хариу авна.'
+      : n ? '' : 'Туршилтын акаунт алга — хадгалсан ч AI хэнд ч шууд хариулахгүй. Доорх «Туршилтын акаунт» хэсгийн зааврыг үзнэ үү.';
+  audWarn.textContent = msg;
+  audWarn.hidden = !msg;
+}
 const fill = (s) => {
   $$('input[name="ms-mode"]', form).forEach((r) => { r.checked = r.value === s.mode; });
+  $$('input[name="ms-aud"]', form).forEach((r) => { r.checked = r.value === s.autoAudience; });
   $('#ms-kill').checked = s.killSwitch;
   $('#ms-runs').value = String(s.monthlyRunCap);
   $('#ms-usd').value = String(s.monthlyCostCapUsd);
+  syncAudience();
 };
+/** Маягт → тохиргоо. Туршилтын акаунтын жагсаалт маягтын хэсэг БИШ (шууд хадгалагддаг) — хадгалсан утгаас авна.
+ *  Талбарын дараалал = normalizeSettings (settingsDirty JSON-оор харьцуулна). */
 const asSettings = (v) => {
   const caps = parseCaps(v.runs, v.usd);
-  return caps.error ? null : { mode: v.mode, killSwitch: v.killSwitch, monthlyRunCap: caps.runs, monthlyCostCapUsd: caps.usd };
+  return caps.error ? null : { mode: v.mode, killSwitch: v.killSwitch, monthlyRunCap: caps.runs, monthlyCostCapUsd: caps.usd, autoAudience: v.audience, testThreads: saved ? [...saved.testThreads] : [] };
 };
 const settingsDirty = () => {
   if (!ready || !saved) return false;
@@ -343,6 +392,7 @@ function renderState(st, usage, settings) {
   }).join('');
   const s = settings || saved || normalizeSettings(null);
   const err = st && st.lastError && st.lastError.code ? `<p class="ms-err">Сүүлийн алдаа: <code>${esc(st.lastError.code)}</code> · ${esc(fmtDate(st.lastError.at))}</p>` : '';
+  const sendErr = st && st.lastSendError && st.lastSendError.kind ? `<p class="ms-err">Сүүлийн илгээлтийн алдаа: ${esc(sendReasonText(st.lastSendError.kind))}${st.lastSendError.code ? ` <code>${esc(String(st.lastSendError.code))}${st.lastSendError.subcode ? `/${esc(String(st.lastSendError.subcode))}` : ''}</code>` : ''} · ${esc(fmtDate(st.lastSendError.at))}</p>` : '';
   stateBox.innerHTML = `
     ${!st ? '<p class="ms-banner">Сервер хараахан холбогдоогүй байна. Vercel болон Google Cloud-ийн тохиргоог (нууц түлхүүр, Firebase-ийн эрх) хийсний дараа энд төлөв гарна. Тохиргоог одоо хадгалж болно — сервер холбогдмогц мөрдөнө.</p>' : ''}
     <dl class="ms-kv">
@@ -350,8 +400,9 @@ function renderState(st, usage, settings) {
       <div><dt>Өдрийн cron сүүлд</dt><dd>${st && st.lastCronAt ? esc(fmtDate(st.lastCronAt)) : '—'}</dd></div>
       <div><dt>Энэ сард AI хариу бичсэн</dt><dd>${usage.runs} / ${s.monthlyRunCap}</dd></div>
       <div><dt>Энэ сарын зардал</dt><dd>${esc(usd(usage.costMicroUsd))} / $${esc(String(s.monthlyCostCapUsd))}</dd></div>
+      <div><dt>Пэйжийн token (илгээхэд)</dt><dd>${cfg && cfg.metaPageToken === true ? esc(metaTokenText(st && st.metaToken)) : 'тохируулаагүй — «Автомат» горим илгээж чадахгүй'}</dd></div>
     </dl>
-    ${err}
+    ${err}${sendErr}
     <details class="ms-cfg-wrap"><summary>Серверийн тохиргоо (нууц түлхүүрүүд — утга биш, зөвхөн тавьсан эсэх)</summary><ul class="ms-cfg">${cfg ? rows : '<li>Мэдээлэл алга</li>'}</ul></details>`;
 }
 
@@ -386,6 +437,9 @@ async function refreshAfterStop(g) {
     lastState = stSnap.exists() ? stSnap.data() : lastState;
     $('#ms-kill').checked = saved.killSwitch;
     renderBanner();
+    renderTestThreads();
+    refreshSendRows();
+    syncAudience();
     refreshDirty();
     snack('Таны хадгалаагүй тохиргоо хэвээр, харин «Яаралтай зогсоолт» асаалттай болсон — шалгаад хадгална уу.');
   } catch (_) { /* дараагийн ачаалалт */ }
@@ -417,6 +471,8 @@ async function loadSettings() {
     lastUsage = { runs: Number(u.runs) || 0, costMicroUsd: Number(u.costMicroUsd) || 0 };
     renderState(lastState, lastUsage, saved);
     renderBanner();
+    renderTestThreads();
+    refreshSendRows();
     ready = true;
     lockForm(false);
     const who = raw && raw.updatedBy === 'system' ? 'систем (автомат зогсолт)' : (raw && raw.updatedBy) || '';
@@ -435,12 +491,20 @@ function renderBanner() {
   const b = $('#msModeBanner');
   if (!saved) { b.hidden = true; return; }
   b.hidden = false;
-  const on = saved.mode === 'shadow' && !saved.killSwitch;
-  b.className = `ms-modebar ${on ? 'is-on' : 'is-off'}`;
+  const on = saved.mode !== 'off' && !saved.killSwitch;
+  // «Автомат» асаалттай ч сервер илгээж чадахгүй (token алга/хүчингүй) бол «шууд хариулж байна» гэж хэлэхгүй
+  const blocked = on && saved.mode === 'auto' ? sendBlocker(lastState) : '';
+  b.className = `ms-modebar ${on && !blocked ? 'is-on' : 'is-off'}`;
   const auto = saved.killSwitch && savedBy === 'system' ? (lastState && lastState.autoStop) || {} : null;
+  const n = saved.testThreads.length;
+  const live = blocked ? `AI «Автомат» горимд боловч одоогоор ИЛГЭЭЖ ЧАДАХГҮЙ — ${blocked}. Ноорог л бичнэ («Тохиргоо» → «Серверийн төлөв»-ийг шалгана уу).`
+    : saved.autoAudience === 'all' ? 'AI АВТОМАТ горимд — БҮХ үйлчлүүлэгчид шууд хариулж байна (эрсдэлтэй сэдэв, зургийг ажилтанд шилжүүлнэ).'
+    : n ? `AI АВТОМАТ горимд — туршилтын ${n} акаунтад шууд хариулж байна. Бусад үйлчлүүлэгчид юу ч илгээхгүй (сүүдэр хэвээр).`
+      : 'AI «Автомат» горимд боловч туршилтын акаунт алга — хэнд ч илгээхгүй (сүүдэртэй адил ноорог л бичнэ).';
   b.textContent = auto
     ? `AI-Г СИСТЕМ АВТОМАТААР ЗОГСООСОН: ${AUTO_STOP_TEXT[auto.reason] || 'хямралын шалгуур'}${auto.at ? ` (${fmtDate(auto.at)})` : ''}. Шалгаад «Тохиргоо»-оос яаралтай зогсоолтыг унтрааж хадгална уу.`
-    : saved.killSwitch ? 'AI ЗОГСООСОН (яаралтай зогсоолт асаалттай).' : on ? 'AI сүүдэр горимд ажиллаж байна — ноорог бичнэ, үйлчлүүлэгч рүү юу ч илгээхгүй.' : 'AI унтраалттай — мессеж хадгалагдахгүй.';
+    : saved.killSwitch ? 'AI ЗОГСООСОН (яаралтай зогсоолт асаалттай).' : !on ? 'AI унтраалттай — мессеж хадгалагдахгүй.'
+      : saved.mode === 'auto' ? live : 'AI сүүдэр горимд ажиллаж байна — ноорог бичнэ, үйлчлүүлэгч рүү юу ч илгээхгүй.';
   btnStop.hidden = saved.killSwitch;
 }
 
@@ -462,18 +526,88 @@ async function persist(next, { stop = false } = {}) {
     // (баталгаажуулах аудит); ердийн хадгалалт хуучирсан бол цуцлагдана
     if (stop) written = { ...normalizeSettings(changed ? curData : next), killSwitch: true };
     else if (changed) throw Object.assign(new Error(STALE), { code: STALE });
-    tx.set(ref, {
-      mode: written.mode, killSwitch: written.killSwitch, monthlyRunCap: written.monthlyRunCap, monthlyCostCapUsd: written.monthlyCostCapUsd,
-      lastAuditId: id, updatedAt: serverTimestamp(), updatedBy: session.user.email,
-    });
-    tx.set(doc(db, 'messenger_audit', id), {
-      action: 'settings', by: session.user.email, at: serverTimestamp(),
-      detail: { mode: written.mode, killSwitch: written.killSwitch, monthlyRunCap: written.monthlyRunCap, monthlyCostCapUsd: written.monthlyCostCapUsd },
-    });
+    // Бичих утгыг ҮРГЭЛЖ цэвэрлэнэ (горим, үзэгчид, туршилтын акаунтын жагсаалт — rules-тэй ижил хэлбэр)
+    written = normalizeSettings(written);
+    // Анхдагч үзэгчид/хоосон жагсаалтыг бичихгүй (settingsDoc) — rules хуучин байсан ч зогсоолт, сүүдэр горим хадгалагдана
+    tx.set(ref, { ...settingsDoc(written), lastAuditId: id, updatedAt: serverTimestamp(), updatedBy: session.user.email });
+    // Audit-ийн detail = хадгалсан тохиргоо (rules тулгана): хэн, хэзээ «Автомат» асаасан, хэнийг туршилтын акаунт болгосон
+    tx.set(doc(db, 'messenger_audit', id), { action: 'settings', by: session.user.email, at: serverTimestamp(), detail: settingsDoc(written) });
   });
   savedAuditId = id;
   return { written, changed };
 }
+
+/* ---------- «Автомат» горим: туршилтын акаунт ---------- */
+function renderTestThreads() {
+  const rows = saved ? saved.testThreads : [];
+  // Хэн болохыг танихад: ачаалсан ноорогуудаас тэр ярианы СҮҮЛИЙН мессежийг харуулна (нэр, id хадгалдаггүй)
+  const last = (t) => drafts.find((d) => d.threadId === t && d.userText);
+  ttList.innerHTML = rows.length
+    ? rows.map((t, i) => {
+      const d = last(t);
+      const hint = d ? `сүүлийн мессеж: «${esc(String(d.userText).slice(0, 60))}» · ${esc(fmtDate(d.createdAt))}` : 'ачаалсан ноорогт энэ ярианы мессеж алга';
+      return `<li class="ms-tt"><span>Туршилтын акаунт ${i + 1} <code>${esc(shortThread(t))}…</code><br><small class="muted">${hint}</small></span><button class="btn btn--outline btn--sm" type="button" data-tt-del="${esc(t)}" aria-label="Туршилтын акаунт ${i + 1}-ийг хасах">Хасах</button></li>`;
+    }).join('')
+    : '<li class="muted">Туршилтын акаунт алга.</li>';
+}
+/** Тохиргоо/жагсаалт өөрчлөгдөхөд картуудын «илгээлт» мөрийг л дахин зурна (тэмдэглэл бичиж буй textarea-д хүрэхгүй) */
+function refreshSendRows() {
+  for (const d of drafts) {
+    const card = $(`.ms-card[data-id="${CSS.escape(d.id)}"]`, list);
+    if (!card) continue;
+    const old = $('.ms-sendline', card);
+    const had = old && old.contains(document.activeElement);
+    const html = sendRow(d);
+    if (old) old.remove();
+    if (html) $('.ms-why', card).insertAdjacentHTML('beforebegin', html);
+    if (had) ($('.ms-sendline button', card) || $('.ms-card__title', card))?.focus();
+  }
+}
+/**
+ * Туршилтын акаунт нэмэх/хасах — ШУУД хадгална (хадгалсан тохиргоо + шинэ жагсаалт; маягтын хадгалаагүй өөрчлөлтийг
+ * хадгалахгүй). Нэмэхэд баталгаажуулна: буруу хүнийг (жинхэнэ үйлчлүүлэгч) туршилтын акаунт болговол AI түүнд шууд хариулна.
+ * @param {string} threadId @param {'card'|'list'} from
+ */
+async function changeTestThread(threadId, from) {
+  if (!session.user || saving) return;
+  if (!ready || !saved) { snack('Тохиргоо ачаалагдаагүй байна — түр хүлээгээд дахин оролдоно уу.', { error: true }); return; }
+  const adding = !saved.testThreads.includes(threadId);
+  const next = toggleTestThread(saved.testThreads, threadId);
+  if (!next) { snack(`Туршилтын акаунт ${TEST_THREADS_MAX}-аас ихгүй байна. Эхлээд «Тохиргоо» табаас нэгийг хасна уу.`, { error: true }); return; }
+  if (adding && !(await dialog({
+    title: 'Туршилтын акаунт болгох уу?',
+    body: ['Энэ яриа ТАНЫ ӨӨРИЙН эсвэл ажилтны акаунт мөн үү? Жинхэнэ үйлчлүүлэгчийн яриаг бүү сонгоорой.', '«Автомат» горим «Зөвхөн туршилтын акаунт»-аар асаалттай үед AI энэ ярианд шууд хариулна.'],
+    confirm: 'Туршилтын акаунт болгох', cancel: 'Болих', safe: true,
+  }))) return;
+  if (!session.user || saving || !ready || !saved) return;
+  // Цонх нээлттэй байх хооронд тохиргоо дахин ачаалагдсан байж болно — жагсаалтыг ОДООГИЙН хадгалсан утгаас дахин тооцно
+  const list2 = adding && saved.testThreads.includes(threadId) ? saved.testThreads : toggleTestThread(saved.testThreads, threadId);
+  if (!list2) { snack(`Туршилтын акаунт ${TEST_THREADS_MAX}-аас ихгүй байна. Эхлээд «Тохиргоо» табаас нэгийг хасна уу.`, { error: true }); return; }
+  saving = true;
+  lockForm(true);
+  setStatus(ttStatus, 'Хадгалж байна…', '');
+  try {
+    const r = await persist({ ...saved, testThreads: list2 });
+    saved = r.written;
+    savedBy = session.user.email;
+    renderBanner();
+    renderTestThreads();
+    refreshSendRows();
+    syncAudience();
+    setStatus(ttStatus, adding ? 'Туршилтын акаунт нэмэгдлээ.' : 'Туршилтын акаунтаас хасагдлаа.', 'ok');
+    snack(adding ? 'Туршилтын акаунт нэмэгдлээ' : 'Туршилтын акаунтаас хаслаа');
+  } catch (e) {
+    if (e && e.code === STALE) { setStatus(ttStatus, '', ''); await onStale(); return; }
+    setStatus(ttStatus, errText(e), 'err'); snack(errText(e), { error: true });
+  } finally {
+    saving = false;
+    lockForm(!ready);
+    refreshDirty();
+    // Жагсаалтаас хассан бол товч алга болсон — фокус body руу унахгүй
+    if (from === 'list') ($('button', ttList) || $('#msTestHead'))?.focus();
+  }
+}
+ttList.addEventListener('click', (e) => { const b = e.target.closest('[data-tt-del]'); if (b) changeTestThread(b.dataset.ttDel, 'list'); });
 const STALE_TEXT = 'Тохиргоо таныг ачаалснаас хойш өөрчлөгдсөн байна (систем AI-г автоматаар зогсоосон эсвэл өөр цонхноос хадгалсан). Шинэ утгыг ачааллаа — шалгаад дахин хадгална уу.';
 /** Хуучирсан маягт: хадгалалтыг цуцалж, шинэ утгыг ачаална */
 async function onStale() {
@@ -497,17 +631,52 @@ async function save() {
     return;
   }
   clearErrors(form);
-  const next = { mode: v.mode, killSwitch: v.killSwitch, monthlyRunCap: caps.runs, monthlyCostCapUsd: caps.usd };
+  const next = { mode: v.mode, killSwitch: v.killSwitch, monthlyRunCap: caps.runs, monthlyCostCapUsd: caps.usd, autoAudience: v.audience, testThreads: saved ? [...saved.testThreads] : [] };
+  // «Автомат» асаах, эсвэл бүх үйлчлүүлэгчид нээх — үйлчлүүлэгч рүү жинхэнэ мессеж явна: баталгаажуулна
+  // «Асаалттай» = горим «Автомат» БА яаралтай зогсоолтгүй: зогсоолтыг унтрааж дахин асаах нь ч мөн адил баталгаажна
+  const wasAuto = Boolean(saved && saved.mode === 'auto' && !saved.killSwitch);
+  const wasAll = wasAuto && saved.autoAudience === 'all';
+  const willAuto = next.mode === 'auto' && !next.killSwitch;
+  // Цонх нээлттэй байх хооронд тохиргоо өөрчлөгдвөл (систем автоматаар зогсоосон г.м.) хуучин утгаар ДАРЖ хадгалахгүй
+  const auditBefore = savedAuditId;
+  const blocked = willAuto ? sendBlocker(lastState) : '';
+  const blockedNote = blocked ? `Анхаар: сервер одоогоор илгээж чадахгүй — ${blocked}. Засах хүртэл AI ноорог л бичнэ.` : '';
+  if (willAuto && next.autoAudience === 'all' && !wasAll) {
+    if (!(await dialog({
+      title: 'БҮХ үйлчлүүлэгчид шууд хариулах уу?',
+      body: ['Хадгалмагц AI пэйж рүү бичсэн хүн бүрд зөвшөөрсөн сэдвээр шууд хариулж эхэлнэ.', blockedNote],
+      list: ['Туршилтын акаунтаар шалгаж, хариу зөв байсан', 'Meta Business Suite-ийн автомат хариуг (Instant reply, Away message, FAQ) унтраасан', 'Ажилтнууд «ажилтанд дамжууллаа» гэсэн яриаг Meta Inbox-оос хариулахаа мэдэж байгаа'],
+      confirm: 'Бүгдэд нээх', cancel: 'Болих', danger: true,
+    }))) return;
+  } else if (willAuto && !wasAuto) {
+    const n = next.testThreads.length;
+    if (!(await dialog({
+      title: '«Автомат» горимыг асаах уу?',
+      body: [n ? `AI туршилтын ${n} акаунтад Messenger-ээр шууд хариулж эхэлнэ. Бусад үйлчлүүлэгчид юу ч илгээхгүй.` : 'Туршилтын акаунт алга тул AI одоохондоо хэнд ч илгээхгүй. Ноорогийн картаас «Туршилтын акаунт болгох»-ыг дарсны дараа тэр акаунтад шууд хариулна.',
+        'Эмнэлгийн асуулт, гаж нөлөө, гомдол, мөнгө, зураг/видеод AI хариулахгүй — «ажилтанд дамжууллаа» гэж мэдэгдээд тэр ярианд чимээгүй болно.', blockedNote],
+      confirm: '«Автомат» асаах', cancel: 'Болих', safe: true,
+    }))) return;
+  }
+  if (!session.user || saving || !ready) return;
+  if (savedAuditId !== auditBefore) {
+    // Баталгаажуулах хооронд өөр газраас хадгалагдсан (автомат зогсолт) — шинэ утгыг харуулаад дахин шийдүүлнэ
+    fill(saved);
+    setStatus(status, STALE_TEXT, 'err'); snack(STALE_TEXT, { error: true });
+    refreshDirty();
+    return;
+  }
   const restore = captureFocus(form);
   saving = true;
   lockForm(true);
   setStatus(status, 'Хадгалж байна…', '');
   try {
-    await persist(next);
-    saved = next;
+    const r = await persist(next);
+    saved = r.written;
     savedBy = session.user.email;
     fill(saved);
     renderBanner();
+    renderTestThreads();
+    refreshSendRows();
     renderState(lastState, lastUsage, saved);
     setStatus(status, 'Хадгалагдлаа — сервер дараагийн мессежээс мөрдөнө.', 'ok');
     snack('Messenger AI-ийн тохиргоо хадгалагдлаа');
@@ -531,6 +700,9 @@ async function stopNow() {
     if (r.changed) fill(saved);
     $('#ms-kill').checked = true;
     renderBanner();
+    renderTestThreads();
+    refreshSendRows();
+    syncAudience();
     renderState(lastState, lastUsage, saved);
     setStatus(status, 'AI зогслоо. Дахин асаахдаа «Яаралтай зогсоолт»-ыг унтрааж хадгална.', 'ok');
     announce('AI зогслоо');
@@ -547,7 +719,7 @@ btnStop.addEventListener('click', stopNow);
 
 form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
 form.addEventListener('input', (e) => { clearFieldError(e.target); refreshDirty(); });
-form.addEventListener('change', refreshDirty);
+form.addEventListener('change', (e) => { if (e.target.matches('input[name="ms-mode"], input[name="ms-aud"]')) syncAudience(); refreshDirty(); });
 // Хадгалах мөр: тохиргоог хадгална; хадгалаагүй үнэлгээ байвал тэр карт руу аваачна (үнэлгээ карт бүр дээрээ хадгалагдана).
 // isDirty нь үнэлгээг ч тооцно — гарах/хаахад анхааруулга гарна.
 registerForm('messenger', {
@@ -628,6 +800,7 @@ export function teardown() {
   selectTab('drafts');
   lockForm(true);
   list.innerHTML = ''; meta.textContent = ''; more.hidden = true; stateBox.innerHTML = '';
+  ttList.innerHTML = ''; audBox.hidden = true; setStatus(ttStatus, '', '');
   $('#msModeBanner').hidden = true;
   setStatus(status, '', '');
 }

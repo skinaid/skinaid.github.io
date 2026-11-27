@@ -12,14 +12,21 @@
  *     автомат загвар; хэрэглэгч огт бичээгүй ярианы echo = Page-ээс эхэлсэн автомат (Comment to message, зарын greeting).
  *     Сүүдэр горимд алдах эрсдэл бага (ажилтныг автомат гэж үзвэл зөвхөн илүү ноорог бичнэ).
  *     2026-11-27: ангилал бүр ШАЛТГААНТАЙ (`classifyEchoWhy` → own_app | known_app | template | no_user | fast_gap | default) —
- *     мессеж ба өдрийн тоологчид хадгалж бодит echo-гоор тохируулна. `echoPolicy: 'strict'` (3-р үе шат: assist/auto) —
- *     тодорхойгүй echo (no_user, fast_gap) = АЖИЛТАН (бот ажилтны яриаг таслахгүй); зөвхөн манай апп ба ≥ 3 ярианд давтагдсан
- *     загвар автомат. Одоо (сүүдэр) идэвхгүй — `planBatch`-ийн анхдагч 'shadow'.
+ *     мессеж ба өдрийн тоологчид хадгалж бодит echo-гоор тохируулна. `echoPolicy: 'strict'` — «Автомат» горимын АМЬД ярианд
+ *     (бот шууд хариулдаг; pipeline.js): тодорхойгүй echo (no_user, 8 с-ээс удаан) = АЖИЛТАН (бот ажилтны яриаг таслахгүй);
+ *     зөвхөн манай апп ба ≤ 8 с-ийн хариу автомат (давтагдсан загварын дүрэм ҮЙЛЧЛЭХГҮЙ — ажилтны хадгалсан хариу).
+ *     Сүүдэр ярианд анхдагч 'shadow'.
+ *   · Манай ботын ӨӨРИЙН илгээсэн мессеж (outbound.js): илгээсэн даруйд thread-д `own` мөрөөр бичигддэг (id = echo-гийн
+ *     event id). Echo ирэхэд `knownEchoes` түүнийг таньж, бодит ирсэн цагаар БИШ «логик байрлал»-аар (хариулсан хэрэглэгчийн
+ *     мессежийн яг дараа) эрэмбэлнэ — хэрэглэгч AI бодож байх хооронд дараагийн мессежээ бичсэн бол тэр мессеж «хариулсан»
+ *     болж алгасагдахгүй.
  *   · take_thread_control → human; бидэнд pass_thread_control → bot.
- *   · хүн 12 цаг идэвхгүй байхад хэрэглэгч бичвэл → bot руу буцна.
- *   · standby (өөр апп яриаг эзэмшиж байна) мессежийг хадгална; сүүдэр горимд ноорог бичсээр.
+ *   · хүн 12 цаг идэвхгүй байхад хэрэглэгч бичвэл → bot руу буцна (хүний сүүлийн хариу, хүнд шилжсэн мөчийн СҮҮЛИЙНХЭЭС).
+ *   · standby (өөр апп яриаг эзэмшиж байна) мессежийг хадгална; ноорог бичсээр, action.standby = true — илгээхгүй
+ *     (outbound.js: thread эзэмшээгүй үед Meta code 10 / 2018300 буцаана).
  * Үйлдэл: горим off → бүгд «skipped»; эс бөгөөс хэрэглэгчийн сүүлийн мессеж хүний/ботын хариунаас хойш байвал —
- * зөвхөн хавсралт = LLM-гүй загвар, текст = НЭГ агентын ажиллагаа (дараалсан мессежүүдэд нэг ноорог).
+ * зөвхөн хавсралт = LLM-гүй загвар (зөвхөн стикер бол action.stickerOnly), текст = НЭГ агентын ажиллагаа (дараалсан
+ * мессежүүдэд нэг ноорог).
  */
 import { createHash } from 'node:crypto';
 
@@ -44,8 +51,10 @@ export const AUTOMATION_TEMPLATE_MIN_CONVERSATIONS = 3;
  *   payload: import('./meta-events.js').SocialEventPayload }} StoredEvent
  * @typedef {{ eventId: string, role: MessageRole, textHash: string|null, kind: MessageKind, text: string,
  *   attachments: string[], mid: string|null, sentAt: Date, echoWhy?: string }} PlannedMessage
- * @typedef {{ type: 'none', reason: 'mode_off'|'human_active'|'no_user_message'|'already_answered' }
- *   | { type: 'agent', replyToEventId: string } | { type: 'media_template', replyToEventId: string }} BatchAction
+ * @typedef {{ type: 'none', reason: 'mode_off'|'human_active'|'no_user_message'|'already_answered'|'paused' }
+ *   | { type: 'agent', replyToEventId: string, standby?: true }
+ *   | { type: 'media_template', replyToEventId: string, standby?: true, stickerOnly?: true }} BatchAction
+ *   standby / stickerOnly — зөвхөн үнэн үед талбар байна
  */
 
 /**
@@ -59,7 +68,7 @@ export function echoFingerprint(text) {
 }
 
 /** @typedef {'own_app'|'known_app'|'template'|'no_user'|'fast_gap'|'default'} EchoWhy */
-/** Echo-гийн бодлого: shadow (одоо) — тодорхойгүйг автомат гэж үзнэ; strict (3-р үе шат) — хэрэглэгчгүй яриа = ажилтан,
+/** Echo-гийн бодлого: shadow (сүүдэр яриа) — тодорхойгүйг автомат гэж үзнэ; strict (амьд яриа) — хэрэглэгчгүй яриа = ажилтан,
  *  хурдан хариуны босго 8 с (Meta-ийн автомат хариу 2–4 с тул автомат хэвээр — бот дуугүй болохгүй; аудит) */
 export const ECHO_POLICIES = Object.freeze(['shadow', 'strict']);
 
@@ -74,9 +83,11 @@ export function classifyEchoWhy(echo, ctx) {
   const app = echo.payload.app_id ?? null;
   if (ctx.ownAppId && app === ctx.ownAppId) return { source: 'own_bot', why: 'own_app' };
   if (app && KNOWN_AUTOMATION_APP_IDS.includes(app)) return { source: 'automation', why: 'known_app' };
-  const fp = echoFingerprint(echo.payload.text);
-  if (fp && ctx.automationHashes?.has(fp)) return { source: 'automation', why: 'template' };
   const strict = ctx.policy === 'strict';
+  // Давтагдсан текст = Meta-ийн загвар — ЗӨВХӨН сүүдэрт. Амьд ярианд (strict) хэрэглэхгүй: ажилтны «хадгалсан хариу» (Page
+  // Inbox saved reply) ч ≥ 3 ярианд давтагддаг тул автомат гэж андуурвал бот ажилтны дээгүүр хариулна (аудит 2026-11-26).
+  const fp = strict ? null : echoFingerprint(echo.payload.text);
+  if (fp && ctx.automationHashes?.has(fp)) return { source: 'automation', why: 'template' };
   // Хэрэглэгч бичсэн ч echo-оос өмнөх мөч тодорхойгүй (echo хоцорч, дараалал алдагдаж ирсэн) — «бичээгүй» гэж бүү андуур:
   // зөрүүг хэмжих боломжгүй тул ажилтан гэж үзнэ (баталгаажуулах аудит; өмнөх зан төлөв)
   if (!ctx.lastUserAt && ctx.userWrote) return { source: 'staff', why: 'default' };
@@ -93,6 +104,9 @@ export function classifyEcho(echo, ctx) {
 }
 
 const hoursBetween = (a, b) => (b.getTime() - a.getTime()) / 3600_000;
+const validDate = (v) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : null);
+/** Хоёр мөчийн сүүлийнх (аль нэг нь null байж болно) */
+const laterOf = (a, b) => (a && b ? (a.getTime() >= b.getTime() ? a : b) : a ?? b ?? null);
 
 /**
  * Echo-гийн ӨМНӨХ хэрэглэгчийн мессежийн мөч: энэ багцынх (эрэмбэлсэн тул ≤ echo), эс бөгөөс ярианы lastUserAt — зөвхөн echo-оос
@@ -112,17 +126,32 @@ const ROLE_SOURCE = { bot: 'own_bot', automation: 'automation', staff: 'staff' }
 function knownEcho(known, e) {
   const k = known?.get(e.id);
   const source = k && ROLE_SOURCE[k.role];
-  return source ? { source, why: k.echoWhy || 'default' } : null;
+  return source ? { source, why: k.echoWhy || 'default', own: source === 'own_bot' && Boolean(validDate(k.at)) } : null;
+}
+/**
+ * Манай ботын өөрийн илгээсэн мессежийн echo → «логик байрлал» (хадгалсан мөрийн `at`)-аар; бусад event хэвээр.
+ * Зөвхөн role = bot мөрөнд (ажилтан/автомат echo-гийн цагийг хэзээ ч өөрчлөхгүй).
+ */
+function withLogicalTime(events, known) {
+  if (!known || !known.size) return events;
+  return events.map((e) => {
+    if (e.kind !== 'echo') return e;
+    const k = known.get(e.id);
+    const at = k && k.role === 'bot' ? validDate(k.at) : null;
+    return at ? { ...e, eventTime: at } : e;
+  });
 }
 
 /**
  * @param {ConversationSnapshot} conv
  * @param {readonly StoredEvent[]} events
  * @param {{ mode: 'off'|'shadow', ownAppId: string|null, now: Date, automationHashes?: ReadonlySet<string>, echoPolicy?: 'shadow'|'strict',
- *   knownEchoes?: ReadonlyMap<string, { role: string, echoWhy?: string|null }> }} opts  knownEchoes — өмнө хадгалсан echo мессеж (event id → ангилал)
+ *   knownEchoes?: ReadonlyMap<string, { role: string, echoWhy?: string|null, at?: Date|null }>, stateOnly?: boolean }} opts
+ *   knownEchoes — өмнө хадгалсан echo мессеж (event id → ангилал; `at` = манай ботын өөрийн илгээсэн мессежийн логик байрлал);
+ *   stateOnly — яаралтай зогсоолтын үе: төлвийг (ажилтан хариулсан эсэх) шинэчилнэ, ямар ч үйлдэл хийхгүй (reason 'paused')
  */
 export function planBatch(conv, events, opts) {
-  const sorted = [...events].sort((a, b) => a.eventTime.getTime() - b.eventTime.getTime());
+  const sorted = [...withLogicalTime(events, opts.knownEchoes)].sort((a, b) => a.eventTime.getTime() - b.eventTime.getTime());
   /** @type {Record<string, 'done'|'skipped'>} */
   const status = {};
   if (opts.mode === 'off') {
@@ -173,9 +202,14 @@ export function planBatch(conv, events, opts) {
           echoWhy: why,
           // Өмнө хадгалсан — өдрийн тоонд дахин тоолохгүй (store.saveBatch)
           ...(stored ? { echoKnown: true } : {}),
+          // Манай ботын өөрийн илгээсэн мөр — тэмдгийг хадгална (дахин боловсруулахад логик байрлал алдагдахгүй)
+          ...(stored?.own ? { own: true } : {}),
         });
-        // Meta-ийн автомат хариу асуултад хариулаагүй гэж үзнэ — сүүдэр ноорог бичигдсээр (үнэлгээнд хэрэгтэй)
-        if (lastUser && source !== 'automation') answeredAfterUser = true;
+        // Зөвхөн АЖИЛТНЫ хариу хэрэглэгчийн мессежийг «хариулсан» болгоно. Meta-ийн автомат хариу асуултад хариулаагүй
+        // (сүүдэр ноорог бичигдсээр). Манай ботын ӨӨРИЙН echo ч үгүй: бот хариугаа тухайн багцын event-үүд `done` болсны
+        // ДАРАА л илгээдэг тул pending үлдсэн хэрэглэгчийн мессежийг өмнөх ботын хариу хэзээ ч хамраагүй (аудит: хоцорч /
+        // дараалал алдагдаж ирсэн мессеж «хариулсан» болж алга болдог байв).
+        if (lastUser && source === 'staff') answeredAfterUser = true;
         break;
       }
       case 'handover': {
@@ -192,8 +226,9 @@ export function planBatch(conv, events, opts) {
       case 'attachment':
       case 'postback':
       case 'referral': {
-        // Хүний идэвхгүй хугацаа = сүүлийн хариу эсвэл хүнд шилжсэн мөчөөс
-        const since = lastStaffAt ?? humanSince;
+        // Хүний идэвхгүй хугацаа = сүүлийн хариу, хүнд шилжсэн мөчийн СҮҮЛИЙНХЭЭС (бот өөрөө ажилтанд шилжүүлэхэд
+        // humanSince = одоо; хуучин lastStaffAt-аар тооцвол дараагийн мессежид шууд буцаад бот болчихно)
+        const since = laterOf(lastStaffAt, humanSince);
         if (state === 'human' && (!since || hoursBetween(since, e.eventTime) >= HUMAN_IDLE_HOURS)) {
           state = 'bot';
           humanSince = null;
@@ -216,11 +251,14 @@ export function planBatch(conv, events, opts) {
 
   /** @type {BatchAction} */
   let action;
-  if (!lastUser) action = { type: 'none', reason: 'no_user_message' };
+  /** Энэ багцын ХАРИУЛААГҮЙ хэрэглэгчийн мессежийн текстүүд (ажилтны сүүлийн хариунаас хойшхи) — эрсдэлийн дохионы оролт */
+  let unanswered = [];
+  if (opts.stateOnly) action = { type: 'none', reason: 'paused' };
+  else if (!lastUser) action = { type: 'none', reason: 'no_user_message' };
   else if (answeredAfterUser) action = { type: 'none', reason: 'already_answered' };
   else if (state !== 'bot') action = { type: 'none', reason: 'human_active' };
-  // standby (Page Inbox яриаг эзэмшиж байна): сүүдэр горимд ноорог бичсээр — юу ч илгээхгүй.
-  // TODO(3-р үе шат): assist/auto-д standby үед илгээхгүй (thread эзэмшээгүй — code 10 / 2018300).
+  // standby (Page Inbox яриаг эзэмшиж байна): ноорог бичсээр — action.standby-аар outbound.js илгээхгүй
+  // (thread эзэмшээгүй — code 10 / 2018300).
   else {
     // Сүүлийн хариулаагүй хэсэгт текст байвал агент (бүх мессежийг нэг ноорогт), эс бөгөөс зөвхөн хавсралт
     const since = lastAnswerAt(sorted, opts.ownAppId, conv.lastUserAt, opts.automationHashes, opts.echoPolicy, opts.knownEchoes);
@@ -228,7 +266,14 @@ export function planBatch(conv, events, opts) {
       (e) => (e.kind === 'message' || e.kind === 'attachment' || e.kind === 'postback') && (!since || e.eventTime >= since),
     );
     const hasText = pending.some((e) => Boolean(e.payload.text));
-    action = hasText ? { type: 'agent', replyToEventId: lastUser.id } : { type: 'media_template', replyToEventId: lastUser.id };
+    unanswered = pending.map((e) => e.payload.text).filter((x) => typeof x === 'string' && x);
+    const standby = lastUser.payload.standby === true ? { standby: /** @type {const} */ (true) } : {};
+    // Зөвхөн стикер (👍 г.м.) — «файлыг хүлээн авлаа» гэж хариулах, ажилтанд шилжүүлэх шаардлагагүй
+    const stickers = pending.flatMap((e) => e.payload.attachments ?? []);
+    const stickerOnly = !hasText && stickers.length > 0 && stickers.every((a) => a === 'sticker') ? { stickerOnly: /** @type {const} */ (true) } : {};
+    action = hasText
+      ? { type: 'agent', replyToEventId: lastUser.id, ...standby }
+      : { type: 'media_template', replyToEventId: lastUser.id, ...standby, ...stickerOnly };
   }
 
   return {
@@ -236,17 +281,18 @@ export function planBatch(conv, events, opts) {
     conversation: { state, humanSince, lastStaffAt, lastUserAt, addedUserMessages: added, referral },
     action,
     eventStatus: status,
+    unanswered,
   };
 }
 
-/** Сүүлийн хүн/ботын хариуны мөч (echo; Meta-ийн автомат хариуг тоолохгүй) — түүнээс хойшхи = хариулаагүй хэсэг */
+/** Сүүлийн АЖИЛТНЫ хариуны мөч (echo; Meta-ийн автомат, манай ботын өөрийн echo-г тоолохгүй) — түүнээс хойшхи = хариулаагүй хэсэг */
 function lastAnswerAt(sorted, ownAppId, lastUserBefore, automationHashes, policy, known) {
   let at = null;
   let lastUser = null;
   for (const e of sorted) {
     if (e.kind === 'echo') {
       const source = knownEcho(known, e)?.source ?? classifyEcho(e, { ownAppId, ...userBefore(e.eventTime, lastUser, lastUserBefore), automationHashes, policy });
-      if (source !== 'automation') at = e.eventTime;
+      if (source === 'staff') at = e.eventTime;
     } else if (e.kind === 'message' || e.kind === 'attachment' || e.kind === 'postback') {
       lastUser = e.eventTime;
     }

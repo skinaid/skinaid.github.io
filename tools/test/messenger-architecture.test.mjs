@@ -1,5 +1,5 @@
-// Messenger AI-ийн архитектурын хамгаалалт (статик): 1-р үе шатанд үйлчлүүлэгч рүү ИЛГЭЭХ зам огт байхгүй, захиалгын
-// өгөгдөлд хүрэхгүй, SDK-г зөвхөн тодорхой файл импортолно, Vercel-ийн deploy (api/, package.json) эвдрэхгүй.
+// Messenger AI-ийн архитектурын хамгаалалт (статик): үйлчлүүлэгч рүү ИЛГЭЭХ зам ЦОР ГАНЦ (meta-send.js ← outbound.js ←
+// pipeline.js), захиалгын өгөгдөлд хүрэхгүй, SDK-г зөвхөн тодорхой файл импортолно, Vercel-ийн deploy (api/, package.json) эвдрэхгүй.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
@@ -16,22 +16,71 @@ const API = walk('api');
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 const src = Object.fromEntries(API.map((f) => [f, stripComments(readFileSync(join(ROOT, f), 'utf8'))]));
 
-test('архитектур: api/**-д Send API, илгээх функц ОГТ байхгүй (1-р үе шат — сүүдэр)', () => {
+const SEND = 'api/_lib/social/meta-send.js';
+const OUTBOUND = 'api/_lib/outbound.js';
+const PIPELINE = 'api/_lib/pipeline.js';
+const RUNTIME = 'api/_lib/runtime.js';
+/** Файл бүрийн харьцангуй import-ууд → api/-аас эхэлсэн зам */
+const localImports = (f) => [...src[f].matchAll(/(?:from\s+|import\()\s*['"](\.[^'"]+)['"]/g)]
+  .map((m) => join(f, '..', m[1]).split('\\').join('/'));
+
+test('архитектур: Send API ЗӨВХӨН meta-send.js-д; sender_action, thread control, broadcast хаана ч байхгүй', () => {
   assert.ok(API.length >= 20, 'api/ файлууд олдсонгүй');
+  // Хаана ч байж болохгүй (typing/mark_seen, яриаг булаах/дамжуулах, олноор илгээх, хуучин нэртэй илгээх функц)
   const FORBIDDEN = [
-    /\/me\/messages/, /\bsendText\b/, /\bsendToUser\b/, /sender_action/, /\bsenderAction\b/, /messaging_type/,
+    /\bsendText\b/, /\bsendToUser\b/, /sender_action/, /\bsenderAction\b/,
     /\/me\/(?:pass|take|release)_thread_control/, /\bpassThreadControl\b/, /\btakeThreadControl\b/, /\breleaseThreadControl\b/,
-    /message_creatives|broadcast_messages|\/me\/message_attachments/,
+    /message_creatives|broadcast_messages|\/me\/message_attachments/, /MESSAGE_TAG|\bmessaging_type:\s*['"`](?:UPDATE|MESSAGE_TAG)/,
   ];
+  // Зөвхөн meta-send.js-д байж болно
+  const SEND_ONLY = [/\/me\/messages/, /messaging_type/, /template_type/];
   for (const [f, s] of Object.entries(src)) {
     for (const re of FORBIDDEN) assert.ok(!re.test(s), `${f}: ${re}`);
+    if (f !== SEND) for (const re of SEND_ONLY) assert.ok(!re.test(s), `${f}: ${re} — илгээх хүсэлт зөвхөн meta-send.js-д`);
   }
-  // Graph руу хандах цорын ганц газар = meta-client.js (getPage, subscribed_apps)
+  // Илгээх хүсэлт бүр RESPONSE (24 цагийн цонх) — өөр төрөл байхгүй
+  assert.deepEqual([...src[SEND].matchAll(/messaging_type:\s*['"`](\w+)['"`]/g)].map((m) => m[1]), ['RESPONSE']);
+  assert.equal((src[SEND].match(/\/me\/messages/g) || []).length, 1);
+  // Graph-ийн host зөвхөн meta-client.js-д (GRAPH_BASE); meta-send.js түүнийг импортолно
   for (const [f, s] of Object.entries(src)) {
     if (f.endsWith('social/meta-client.js')) continue;
     assert.ok(!/graph\.facebook\.com/.test(s), `${f}: Graph-д хандаж байна`);
   }
   assert.ok(!/['"`]POST['"`]\s*,\s*`\/me\b/.test(src['api/_lib/social/meta-client.js']));
+  // Token зөвхөн Authorization толгойд (URL-д access_token параметр байхгүй)
+  for (const [f, s] of Object.entries(src)) assert.ok(!/access_token/.test(s), `${f}: access_token (URL/биед token)`);
+});
+
+test('архитектур: илгээх ЦОР ГАНЦ зам — meta-send.js ← outbound.js ← (runtime.js холбоно) ← pipeline.js; агент, admin, cron илгээхгүй', () => {
+  const importers = (target) => API.filter((f) => localImports(f).includes(target));
+  assert.deepEqual(importers(SEND), [OUTBOUND], 'meta-send.js-ийг зөвхөн outbound.js импортолно');
+  assert.deepEqual(importers(OUTBOUND), [RUNTIME], 'outbound.js-ийг зөвхөн runtime.js (холболт) импортолно');
+  for (const [f, s] of Object.entries(src)) {
+    if (f !== SEND && f !== OUTBOUND) assert.ok(!/\bcreateMetaSender\b/.test(s), `${f}: createMetaSender`);
+    if (f !== OUTBOUND && f !== RUNTIME) assert.ok(!/\bcreateOutbound\b/.test(s), `${f}: createOutbound`);
+    // sendGuarded-ийг зөвхөн pipeline.js дуудна (outbound.js тодорхойлно)
+    if (f !== OUTBOUND && f !== PIPELINE) assert.ok(!/\bsendGuarded\b/.test(s), `${f}: sendGuarded`);
+    // Илгээлтийн бүртгэлийг зөвхөн outbound.js бичнэ (store.js тодорхойлно)
+    if (f !== OUTBOUND && f !== 'api/_lib/store.js') assert.ok(!/\b(?:claimOutbound|finishOutbound|markSendSkipped)\b/.test(s), `${f}: илгээлтийн бүртгэл`);
+  }
+  // runtime.js outbound-ийг ЗӨВХӨН pipeline-д өгнө (агент, admin, cron-д хүрэхгүй): cached-д гаргахгүй
+  assert.match(src[RUNTIME], /createPipeline\(\{[^}]*\boutbound\b[^}]*\}\)/);
+  assert.ok(!/cached = \{[^}]*\boutbound\b/.test(src[RUNTIME]), 'outbound-ийг runtime-ын бусад хэрэглэгчид (admin, cron) ил гаргахгүй');
+  for (const f of ['api/_lib/agent.js', 'api/_lib/admin-api.js', 'api/_lib/cron.js', 'api/_lib/crisis.js', 'api/_lib/eval.js', 'api/_lib/knowledge.js', 'api/admin.js', 'api/cron/daily.js']) {
+    assert.ok(!/\boutbound\b/i.test(src[f].replace(/COL\.outbound/g, '')), `${f}: outbound-д хүрч байна`);
+  }
+  // Хүлээн авагч (PSID) зөвхөн webhook → pipeline → outbound (санах ойд): гацсан event-ийн нөхөлт, cron-д байхгүй
+  assert.match(src[PIPELINE], /async function sweepStale[\s\S]*?await processThread\(h, \{ deadline \}\);/, 'sweepStale recipient-гүй дуудна');
+  assert.ok(!/recipient/.test(src['api/_lib/cron.js']));
+  assert.ok(!/recipient/.test(src['api/_lib/store.js']), 'store.js хүлээн авагчийг хэзээ ч хүлээж авахгүй (хадгалахгүй)');
+  assert.ok(!/recipient/.test(src['api/_lib/agent.js']), 'агент хүлээн авагчийг мэдэхгүй');
+  // Илгээхийн өмнө: тохиргоог дахин уншина → эзэмшинэ (claimOutbound) → илгээнэ — энэ дарааллаар
+  const o = src[OUTBOUND];
+  const at = (re) => { const i = o.search(re); assert.ok(i >= 0, String(re)); return i; };
+  assert.ok(at(/store\.readSettings\(\)/) < at(/store\.claimOutbound\(/));
+  assert.ok(at(/store\.claimOutbound\(/) < at(/await send\(\{/));
+  assert.equal((o.match(/await send\(\{/g) || []).length, 1, 'нэг л илгээх дуудлага (дахин оролдлого, давталтгүй)');
+  assert.ok(!/console\.(?:log|warn|error)\([^)]*(?:recipient|text|token)/i.test(o + src[SEND]), 'PSID, текст, token-ийг логлохгүй');
 });
 
 test('архитектур: захиалгын (bookings) өгөгдөлд хүрэхгүй; PSID-г хадгалахгүй (psidHash л)', () => {

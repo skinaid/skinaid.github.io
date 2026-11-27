@@ -4,15 +4,27 @@
    (хөтөч api/_lib-ийг импортолж чадахгүй: тэр нь Vercel функц, статик файл биш).
    ========================================================================== */
 
-/** Горим (1-р үе шат: off | shadow) — api/_lib/social/labels.js SOCIAL_MODE_TEXT */
+/** Горим (off | shadow | auto) — api/_lib/social/labels.js SOCIAL_MODE_TEXT */
 export const MODES = [
   { key: 'off', label: 'Унтраалттай', hint: 'Мессежийг хадгалахгүй, AI ажиллахгүй.' },
   { key: 'shadow', label: 'Сүүдэр', hint: 'AI хариуны ноорог бичнэ, үйлчлүүлэгч рүү ЮУ Ч илгээхгүй. Ажилтан Meta Inbox-оос өөрөө хариулж, «Ноорог» хэсэгт үнэлгээ өгнө.' },
+  { key: 'auto', label: 'Автомат', hint: 'Зөвшөөрсөн сэдэвт (мэнд, цаг, хаяг, холбоо барих, үйлчилгээ, мэдлэгт бичигдсэн үнэ) AI Messenger-т ШУУД хариулна. Эмнэлгийн асуулт, гаж нөлөө, гомдол, мөнгө, зураг/видеог «ажилтанд дамжууллаа» гэж мэдэгдээд ажилтанд үлдээнэ.' },
 ];
+/** «Автомат» горимд хэнд илгээх вэ — api/_lib/social/labels.js SOCIAL_AUDIENCE_TEXT, firestore.rules */
+export const AUDIENCES = [
+  { key: 'test', label: 'Зөвхөн туршилтын акаунт', hint: 'Доорх жагсаалтад байгаа акаунтад л шууд хариулна. Бусад үйлчлүүлэгчид юу ч илгээхгүй (сүүдэр хэвээр).' },
+  { key: 'all', label: 'Бүх үйлчлүүлэгч', hint: 'Пэйж рүү бичсэн хүн бүрд шууд хариулна.' },
+];
+/** Туршилтын акаунтын дээд тоо — api/_lib/social/labels.js TEST_THREADS_MAX, firestore.rules validTestThreads */
+export const TEST_THREADS_MAX = 10;
+/** Ярианы id (messenger_drafts.threadId = psidHash) — api/_lib/social/settings-logic.js THREAD_ID_RE */
+export const isThreadId = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+/** Ярианы id-ийн богино хэлбэр (жагсаалтад) */
+export const shortThread = (id) => String(id ?? '').slice(0, 8);
 
 /** Таг — api/_lib/social/settings-logic.js SOCIAL_CAP_LIMITS / SOCIAL_DEFAULTS, firestore.rules */
 export const CAP_LIMITS = { runsMax: 100000, usdMax: 1000 };
-export const DEFAULTS = { mode: 'off', killSwitch: false, monthlyRunCap: 3000, monthlyCostCapUsd: 50 };
+export const DEFAULTS = { mode: 'off', killSwitch: false, monthlyRunCap: 3000, monthlyCostCapUsd: 50, autoAudience: 'test', testThreads: [] };
 
 /** Чиглэлийн тэмдгийн өнгө (шошгыг сервер ноорогт хадгална: draft.labels.route) */
 export const ROUTE_TONE = { auto_candidate: 'ok', draft: 'info', handoff: 'warn', silent: 'muted' };
@@ -38,18 +50,124 @@ export const CONFIG_ITEMS = [
   ['metaVerifyToken', 'Webhook баталгаажуулах үг (META_VERIFY_TOKEN)'],
   ['metaAppId', 'Meta аппын id (META_APP_ID)'],
   ['metaPageId', 'SkinAid пэйжийн id (META_PAGE_ID)'],
+  ['metaPageToken', 'Пэйжийн token (META_PAGE_TOKEN) — «Автомат» горимд хариу илгээхэд'],
 ];
+/** Өдрийн cron-ын пэйжийн token шалгалт (messenger_status/main.metaToken — api/_lib/cron.js) */
+export const META_TOKEN_TEXT = {
+  ok: 'хүчинтэй',
+  page_mismatch: 'өөр пэйжийн token байна',
+  token_invalid: 'хүчингүй эсвэл хугацаа нь дууссан — шинэ token хэрэгтэй',
+  permission: 'зөвшөөрөл дутуу',
+  network: 'шалгаж чадсангүй (Meta-тай холбогдоогүй)',
+  rate_limit: 'шалгаж чадсангүй (Meta-ийн хязгаар)',
+};
+export const metaTokenText = (v) => (v ? META_TOKEN_TEXT[v] || 'шалгалт амжилтгүй' : 'шалгаагүй (өдөрт нэг удаа шалгана)');
 
 /** Firestore-ийн баримт → маягтын утга (буруу/байхгүй = анхдагч; сервер ч ижил — settings-logic.js normalizeSettings) */
 export function normalizeSettings(d) {
   const s = d && typeof d === 'object' ? d : {};
   const num = (v, def, max) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : def);
   return {
-    mode: s.mode === 'shadow' ? 'shadow' : 'off',
+    mode: MODES.some((m) => m.key === s.mode) ? s.mode : 'off',
     killSwitch: s.killSwitch === undefined ? false : s.killSwitch !== false,
     monthlyRunCap: Math.floor(num(s.monthlyRunCap, DEFAULTS.monthlyRunCap, CAP_LIMITS.runsMax)),
     monthlyCostCapUsd: num(s.monthlyCostCapUsd, DEFAULTS.monthlyCostCapUsd, CAP_LIMITS.usdMax),
+    // 'all'-оос бусад бүх утга = 'test' (fail-closed); жагсаалт: зөвхөн ярианы id, давхардалгүй, ≤ TEST_THREADS_MAX
+    autoAudience: s.autoAudience === 'all' ? 'all' : 'test',
+    testThreads: [...new Set((Array.isArray(s.testThreads) ? s.testThreads : []).filter(isThreadId))].slice(0, TEST_THREADS_MAX),
   };
+}
+
+/** Бот энэ ярианд ШУУД хариулах эсэх — api/_lib/social/settings-logic.js isLive-тэй ИЖИЛ */
+export function isLiveThread(settings, threadId) {
+  if (!settings || settings.mode !== 'auto' || settings.killSwitch !== false) return false;
+  return settings.autoAudience === 'all' || (isThreadId(threadId) && Array.isArray(settings.testThreads) && settings.testThreads.includes(threadId));
+}
+
+/**
+ * Сервер одоо илгээж ЧАДАХГҮЙ шалтгаан (messenger_status/main — сервер бичсэн сүүлийн төлөв) → текст; чадна = ''.
+ * Тууз, баталгаажуулах цонх «шууд хариулж байна» гэж худал хэлэхгүйн тулд (api/_lib/outbound.js not_configured, token алдаа).
+ * @param {Record<string, any> | null | undefined} st
+ */
+export function sendBlocker(st) {
+  const cfg = st && typeof st === 'object' ? st.config : null;
+  if (!cfg || typeof cfg !== 'object') return 'сервер хараахан холбогдоогүй (төлөв алга)';
+  if (cfg.anthropicKey !== true) return 'серверт Claude AI-ийн түлхүүр (ANTHROPIC_API_KEY) тохируулаагүй';
+  if (cfg.metaPageToken !== true) return 'серверт пэйжийн token (META_PAGE_TOKEN) тохируулаагүй';
+  if (cfg.metaAppId !== true || cfg.metaPageId !== true) return 'серверт Meta аппын id эсвэл пэйжийн id тохируулаагүй';
+  if (['token_invalid', 'page_mismatch', 'permission'].includes(st.metaToken)) return `пэйжийн token: ${metaTokenText(st.metaToken)}`;
+  return '';
+}
+
+/**
+ * Firestore-д бичих тохиргооны талбар (lastAuditId/updatedAt/updatedBy-гүй) ба audit-ийн detail — ИЖИЛ объект.
+ * Анхдагч утгыг (autoAudience 'test', хоосон testThreads) БИЧИХГҮЙ: rules шинэчлэгдээгүй (шинэ талбаргүй) байсан ч
+ * «Яаралтай зогсоох» ба «Автомат» биш горимын хадгалалт татгалзагдахгүй; rules ба сервер байхгүйг анхдагчаар уншина.
+ * @param {ReturnType<typeof normalizeSettings>} n  normalizeSettings-ийн гаралт
+ */
+export function settingsDoc(n) {
+  const d = { mode: n.mode, killSwitch: n.killSwitch, monthlyRunCap: n.monthlyRunCap, monthlyCostCapUsd: n.monthlyCostCapUsd };
+  if (n.autoAudience === 'all') d.autoAudience = 'all';
+  if (n.testThreads.length) d.testThreads = [...n.testThreads];
+  return d;
+}
+
+/** Туршилтын акаунтын жагсаалтад нэмэх/хасах → шинэ жагсаалт; дүүрсэн / буруу id бол null */
+export function toggleTestThread(list, threadId) {
+  if (!isThreadId(threadId)) return null;
+  const cur = Array.isArray(list) ? list.filter(isThreadId) : [];
+  if (cur.includes(threadId)) return cur.filter((t) => t !== threadId);
+  return cur.length >= TEST_THREADS_MAX ? null : [...cur, threadId];
+}
+
+/**
+ * Илгээгээгүй / илгээж чадаагүй шалтгаан (ноорогийн sendReason) — api/_lib/social/labels.js SEND_REASON_TEXT-тэй ИЖИЛ
+ * (tools/test/messenger-admin.test.mjs тулгана).
+ */
+export const SEND_REASON_TEXT = {
+  no_recipient: 'хожимдож боловсруулсан тул хүлээн авагч тодорхойгүй (ажилтан хариулна)',
+  not_configured: 'серверт пэйжийн token эсвэл аппын id тохируулаагүй',
+  mode: 'горим «Автомат» биш болсон',
+  kill_switch: 'яаралтай зогсоолт асаалттай',
+  audience: 'туршилтын акаунт биш',
+  standby: 'яриаг өөр апп (Page Inbox) эзэмшиж байна',
+  human_active: 'ажилтан энэ ярианд хариулж байна',
+  window: '24 цагийн хариулах хугацаа дууссан',
+  thread_cap: 'энэ ярианд өнөөдрийн илгээх хязгаарт хүрсэн',
+  day_cap: 'өнөөдрийн нийт илгээх хязгаарт хүрсэн',
+  invalid_text: 'илгээх текст хоосон эсвэл буруу хэлбэртэй',
+  duplicate: 'энэ мессежид аль хэдийн хариулсан',
+  stale: 'мессеж хуучирсан эсвэл дараалал алдагдаж ирсэн (ажилтан хариулна)',
+  sticker: 'зөвхөн стикер — хариу шаардлагагүй',
+  token_invalid: 'пэйжийн token хүчингүй',
+  permission: 'Meta зөвшөөрөл алга',
+  thread_owned: 'яриаг өөр апп (Page Inbox) эзэмшиж байна',
+  window_closed: '24 цагийн хариулах хугацаа дууссан',
+  rate_limit: 'Meta-ийн хязгаарт хүрсэн',
+  invalid: 'Meta хүсэлтийг хүлээж авсангүй',
+  network: 'Meta-тай холбогдож чадсангүй',
+  unknown: 'Meta-ийн тодорхойгүй алдаа',
+  error: 'серверийн алдаа',
+};
+export const sendReasonText = (code) => SEND_REASON_TEXT[String(code ?? '')] || String(code ?? '');
+/** Илгээсэн мессежийн төрөл (өдрийн нэгтгэл sent.<төрөл> — api/_lib/outbound.js SEND_KINDS) */
+export const SEND_KIND_TEXT = { reply: 'AI-ийн хариу', handoff: '«ажилтанд дамжууллаа» мэдэгдэл', media: 'зураг/файлын мэдэгдэл' };
+
+/**
+ * Ноорогийн илгээлтийн төлөв → { tone, text } (картын тэмдэг); илгээх оролдлого хийгээгүй (сүүдэр, хуучин ноорог) = null.
+ * @param {{ sendStatus?: string|null, sendReason?: string|null }} d @param {string} when  илгээсэн мөч (форматласан)
+ */
+export function sendBadge(d, when = '') {
+  if (!d) return null;
+  // Амьд ярианы ноорог боловч илгээх оролдлого хийгээгүй («Хүн хянана» чиглэл г.м.) — сүүдрийн ноорогоос ялгана:
+  // үйлчлүүлэгч юу ч аваагүй, ажилтан хариулах ёстой
+  if (!d.sendStatus) return d.mode === 'auto' ? { tone: 'muted', text: 'Илгээгээгүй — ажилтан хариулна' } : null;
+  if (d.sendStatus === 'sent') return { tone: 'ok', text: `✓ Үйлчлүүлэгчид илгээсэн${when ? ` · ${when}` : ''}` };
+  // Илгээхээр эзэмшсэн боловч үр дүн бүртгэгдээгүй — мессеж хүрсэн байж магадгүй (худал «илгээгээгүй» гэхгүй)
+  if (d.sendStatus === 'sending') return { tone: 'warn', text: 'Илгээсэн байж магадгүй — үр дүн бүртгэгдээгүй (Meta Inbox-оос шалгана уу)' };
+  if (d.sendStatus === 'failed') return { tone: 'warn', text: `Илгээж чадсангүй: ${sendReasonText(d.sendReason)}` };
+  if (d.sendStatus === 'skipped') return { tone: 'muted', text: `Илгээгээгүй: ${sendReasonText(d.sendReason)}` };
+  return null;
 }
 
 /** Маягтын хязгаар → тоо (хоосон = анхдагч); буруу бол { error }. Доллар: «12,5» / «12,50» = 12.5 (таслалтай гар),
@@ -347,18 +465,23 @@ export function lastDays(n, nowMs = Date.now()) {
 const addMap = (into, m) => { for (const [k, v] of Object.entries(m && typeof m === 'object' ? m : {})) into[k] = (into[k] || 0) + (Number(v) || 0); };
 /** Өдрийн баримтууд (id → data) → нийт ба өдөр бүрийн ноорог */
 export function aggregateDays(byDay, days) {
-  const t = { drafts: 0, routes: {}, intents: {}, runs: {}, echo: {}, costMicroUsd: 0, adminCostMicroUsd: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, tests: 0, evals: 0 };
+  const t = { drafts: 0, routes: {}, intents: {}, runs: {}, echo: {}, sent: {}, sendSkip: {}, sendFail: {}, costMicroUsd: 0, adminCostMicroUsd: 0, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, tests: 0, evals: 0 };
   const series = [];
   for (const day of days) {
     const d = byDay[day] || {};
     series.push({ day, drafts: Number(d.drafts) || 0 });
     t.drafts += Number(d.drafts) || 0;
-    for (const k of ['routes', 'intents', 'runs', 'echo']) addMap(t[k], d[k]);
+    for (const k of ['routes', 'intents', 'runs', 'echo', 'sent', 'sendSkip', 'sendFail']) addMap(t[k], d[k]);
     for (const k of ['costMicroUsd', 'adminCostMicroUsd', 'inputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'tests', 'evals']) t[k] += Number(d[k]) || 0;
   }
   const denom = t.cacheReadTokens + t.inputTokens + t.cacheWriteTokens;
   t.cacheHit = denom ? t.cacheReadTokens / denom : null;
   t.aiErrors = (t.runs.error || 0) + (t.runs.refusal || 0);
+  // «Автомат» горимын илгээлт (api/_lib/store.js finishOutbound / markSendSkipped-ийн өдрийн нэгтгэл)
+  const sum = (m) => Object.values(m).reduce((n, v) => n + (Number(v) || 0), 0);
+  t.sentTotal = sum(t.sent);
+  t.sendSkipTotal = sum(t.sendSkip);
+  t.sendFailTotal = sum(t.sendFail);
   return { totals: t, series };
 }
 

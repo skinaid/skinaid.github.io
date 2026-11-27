@@ -3,14 +3,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as A from '../../admin/messenger-lib.js';
-import { SOCIAL_MODE_TEXT, SOCIAL_MODES, SOCIAL_RATING_TEXT, SOCIAL_RATINGS, SOCIAL_ROUTES } from '../../api/_lib/social/labels.js';
-import { normalizeSettings as serverNormalize, parseSocialCaps, SOCIAL_CAP_LIMITS, SOCIAL_DEFAULTS } from '../../api/_lib/social/settings-logic.js';
+import { SEND_REASON_TEXT, SEND_STATUSES, SOCIAL_AUDIENCE_TEXT, SOCIAL_AUDIENCES, SOCIAL_MODE_TEXT, SOCIAL_MODES, SOCIAL_RATING_TEXT, SOCIAL_RATINGS, SOCIAL_ROUTES, TEST_THREADS_MAX } from '../../api/_lib/social/labels.js';
+import { isLive, normalizeSettings as serverNormalize, parseSocialCaps, SOCIAL_CAP_LIMITS, SOCIAL_DEFAULTS } from '../../api/_lib/social/settings-logic.js';
+import { SEND_KINDS } from '../../api/_lib/outbound.js';
 import { configStatus } from '../../api/_lib/config.js';
 import { ubMonth as serverMonth } from '../../api/_lib/store.js';
 
 test('admin ↔ сервер: горим, үнэлгээ, route, таг, анхдагч ижил', () => {
   assert.deepEqual(A.MODES.map((m) => m.key), [...SOCIAL_MODES]);
   for (const m of A.MODES) assert.deepEqual({ label: m.label, hint: m.hint }, SOCIAL_MODE_TEXT[m.key]);
+  // «Автомат» горим: үзэгчид, туршилтын акаунтын дээд тоо, илгээлтийн шалтгааны текст = сервер
+  assert.deepEqual(A.AUDIENCES.map((a) => a.key), [...SOCIAL_AUDIENCES]);
+  for (const a of A.AUDIENCES) assert.deepEqual({ label: a.label, hint: a.hint }, SOCIAL_AUDIENCE_TEXT[a.key]);
+  assert.equal(A.TEST_THREADS_MAX, TEST_THREADS_MAX);
+  assert.deepEqual(A.SEND_REASON_TEXT, { ...SEND_REASON_TEXT });
+  assert.deepEqual(Object.keys(A.SEND_KIND_TEXT).sort(), [...SEND_KINDS].sort());
   assert.deepEqual(A.RATINGS.map((r) => r.key), [...SOCIAL_RATINGS]);
   for (const r of A.RATINGS) assert.equal(r.label, SOCIAL_RATING_TEXT[r.key]);
   assert.deepEqual(Object.keys(A.ROUTE_TONE).sort(), [...SOCIAL_ROUTES].sort());
@@ -23,15 +30,90 @@ test('admin ↔ сервер: горим, үнэлгээ, route, таг, анх�
 });
 
 test('admin: normalizeSettings, parseCaps = серверийнх (ижил оролт → ижил гаралт)', () => {
-  for (const d of [null, {}, { mode: 'shadow' }, { mode: 'shadow', killSwitch: true }, { mode: 'x', killSwitch: 'y', monthlyRunCap: 5.5, monthlyCostCapUsd: 2000 }, { mode: 'shadow', monthlyRunCap: 10, monthlyCostCapUsd: 1.25 }]) {
+  const H = 'c'.repeat(64);
+  for (const d of [null, {}, { mode: 'shadow' }, { mode: 'shadow', killSwitch: true }, { mode: 'x', killSwitch: 'y', monthlyRunCap: 5.5, monthlyCostCapUsd: 2000 }, { mode: 'shadow', monthlyRunCap: 10, monthlyCostCapUsd: 1.25 },
+    { mode: 'auto' }, { mode: 'auto', autoAudience: 'all' }, { mode: 'auto', autoAudience: 'x', testThreads: [H, H, 'bad', 7] }, { mode: 'auto', testThreads: 'x' },
+    { mode: 'auto', killSwitch: true, autoAudience: 'all', testThreads: Array.from({ length: 12 }, (_, i) => i.toString(16).padStart(64, '0')) }]) {
     const s = serverNormalize(d);
-    assert.deepEqual(A.normalizeSettings(d), { mode: s.mode, killSwitch: s.killSwitch, monthlyRunCap: s.monthlyRunCap, monthlyCostCapUsd: s.monthlyCostCapUsd }, JSON.stringify(d));
+    assert.deepEqual(A.normalizeSettings(d), { mode: s.mode, killSwitch: s.killSwitch, monthlyRunCap: s.monthlyRunCap, monthlyCostCapUsd: s.monthlyCostCapUsd, autoAudience: s.autoAudience, testThreads: s.testThreads }, JSON.stringify(d));
+    // «Амьд яриа»-ны тодорхойлолт admin ба серверт ИЖИЛ (тууз, картын тэмдэг худал хэлэхгүй)
+    for (const t of [H, 'd'.repeat(64), 'bad']) assert.equal(A.isLiveThread(A.normalizeSettings(d), t), isLive(s, t), `${JSON.stringify(d)} ${t.slice(0, 3)}`);
   }
   for (const [r, u] of [['3000', '12,5'], ['3000', '1,000'], ['', ''], ['1,000', '$12.5'], ['100001', '1'], ['1', '1000.5'], ['-1', '1'], ['abc', '1'], ['0', '0']]) {
     const srv = parseSocialCaps(r, u);
     const adm = A.parseCaps(r, u);
     assert.deepEqual(adm.error ? null : adm, srv, `${r} ${u}`);
   }
+});
+
+test('admin («Автомат»): бичих баримт — анхдагч үзэгчид/хоосон жагсаалтыг бичихгүй (rules хуучин байсан ч «Яаралтай зогсоох» хадгалагдана)', () => {
+  const H = 'c'.repeat(64);
+  const RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
+  const block = RULES.slice(RULES.indexOf('match /messenger_settings/{doc}'), RULES.indexOf('match /messenger_audit/{id}'));
+  const keys = (re) => [...block.match(re)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const only = keys(/keys\(\)\.hasOnly\(\[([^\]]+)\]\)/);
+  const all = keys(/keys\(\)\.hasAll\(\[([^\]]+)\]\)/);
+  const audit = RULES.slice(RULES.indexOf('match /messenger_audit/{id}'), RULES.indexOf('match /messenger_kb/{id}'));
+  const detailOnly = [...audit.match(/detail\.keys\(\)\.hasOnly\(\[([^\]]+)\]\)/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  // Нийтлэгдсэн ХУУЧИН rules (origin/main, 2026-11-26)-ийн зөвшөөрдөг талбар — шинэ admin түүнд ч таарах ёстой (горим auto-оос бусад үед)
+  const OLD = ['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd', 'lastAuditId', 'updatedAt', 'updatedBy'];
+  const OLD_DETAIL = ['mode', 'killSwitch', 'monthlyRunCap', 'monthlyCostCapUsd'];
+  const META = ['lastAuditId', 'updatedAt', 'updatedBy'];
+  for (const d of [null, { mode: 'shadow' }, { mode: 'shadow', killSwitch: true }, { mode: 'off', autoAudience: 'test', testThreads: [] }, { mode: 'auto' }, { mode: 'auto', killSwitch: true },
+    { mode: 'auto', autoAudience: 'all' }, { mode: 'auto', testThreads: [H] }, { mode: 'shadow', autoAudience: 'all', testThreads: [H] }]) {
+    const n = A.normalizeSettings(d);
+    const doc = A.settingsDoc(n);
+    const written = [...Object.keys(doc), ...META];
+    for (const k of written) assert.ok(only.includes(k), `${k} rules-д зөвшөөрөгдөөгүй`);
+    for (const k of all) assert.ok(written.includes(k), `${k} заавал байх ёстой`);
+    for (const k of Object.keys(doc)) assert.ok(detailOnly.includes(k), `audit detail: ${k}`);
+    // Бичсэн баримтыг сервер/admin буцааж уншихад ИЖИЛ тохиргоо гарна (орхисон талбар = анхдагч)
+    assert.deepEqual(A.normalizeSettings(doc), n, JSON.stringify(d));
+    const s = serverNormalize(doc);
+    assert.deepEqual([s.autoAudience, s.testThreads], [n.autoAudience, n.testThreads]);
+    if (n.autoAudience === 'test' && !n.testThreads.length) {
+      assert.deepEqual(written.sort(), [...OLD].sort(), `анхдагч үзэгчидтэй баримт = хуучин rules-ийн яг 7 талбар (${JSON.stringify(d)})`);
+      assert.deepEqual(Object.keys(doc).sort(), [...OLD_DETAIL].sort());
+    }
+  }
+  assert.equal(A.settingsDoc(A.normalizeSettings({ mode: 'auto', autoAudience: 'all' })).autoAudience, 'all');
+  assert.deepEqual(A.settingsDoc(A.normalizeSettings({ mode: 'auto', testThreads: [H] })).testThreads, [H]);
+});
+
+test('admin («Автомат»): сервер илгээж чадахгүй бол тууз худал хэлэхгүй (sendBlocker); амьд ярианы илгээгээгүй ноорог сүүдрээс ялгарна', () => {
+  const ok = { config: { anthropicKey: true, metaPageToken: true, metaAppId: true, metaPageId: true }, metaToken: 'ok' };
+  assert.match(A.sendBlocker({ ...ok, config: { ...ok.config, anthropicKey: false } }), /ANTHROPIC_API_KEY/, 'AI-ийн түлхүүргүй бол хариулж чадахгүй');
+  assert.equal(A.sendBlocker(ok), '');
+  assert.equal(A.sendBlocker({ ...ok, metaToken: null }), '', 'token хараахан шалгагдаагүй (cron өдөрт нэг) — саад биш');
+  assert.equal(A.sendBlocker({ ...ok, metaToken: 'network' }), '', 'шалгаж чадаагүй нь token буруу гэсэн үг биш');
+  for (const st of [null, undefined, {}, { config: null }, { config: 'x' }]) assert.match(A.sendBlocker(st), /холбогдоогүй/);
+  assert.match(A.sendBlocker({ config: { ...ok.config, metaPageToken: false } }), /META_PAGE_TOKEN/);
+  assert.match(A.sendBlocker({ config: { anthropicKey: true, metaPageToken: true, metaAppId: true } }), /id/);
+  assert.match(A.sendBlocker({ config: { ...ok.config, metaAppId: false } }), /id/);
+  for (const t of ['token_invalid', 'page_mismatch', 'permission']) assert.match(A.sendBlocker({ ...ok, metaToken: t }), /пэйжийн token/);
+  // Ноорогийн тэмдэг
+  assert.equal(A.sendBadge({ mode: 'shadow', sendStatus: null }), null);
+  assert.equal(A.sendBadge({ sendStatus: undefined }), null, 'хуучин ноорог (талбаргүй)');
+  assert.equal(A.sendBadge(null), null);
+  assert.deepEqual(A.sendBadge({ mode: 'auto', sendStatus: null }), { tone: 'muted', text: 'Илгээгээгүй — ажилтан хариулна' });
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'sent' }, '14:32').text, /илгээсэн · 14:32/);
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'failed', sendReason: 'token_invalid' }).text, /Илгээж чадсангүй: пэйжийн token хүчингүй/);
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'skipped', sendReason: 'standby' }).text, /Илгээгээгүй: яриаг өөр апп/);
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'skipped', sendReason: 'шинэ_код' }).text, /шинэ_код/, 'танихгүй шалтгаан — кодоороо');
+  assert.equal(A.sendBadge({ mode: 'auto', sendStatus: 'weird' }), null);
+  // Эзэмшсэн боловч үр дүн бүртгэгдээгүй — «илгээгээгүй» гэж худал хэлэхгүй
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'sending' }).text, /Илгээсэн байж магадгүй/);
+  for (const st of SEND_STATUSES) assert.ok(A.sendBadge({ mode: 'auto', sendStatus: st, sendReason: 'standby' }), `${st}: тэмдэггүй`);
+  // Туршилтын акаунт нэмэх/хасах; түүхий (цэвэрлээгүй) тохиргоонд isLiveThread унахгүй
+  const H = 'c'.repeat(64), G = 'd'.repeat(64);
+  assert.deepEqual(A.toggleTestThread([], H), [H]);
+  assert.deepEqual(A.toggleTestThread([H, G], H), [G]);
+  assert.equal(A.toggleTestThread([H], 'x'), null);
+  const full = Array.from({ length: A.TEST_THREADS_MAX }, (_, i) => i.toString(16).padStart(64, '0'));
+  assert.equal(A.toggleTestThread(full, H), null, 'дүүрсэн');
+  assert.equal(A.toggleTestThread(full, full[0]).length, A.TEST_THREADS_MAX - 1, 'дүүрсэн үед хасаж болно');
+  assert.equal(A.isLiveThread({ mode: 'auto', killSwitch: false, autoAudience: 'test', testThreads: H }, H), false);
+  assert.equal(A.isLiveThread({ mode: 'auto', killSwitch: false, autoAudience: 'test' }, H), false);
 });
 
 test('admin: audit id нь rules-ийн хэлбэрт (8–64, ^[A-Za-z0-9_-]+$); сар = серверийн ubMonth', () => {

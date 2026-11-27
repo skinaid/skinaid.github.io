@@ -4,8 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { COL } from '../../api/_lib/store.js';
-import { SOCIAL_MODES, SOCIAL_RATINGS } from '../../api/_lib/social/labels.js';
-import { SOCIAL_CAP_LIMITS } from '../../api/_lib/social/settings-logic.js';
+import { SOCIAL_AUDIENCES, SOCIAL_MODES, SOCIAL_RATINGS, TEST_THREADS_MAX } from '../../api/_lib/social/labels.js';
+import { isLive, normalizeSettings, SOCIAL_CAP_LIMITS, THREAD_ID_RE } from '../../api/_lib/social/settings-logic.js';
 
 const RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8');
 const code = RULES.replace(/\/\/.*$/gm, '');
@@ -34,7 +34,7 @@ test('rules: хаалт тэнцүү, нийтэлсэн #6/#7-ийн дүрэм
 });
 
 test('rules: серверийн collection бүр — admin уншина, client бичихгүй', () => {
-  for (const c of [COL.events, COL.runs, COL.usage, COL.status, COL.echo, COL.threads]) {
+  for (const c of [COL.events, COL.runs, COL.usage, COL.status, COL.echo, COL.threads, COL.outbound]) {
     const b = block(c);
     assert.match(b, /allow read: if isAdmin\(\);/, c);
     assert.match(b, /allow write: if false;/, c);
@@ -59,6 +59,38 @@ test('rules: тохиргоо = код (горим, таг) + audit нэг batch
   assert.match(a, /allow update, delete: if false;/);
   assert.match(a, /messengerSettingsAfter\(\)\.lastAuditId == id/);
   assert.match(a, /incoming\(\)\.at == request\.time/);
+});
+
+test('rules («Автомат»): үзэгчид, туршилтын акаунт — код-той ижил; ЗААВАЛ БИШ талбар (хуучин admin ажиллана); audit тохиргоотой тэнцүү', () => {
+  const s = block(COL.settings);
+  assert.deepEqual(list(s.match(/incoming\(\)\.get\('autoAudience', 'test'\) in \[([^\]]+)\]/)[1]), [...SOCIAL_AUDIENCES]);
+  assert.match(s, /validTestThreads\(incoming\(\)\.get\('testThreads', \[\]\)\)/);
+  const only = list(s.match(/keys\(\)\.hasOnly\(\[([^\]]+)\]\)/)[1]);
+  const all = list(s.match(/keys\(\)\.hasAll\(\[([^\]]+)\]\)/)[1]);
+  assert.deepEqual(only.filter((k) => !all.includes(k)).sort(), ['autoAudience', 'testThreads'], 'шинэ талбарууд зөвшөөрөгдсөн ч заавал биш');
+  assert.deepEqual(all.sort(), ['killSwitch', 'lastAuditId', 'mode', 'monthlyCostCapUsd', 'monthlyRunCap', 'updatedAt', 'updatedBy']);
+  // Туршилтын акаунт: дүрэмд ЗӨВХӨН бүтэц (жагсаалт, ≤ TEST_THREADS_MAX). Элемент бүрийг (64 hex) дүрэмд шалгахгүй —
+  // Firestore нэг хүсэлтэд ≤ 1000 илэрхийлэл үнэлдэг (settings/home-д хэтэрч хадгалалт бүр татгалзагдсан, 2026-11-26);
+  // хэлбэрийг сервер/admin-ий normalizeSettings шүүнэ (буруу элемент хэнтэй ч таарахгүй — доорх шалгалт).
+  const fn = code.slice(code.indexOf('function validTestThreads'), code.indexOf('match /messenger_settings/'));
+  assert.match(fn, new RegExp(`return l is list && l\\.size\\(\\) <= ${TEST_THREADS_MAX};`));
+  assert.ok(!/l\[\d+\]|matches\(/.test(fn), 'элемент бүрийн шалгалт (илэрхийллийн төсөв) байх ёсгүй');
+  const junk = normalizeSettings({ mode: 'auto', testThreads: ['x', 5, null, { a: 1 }, 'A'.repeat(64), `${'a'.repeat(64)} `] });
+  assert.deepEqual(junk.testThreads, [], 'дүрмээр өнгөрсөн буруу элементийг сервер хаяна');
+  assert.equal(isLive(junk, 'x'), false);
+  assert.equal(THREAD_ID_RE.source, '^[0-9a-f]{64}$');
+  // Илэрхийллийн төсөв: Messenger-ийн тохиргоо, audit-ийн дүрэмд давталт (индекс бүрээр задалсан шалгалт) алга
+  const budget = code.slice(code.indexOf('function messengerAudit'), code.indexOf('match /messenger_kb/'));
+  assert.ok(!/\[\d\]/.test(budget), 'индексээр задалсан шалгалт нэмэхгүй');
+  assert.ok((budget.match(/messengerSettingsAfter\(\)/g) || []).length <= 9 && (budget.match(/messengerAudit\(/g) || []).length <= 4, 'getAfter дуудлага ≤ 10 / бичилт');
+  const a = block(COL.audit);
+  assert.deepEqual(list(a.match(/detail\.keys\(\)\.hasOnly\(\[([^\]]+)\]\)/)[1]).sort(), ['autoAudience', 'killSwitch', 'mode', 'monthlyCostCapUsd', 'monthlyRunCap', 'testThreads']);
+  assert.match(a, /detail\.get\('autoAudience', 'test'\) == messengerSettingsAfter\(\)\.get\('autoAudience', 'test'\)/);
+  assert.match(a, /detail\.get\('testThreads', \[\]\) == messengerSettingsAfter\(\)\.get\('testThreads', \[\]\)/);
+  // Илгээсэн мессежийн бүртгэл: client хэзээ ч бичихгүй
+  const o = block(COL.outbound);
+  assert.match(o, /allow read: if isAdmin\(\);/);
+  assert.match(o, /allow write: if false;/);
 });
 
 test('rules: ноорог — admin зөвхөн үнэлгээ (rating = код), «Засвартай» тэмдэглэлтэй; үүсгэх/устгах хориотой', () => {

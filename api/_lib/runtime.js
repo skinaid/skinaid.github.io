@@ -1,5 +1,6 @@
 /**
- * Жинхэнэ deps-ийг холбоно (нэг инстанст нэг удаа): GCP эрх → Firestore REST → store → мэдлэг, Claude → агент → pipeline.
+ * Жинхэнэ deps-ийг холбоно (нэг инстанст нэг удаа): GCP эрх → Firestore REST → store → мэдлэг, Claude → агент → pipeline
+ * (+ outbound: «Автомат» горимд илгээх цор ганц зам).
  * webhook, cron, admin (api/admin.js — мэдлэг, агентыг шууд ашиглана) хуваалцана.
  * Серверийн эрх тохируулаагүй бол null (webhook 200 буцааж логлоно, cron 503).
  */
@@ -11,6 +12,7 @@ import { createClaudeCaller } from './claude.js';
 import { createAgent } from './agent.js';
 import { createCrisisGuard } from './crisis.js';
 import { createPipeline } from './pipeline.js';
+import { createOutbound } from './outbound.js';
 import { metaConfig } from './social/meta-config.js';
 import { SOCIAL_PROMPT_VERSION } from './social/prompt.js';
 
@@ -29,7 +31,9 @@ export function getRuntime(env = process.env) {
   // «Буруу» үнэлгээг ОДООГИЙН prompt-ийн хувилбартай ноорогт л тооцно (crisis.js)
   const guard = createCrisisGuard({ store, promptVersion: SOCIAL_PROMPT_VERSION });
   const agent = createAgent({ store, knowledge, callClaude: createClaudeCaller(), env, guard });
-  const pipeline = createPipeline({ store, agent, ownAppId: metaConfig(env).appId });
+  // Илгээх цор ганц зам — зөвхөн pipeline-д (webhook-ийн боловсруулалт); admin-ийн туршилт/eval, cron-д өгөхгүй
+  const outbound = createOutbound({ store, env });
+  const pipeline = createPipeline({ store, agent, outbound, ownAppId: metaConfig(env).appId });
   cached = { store, pipeline, knowledge, agent, guard };
   return cached;
 }

@@ -318,7 +318,7 @@ test('cron: ноорогоос үүссэн жишээ (x_) 180 хоногийн
   const rev = s.fake.read('messenger_kb/_rev');
   assert.equal(rev.status, 'draft', 'тэмдэг нь нийтлэгдээгүй бичлэг — AI-д орохгүй');
   const src = readFileSync(new URL('../../api/_lib/cron.js', import.meta.url), 'utf8');
-  assert.match(src, /COL\.usage, COL\.status\]/);
+  assert.match(src, /COL\.usage, COL\.status, COL\.outbound\]/);
   assert.match(src, /purgeDraftExamples/);
 });
 

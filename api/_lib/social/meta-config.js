@@ -8,7 +8,8 @@
  *   META_VERIFY_TOKEN — GET verify (developers.facebook.com дээрх «Verify token»-той ижил)
  *   META_APP_ID       — манай аппын id (нууц биш): echo нь манай ботынх уу, хүнийх үү ялгана
  *   META_PAGE_ID      — SkinAid пэйжийн id (нууц биш): өөр пэйжийн event-ийг хаяна
- *   META_PAGE_TOKEN   — 1-р үе шатанд зөвхөн cron-ын token шалгалт (getPage). Илгээхэд ХЭРЭГЛЭГДЭХГҮЙ.
+ *   META_PAGE_TOKEN   — пэйжийн token: cron-ын token шалгалт (getPage) ба «Автомат» горимын илгээлт (ЗӨВХӨН
+ *                       ../outbound.js → meta-send.js; `Authorization` толгойд л).
  *   PSID_SALT         — PSID hash-ийн түлхүүр (≥ 32 тэмдэгт). Солибол хуучин яриа шинээр эхэлнэ.
  */
 
