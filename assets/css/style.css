@@ -415,6 +415,21 @@ ul { margin: 0; padding: 0; list-style: none; }
 .faq__a p { padding: 0 4px 22px; color: var(--ink-2); font-size: 15px; }
 
 /* ---------- Blog ---------- */
+/* Видео бичлэг (YouTube): зураг + тоглуулах товч; дарахад main.js iframe-ээр солино */
+.videos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; }
+.videos:has(> :only-child) { max-width: 860px; margin-inline: auto; }
+.video { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: var(--r); overflow: hidden; background: var(--purple-950); box-shadow: var(--shadow-md); color: #fff; }
+.video--short { aspect-ratio: 9 / 16; width: 100%; max-width: 360px; justify-self: center; }
+.video img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease); }
+.video:hover img { transform: scale(1.04); }
+.video:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
+.video__play { position: absolute; inset: 0; margin: auto; width: 68px; height: 68px; border-radius: 50%; background: rgba(101, 65, 134, .92); box-shadow: 0 8px 24px rgba(0, 0, 0, .3); transition: transform .25s var(--ease), background-color .25s; }
+.video__play::before { content: ""; position: absolute; inset: 0; margin: auto; width: 0; height: 0; border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent #fff; transform: translateX(3px); }
+.video:hover .video__play { transform: scale(1.08); background: var(--purple); }
+.video__title { position: absolute; inset: auto 0 0; padding: 36px 18px 14px; font-weight: 700; font-size: 15px; line-height: 1.35; background: linear-gradient(transparent, rgba(0, 0, 0, .74)); }
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+@media (prefers-reduced-motion: reduce) { .video img, .video__play { transition: none; } }
+
 .posts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .post { position: relative; border-radius: var(--r-lg); overflow: hidden; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; transition: transform .35s var(--ease), box-shadow .35s var(--ease); }
 .post:hover { transform: translateY(-6px); box-shadow: var(--shadow-md); }
