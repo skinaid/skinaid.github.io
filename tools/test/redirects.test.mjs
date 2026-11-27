@@ -1,7 +1,7 @@
 // node --test tools/test/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { manageRedirects, isManaged } from '../lib/redirects.mjs';
+import { manageRedirects, isManaged, retiredRedirects } from '../lib/redirects.mjs';
 import { sourceToRegExp } from '../lib/check.mjs';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -65,4 +65,47 @@ test('зогссон үйлчилгээ (retiredLegacy): хуудас, ката�
   assert.equal(find(vercel, '/service-page/ультраформер-iii').destination, '/emchilgee#lift');
   assert.ok(!pipeline.some((p) => p.slug === 'ultraformer-hifu'), 'төлөвлөсөн хуудас алга');
   assert.ok(!catalog.treatments.some((t) => t.id === 'lift-1' || /hifu|ультраформер|ultraformer/i.test(`${t.n} ${t.d}`)), 'анхдагч каталогт алга');
+});
+
+test('retiredRedirects: зогссон үйлчилгээний хуучин URL → hub-ийн ЗУРАГДДАГ ангилал 307; буруу оролт → алдаа, дүрэмгүй', () => {
+  const catalog = { cats: { lift: 'Чангалах', laser: 'Лазер', iv: 'Дусал' }, treatments: [{ id: 'lift-2', c: 'lift' }, { id: 'laser-1', c: 'laser' }] };
+  const ok = retiredRedirects([{ category: 'lift', legacy: ['/service-page/хуучин-үйлчилгээ'] }], catalog);
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual(ok.entries, [{ slug: 'retired:lift', legacy: ['/service-page/хуучин-үйлчилгээ'], dest: '/emchilgee#lift', permanent: false }]);
+
+  // Бүтэн зам: манай дүрэм catch-all-аас өмнө, percent-encoded, түр (307)
+  const built = manageRedirects(base, ok.entries, sourceToRegExp);
+  assert.deepEqual(built.errors, []);
+  const rule = find(built.text, '/service-page/хуучин-үйлчилгээ');
+  assert.equal(rule.destination, '/emchilgee#lift');
+  assert.equal(rule.permanent, false);
+  assert.equal(rule.source, encodeURI('/service-page/хуучин-үйлчилгээ'));
+  assert.equal(find(built.text, '/service-page/өөр-хаяг').destination, '/emchilgee', 'бусад нь catch-all-аар');
+
+  // Хуудастай (pipeline) давхцвал manageRedirects алдаа өгнө — нэг хаяг хоёр газар руу заахгүй
+  const dup = manageRedirects(base, [
+    { slug: 'botoks', legacy: ['/service-page/хуучин-үйлчилгээ'], dest: '/emchilgee#anti', permanent: false }, ...ok.entries,
+  ], sourceToRegExp);
+  assert.equal(dup.errors.length, 1);
+  assert.match(dup.errors[0], /давхардсан \(botoks, retired:lift\)/);
+
+  // Ангилал cats-д бий ч анхдагч каталогт үйлчилгээгүй → hub дээр <section id> зурагдахгүй, буух зангуугүй
+  const empty = retiredRedirects([{ category: 'iv', legacy: ['/service-page/a'] }], catalog);
+  assert.deepEqual(empty.entries, []);
+  assert.match(empty.errors[0], /#iv хэсэг зурагдахгүй/);
+
+  for (const [bad, re] of [
+    [[{ category: 'nope', legacy: ['/service-page/a'] }], /category "nope"/],
+    [[{ category: 'toString', legacy: ['/service-page/a'] }], /category "toString"/],
+    [[null], /category "null"/],
+    [[{ category: 'lift', legacy: [] }], /legacy хоосон/],
+    [[{ category: 'lift', legacy: '/service-page/a' }], /legacy хоосон/],
+    [{ category: 'lift', legacy: ['/service-page/a'] }, /массив байх ёстой/],
+  ]) {
+    const r = retiredRedirects(bad, catalog);
+    assert.deepEqual(r.entries, [], JSON.stringify(bad));
+    assert.equal(r.errors.length, 1, JSON.stringify(bad));
+    assert.match(r.errors[0], re);
+  }
+  assert.deepEqual(retiredRedirects([], catalog), { entries: [], errors: [] });
 });

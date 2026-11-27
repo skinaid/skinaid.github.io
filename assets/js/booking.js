@@ -71,8 +71,12 @@ function setup(form) {
   const dateLong = (d) => `${monthDay(d)} (${WD_LONG[weekday(d)]})`;
   const money = (n) => '₮' + Math.round(n).toLocaleString('en-US');
   // Эмнэлэг үнийг нуусан үйлчилгээ (UB Beauty 0212): API `price: null, price_hidden: true` — үнийг огт харуулахгүй,
-  // төлөх дүн зөвхөн төлбөрийн алхамд (`payment.amount`)
-  const hasPrice = (s) => Boolean(s) && Number.isFinite(s.price);
+  // төлөх дүн зөвхөн төлбөрийн алхамд (`payment.amount`).
+  // Эзэмшигч 2026-11-27: UB Beauty-д үнэ нийтэд ил байсан ч ЭНЭ маягтад төлбөрийн алхмаас өмнө үнэ харуулахгүй
+  // (үйлчилгээний жагсаалт = нэр · хугацаа; сонгосны дараа «Төлөх дүн төлбөрийн алхамд харагдана»). «Онцлох эмчилгээ»
+  // жагсаалт, Messenger бот үнээ харуулсаар. true болговол API-ийн нийтийн үнэ маягтад буцаж гарна.
+  const PRICE_BEFORE_PAYMENT = false;
+  const hasPrice = (s) => PRICE_BEFORE_PAYMENT && Boolean(s) && Number.isFinite(s.price);
   const priceText = (s) => (!hasPrice(s) ? ''
     : s.price_max && s.price_max > s.price ? `${money(s.price)} – ${money(s.price_max)}` : money(s.price));
   const durText = (m) => { const h = Math.floor(m / 60), r = m % 60; return h && r ? `${h}ц ${r}м` : h ? `${h} цаг` : `${r} мин`; };
@@ -156,7 +160,8 @@ function setup(form) {
   };
   document.addEventListener('skinaid:content-applied', refreshBookingCopy);
   const prepayText = (s) => {
-    // Нуусан үнэ: тогтмол урьдчилгаа ч үнээр хязгаарлагддаг тул урьдчилан тооцохгүй (үнийг задруулна)
+    // Нуусан үнэ (эсвэл PRICE_BEFORE_PAYMENT = false): тогтмол урьдчилгаа ч үнээр хязгаарлагддаг тул урьдчилан
+    // тооцохгүй (үнийг задруулна)
     if (s && !hasPrice(s)) return 'Төлөх дүн төлбөрийн алхамд харагдана';
     const p = S.channel.prepay || {};
     const amount = p.amount == null ? (s ? s.price : 0) : Math.min(p.amount, s ? s.price : p.amount);
