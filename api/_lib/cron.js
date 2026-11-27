@@ -5,6 +5,7 @@
  *   2. Хадгалах хугацаа: event 30, ноорог 180, илгээсэн мессежийн бүртгэл 180, ai_runs 400, echo загвар 90, өдрийн тоологч 90,
  *      орхисон eval 7 хоног; мессеж 180;
  *      ноорогоос үүссэн жишээ (`x_`) сүүлд засснаас хойш 180 хоног (200-аар хуудаслан, хугацаа дуустал)
+ *   1б. UB Beauty → settings/catalog үнэ, хугацаа (ub-catalog-sync.js; UBBEAUTY_SECRET_KEY-гүй бол алгасна)
  *   3. messenger_status/main: lastCronAt, env «тохируулсан эсэх» (boolean), Meta token-ийн шалгалт (байвал)
  * Хариунд зөвхөн тоо (хувийн мэдээлэлгүй).
  */
@@ -14,6 +15,7 @@ import { createMetaClient } from './social/meta-client.js';
 import { metaConfig } from './social/meta-config.js';
 import { COL } from './store.js';
 import { describeError } from './errors.js';
+import { syncUbCatalog } from './ub-catalog-sync.js';
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
@@ -40,6 +42,11 @@ export function createCronHandler(deps) {
     const out = { ok: true, sweptThreads: 0, purged: {}, metaToken: null };
     try {
       out.sweptThreads = await rt.pipeline.sweepStale({ maxThreads: 20, deadline: sweepUntil });
+      // UB Beauty → «Онцлох эмчилгээ»-ний үнэ, хугацаа (УБ 04:00; content-refresh build 04:17-д уншина). Цэвэрлэгээний
+      // давталтаас ӨМНӨ (тэд хугацаа дуустал үргэлжилж болно); алдаа нь бусад ажлыг зогсоохгүй.
+      out.ubCatalog = await syncUbCatalog({ fs: rt.store.fs, env, fetchImpl: deps.fetchImpl, now })
+        .then((r) => r.status + (r.reason ? `:${r.reason}` : r.changed ? `:${r.changed}` : ''))
+        .catch((e) => { log(`[ub-catalog] алдаа: ${describeError(e)}`); return 'error'; });
       // Хуудаслан устгана (өдрийн хязгааргүй — хоцрогдол хуримтлагдахгүй), хугацаа дуустал
       for (const c of [COL.events, COL.drafts, COL.runs, COL.echo, COL.usage, COL.status, COL.outbound]) {
         let n = 0;
