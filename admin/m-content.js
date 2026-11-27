@@ -10,7 +10,7 @@ import { uploadControl, queueImage, imagePreview, queuedImages, writeImages, cle
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, $$, db, session, errText } from './core.js?v=2c361933';
 import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=720127aa';
-import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, youtubeId, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=c6faf93c';
+import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, youtubeId, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=b2ee7878';
 import { findClaims } from './claims.js?v=b71d5c91';
 
 const PATH = '/';
