@@ -831,6 +831,10 @@ body.is-admin h1, body.is-admin h2, body.is-admin h3 { letter-spacing: -0.005em;
   .is-admin .menu { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 }
 
+/* «Үйлчилгээ / Багц»: UB Beauty-д нийтэд нуусан үнэ — placeholder-оор (хадгалагдахгүй), зөвхөн admin-д */
+.is-admin .tbl td.c-price input.is-private::placeholder { color: var(--purple-700); font-weight: 700; opacity: 1; }
+.is-admin .tbl td.c-price input.is-private { background: var(--purple-50); border-style: dashed; }
+
 /* ---------- Зургийн сангаас сонгох цонх (image-upload.js → openPhotoPicker) ---------- */
 .dlg.pp { width: min(920px, calc(100% - 24px)); max-height: calc(100dvh - 32px); border-radius: var(--bo-radius-lg, 16px); }
 .pp__box { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 12px; padding: 18px 20px; max-height: calc(100dvh - 32px); }

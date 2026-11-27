@@ -113,6 +113,13 @@ service cloud.firestore {
         && incoming().createdAt == request.time;
     }
 
+    // ---------- Admin-д л (сайт уншдаггүй) ----------
+    // ub_prices: UB Beauty-д нийтэд нуусан үнэ (api/_lib/ub-catalog-sync.js — серверийн service account бичнэ)
+    match /admin_private/{doc} {
+      allow read: if isAdmin() && doc == 'ub_prices';
+      allow write: if false;
+    }
+
     // ---------- Тохиргоо (сайт уншина, admin бичнэ) ----------
     match /settings/{doc} {
       allow read: if true;

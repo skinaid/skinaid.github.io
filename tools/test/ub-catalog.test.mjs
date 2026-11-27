@@ -5,9 +5,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import {
-  UB_LINKS, formatDuration, parseUbServices, ubFields, applyUbCatalog, siteHidden, fetchUbServices,
+  UB_LINKS, formatDuration, parseUbServices, ubFields, applyUbCatalog, siteHidden, fetchUbServices, hiddenPrices,
 } from '../../assets/js/ub-catalog.js';
-import { syncUbCatalog, ubSyncConfig } from '../../api/_lib/ub-catalog-sync.js';
+import { syncUbCatalog, ubSyncConfig, refreshHiddenPrices, writeHiddenPrices, UB_PRICES_DOC } from '../../api/_lib/ub-catalog-sync.js';
 
 const defaults = {};
 vm.runInNewContext(readFileSync(new URL('../../assets/js/catalog-defaults.js', import.meta.url), 'utf8'), { window: defaults });
@@ -45,7 +45,7 @@ test('parseUbServices: буруу хэлбэр null, буруу мөр алга�
   assert.equal(parseUbServices({ services: 'x' }), null);
   const m = parseUbServices({ services: [{ id: 'nope' }, null, { id: EXAM.toUpperCase(), duration_min: 30, price: 50000, price_hidden: false }, { id: UB_LINKS['exam-2'][0], price: null, price_hidden: false }] });
   assert.equal(m.size, 2);
-  assert.deepEqual(m.get(EXAM), { id: EXAM, name: '', description: '', duration: 30, price: 50000, priceMax: null, priceHidden: false });
+  assert.deepEqual(m.get(EXAM), { id: EXAM, name: '', description: '', duration: 30, price: 50000, priceMax: null, priceHidden: false, internalPrice: null, internalPriceMax: null });
   assert.equal(m.get(UB_LINKS['exam-2'][0]).priceHidden, true);
 });
 
@@ -279,4 +279,70 @@ test('applyUbCatalog: тайлбар — UB-ээс ирсэн (ubD), UB арил
   // холбоо тасарвал ubD цэвэрлэгдэнэ
   const unl = applyUbCatalog([{ ...fromUb, id: 'inject-7' }, ...others], withD).services[0];
   assert.equal('ubD' in unl, false);
+});
+
+// ---------- Нуусан үнэ (admin_private/ub_prices) ----------
+const multiRow = Object.keys(UB_LINKS).find((k) => UB_LINKS[k].length > 1);
+test('parseUbServices: нууц түлхүүрийн internal_price-ийг тусад нь уншина; нийтийн price null хэвээр', () => {
+  const m = parseUbServices({ services: [{ id: EXAM, name: 'x', duration_min: 30, price: null, price_max: null, price_hidden: true, internal_price: 80000, internal_price_max: 120000 }] });
+  const s = m.get(EXAM);
+  assert.equal(s.price, null);
+  assert.equal(s.priceHidden, true);
+  assert.equal(s.internalPrice, 80000);
+  assert.equal(s.internalPriceMax, 120000);
+  // каталогийн (нийтийн) үнэ хоосон хэвээр — нуусан үнэ settings/catalog руу ОРОХГҮЙ
+  assert.equal(ubFields([EXAM], m).p, '');
+});
+
+test('hiddenPrices: нуусан мөрөнд л жинхэнэ үнэ; internal үнэгүй (нийтийн түлхүүр) бол хоосон', () => {
+  const rows = [{ id: 'exam-1' }, { id: multiRow }, { id: 'no-such-row' }];
+  const hid = (price, max = null) => ({ price: null, price_max: null, price_hidden: true, internal_price: price, internal_price_max: max });
+  const pub = (price) => ({ price, price_max: null, price_hidden: false });
+  const [a, b] = UB_LINKS[multiRow];
+  let ub = parseUbServices(ubJson({ [EXAM]: hid(80000), [a]: hid(150000), [b]: pub(120000) }));
+  assert.deepEqual(hiddenPrices(rows, ub), { 'exam-1': '₮80,000', [multiRow]: '₮120,000-с' });
+  ub = parseUbServices(ubJson({ [EXAM]: hid(80000, 120000) }));
+  assert.equal(hiddenPrices([{ id: 'exam-1' }], ub)['exam-1'], '₮80,000-с');
+  // Нийтийн түлхүүрийн хариу (internal үнэгүй) — юу ч гаргахгүй; нийтэд ил үнэтэй мөр — гаргахгүй
+  assert.deepEqual(hiddenPrices([{ id: 'exam-1' }], parseUbServices(ubJson())), {});
+  assert.deepEqual(hiddenPrices([{ id: 'exam-1' }], parseUbServices(ubJson({ [EXAM]: pub(50000) }))), {});
+});
+
+function fakeFs2(docs = {}) {
+  const s = { docs: { ...docs }, writes: [] };
+  return { s, async get(path) { return s.docs[path] ?? null; }, async commit(writes) { s.writes.push(...writes); return {}; } };
+}
+
+test('writeHiddenPrices: зөвхөн admin_private/ub_prices-д; өөрчлөгдөөгүй эсвэл хоосон бол бичихгүй', async () => {
+  const ub = parseUbServices(ubJson({ [EXAM]: { price: null, price_hidden: true, internal_price: 80000 } }));
+  const fs = fakeFs2();
+  assert.equal(await writeHiddenPrices(fs, [{ id: 'exam-1' }], ub, () => new Date('2026-11-27T00:00:00Z')), 1);
+  assert.equal(fs.s.writes.length, 1);
+  assert.equal(fs.s.writes[0].update.name, UB_PRICES_DOC);
+  assert.equal(fs.s.writes[0].update.fields.prices.mapValue.fields['exam-1'].stringValue, '₮80,000');
+  const same = fakeFs2({ [UB_PRICES_DOC]: { data: { prices: { 'exam-1': '₮80,000' } } } });
+  await writeHiddenPrices(same, [{ id: 'exam-1' }], ub);
+  assert.equal(same.s.writes.length, 0);
+  const none = fakeFs2();
+  assert.equal(await writeHiddenPrices(none, [{ id: 'exam-1' }], parseUbServices(ubJson())), 0);
+  assert.equal(none.s.writes.length, 0);
+});
+
+test('syncUbCatalog: нуусан үнийг каталогоос ТУСАД нь бичнэ (settings/catalog-ийн p хоосон хэвээр)', async () => {
+  const data = { services: [{ id: 'exam-1', c: 'exam', n: 'Үзлэг', d: 'd', t: '', p: '', hidden: false }], packages: [] };
+  const fs = fakeFs2({ 'settings/catalog': { data, updateTime: 'x' } });
+  await syncUbCatalog({ fs, env: { UBBEAUTY_SECRET_KEY: SK }, fetchImpl: ubFetch({ [EXAM]: { duration_min: 30, price: null, price_hidden: true, internal_price: 80000 } }) });
+  const priv = fs.s.writes.find((w) => w.update?.name === UB_PRICES_DOC);
+  const cat = fs.s.writes.find((w) => w.update?.name === 'settings/catalog');
+  assert.ok(priv, 'admin_private бичигдэнэ');
+  assert.equal(cat.update.fields.services.arrayValue.values[0].mapValue.fields.p.stringValue, '');
+  assert.ok(!JSON.stringify(cat).includes('80,000'), 'нуусан үнэ нийтийн каталогт ОРОХГҮЙ');
+});
+
+test('refreshHiddenPrices: түлхүүргүй бол алгасна; каталоггүй бол UB_LINKS-ийн мөрөөр', async () => {
+  assert.deepEqual(await refreshHiddenPrices({ fs: fakeFs2(), env: {} }), { status: 'skipped', reason: 'no_key' });
+  const fs = fakeFs2();
+  const r = await refreshHiddenPrices({ fs, env: { UBBEAUTY_SECRET_KEY: SK }, fetchImpl: ubFetch({ [EXAM]: { price: null, price_hidden: true, internal_price: 80000 } }) });
+  assert.deepEqual(r, { status: 'updated', count: 1 });
+  assert.equal(fs.s.writes[0].update.name, UB_PRICES_DOC);
 });

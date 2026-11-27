@@ -13,9 +13,9 @@ import * as contentEditor from './m-content.js?v=d1dcb964';
 import * as bookings from './m-bookings.js?v=0ad7a194';
 import * as settings from './m-settings.js?v=07329949';
 import * as home from './m-home.js?v=b7567817';
-import * as catalog from './m-catalog.js?v=c8a28b84';
+import * as catalog from './m-catalog.js?v=e544a0b1';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import * as messenger from './m-messenger.js?v=194e69ab';
+import * as messenger from './m-messenger.js?v=e8cee6ca';
 
 const splash = $('#splash'), gate = $('#gate'), shell = $('#shell'), gateErr = $('#gateErr'), btnLogin = $('#btnLogin');
 let gateMessage = '';
