@@ -33,7 +33,7 @@ test('мэдлэг: сайтын бодит каталог (catalog-defaults) �
   assert.equal(c.facts.filter((f) => f.kind === 'service').length, DEFAULTS.treatments.length);
   assert.equal(c.facts.filter((f) => f.kind === 'package').length, DEFAULTS.packages.length);
   for (const n of [50000, 462000, 359000]) assert.ok(c.allowedAmounts.includes(n), n);
-  assert.ok(c.facts.find((f) => f.id === 'service:exam-1').text.includes('ангилал: Үзлэг'));
+  assert.ok(c.facts.find((f) => f.id === 'service:exam-1').text.includes('ангилал: Арьсны оношлогоо, эмчийн үзлэг'));
   assert.ok(c.facts.some((f) => f.id === 'hours' && f.text.includes('09:00-19:00')));
   assert.ok(!JSON.stringify(c).includes('7600'), 'утас LLM-ийн мэдлэгт алга');
   // Нуусан үйлчилгээ, promoEnabled === false → багц алга

@@ -9,7 +9,7 @@ import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, 
 import { normSearch } from './lib.js?v=a9638bd3';
 import { renderPages } from './m-pages.js?v=26a525a2';
 import { api, apiMsg } from './messenger-api.js?v=047b8b55';
-import { UB_LINKS, DESC_MAX, applyUbCatalog, fetchUbServices, siteHidden } from '../assets/js/ub-catalog.js?v=b7d125a2';
+import { UB_LINKS, DESC_MAX, applyUbCatalog, fetchUbServices, siteHidden, ubLinkIds } from '../assets/js/ub-catalog.js?v=89ec0850';
 import { API_BASE, PUBLISHABLE_KEY } from '../assets/js/ubbeauty-config.js?v=8eb0f74a';
 
 const ref = doc(db, 'settings', 'catalog');
@@ -26,12 +26,14 @@ const ubMeta = new Map();
 /** UB Beauty-д нийтэд нуусан үнэ (admin_private/ub_prices — зөвхөн admin уншина): мөрийн id → '₮80,000'.
  *  Үнийн талбарын PLACEHOLDER-т л харуулна — утга (value) биш тул хадгалахад settings/catalog руу (нийтэд) ОРОХГҮЙ. */
 let privatePrices = {};
+/** Мөрийн UB Beauty-ийн холбоо: статик UB_LINKS эсвэл автоматаар нэмэгдсэн `ub-…` мөрийн хадгалсан ub (ubMeta) */
+const linkOf = (id) => UB_LINKS[id] || ubMeta.get(id)?.ub || null;
 const privateRef = doc(db, 'admin_private', 'ub_prices');
 const PRIVATE_TITLE = 'Үйлчлүүлэгчдэд нуусан үнэ (UB Beauty «Үнийг нийтэд харуулах» унтраалттай) — зөвхөн танд харагдана';
 function showPrivatePrice(tr) {
   const id = tr.dataset.id, input = $('[data-k="p"]', tr);
   if (!input) return;
-  const v = !input.value && UB_LINKS[id] ? privatePrices[id] : '';
+  const v = !input.value && linkOf(id) ? privatePrices[id] : '';
   input.placeholder = v || '';   // тасархай хүрээ + tooltip = «нуусан» (нарийн баганад текст тасрахгүй)
   input.classList.toggle('is-private', !!v);
   if (v) { input.title = PRIVATE_TITLE; input.setAttribute('aria-description', 'Үйлчлүүлэгчдэд нуусан үнэ: ' + v); }
@@ -70,8 +72,8 @@ function labelRow(tr) {
 }
 const svcRow = (s) => {
   const tr = document.createElement('tr');
-  const linked = Boolean(UB_LINKS[s.id]), off = linked && ubMeta.get(s.id)?.ubOff === true;
-  const multi = linked && UB_LINKS[s.id].length > 1;
+  const linked = Boolean(linkOf(s.id)), off = linked && ubMeta.get(s.id)?.ubOff === true;
+  const multi = linked && linkOf(s.id).length > 1;
   tr.dataset.id = s.id; if (s.hidden || off) tr.classList.add('is-hidden');
   const page = PAGE_BY_ID[s.id] || PRICE_PAGE_BY_ID[s.id];
   const tag = !linked ? '' : off
@@ -81,8 +83,8 @@ const svcRow = (s) => {
   // Тайлбар: ганц үйлчилгээтэй мөрөнд UB Beauty-гаас (түгжээтэй); олон хувилбартай мөрөнд бүлгийн товч сайтынх
   const roDesc = linked && !multi && ubMeta.get(s.id)?.ubD ? ' readonly title="UB Beauty-ийн тайлбар — os.ubbeauty.mn → Тохиргоо → Үйлчилгээ-д засна"' : '';
   tr.innerHTML = `
-    <td class="c-cat"><select data-k="c">${catOptions(s.c)}</select></td>
-    <td class="c-name"><input type="text" aria-label="Үйлчилгээний нэр" data-k="n" maxlength="120">${tag}${page ? `<a class="svc-page" href="${esc(page)}" target="_blank" rel="noopener" title="Энэ үйлчилгээний үнэ эмчилгээний хуудсанд ч харагдана">↗ ${esc(page)}</a>` : ''}</td>
+    <td class="c-cat"><select data-k="c"${linked ? ' disabled title="Ангилал UB Beauty-гаас — os.ubbeauty.mn-д засна"' : ''}>${catOptions(s.c)}</select></td>
+    <td class="c-name"><input type="text" aria-label="Үйлчилгээний нэр" data-k="n" maxlength="120"${linked && !multi ? ' readonly title="Нэр UB Beauty-гаас — os.ubbeauty.mn → Тохиргоо → Үйлчилгээ-д засна"' : ''}>${tag}${page ? `<a class="svc-page" href="${esc(page)}" target="_blank" rel="noopener" title="Энэ үйлчилгээний үнэ эмчилгээний хуудсанд ч харагдана">↗ ${esc(page)}</a>` : ''}</td>
     <td class="c-desc"><textarea rows="1" data-k="d" maxlength="${DESC_MAX}"${roDesc}></textarea></td>
     <td class="c-time"><input type="text" data-k="t" maxlength="30"${ro}></td>
     <td class="c-price"><input type="text" data-k="p" maxlength="40"${ro}></td>
@@ -112,10 +114,11 @@ const one = (v, max) => str(typeof v === 'string' ? v.replace(/\s+/g, ' ') : v, 
 const normSvc = (s) => ({ id: str(s && s.id, 40) || ('svc-' + Date.now().toString(36)), c: CATS[s && s.c] ? s.c : 'minor', n: one(s && s.n, 120), d: one(s && s.d, DESC_MAX), t: one(s && s.t, 30), p: one(s && s.p, 40), hidden: siteHidden(s) });
 /** Хадгалах мөрүүд: hiddenSite, UB Beauty-ийн t/p/ub/ubOff, эцсийн hidden (сайт, build, бот зөвхөн hidden-ийг уншина) */
 function finalize(rows) {
-  const base = rows.map((r) => ({ ...r, hiddenSite: r.hidden }));
+  // Автомат (`ub-…`) мөрийн холбоог ubMeta-аас буцааж залгана (хүснэгтээс уншихад ub талбар байдаггүй)
+  const base = rows.map((r) => ({ ...r, hiddenSite: r.hidden, ...(ubMeta.get(r.id)?.ub ? { ub: ubMeta.get(r.id).ub } : {}) }));
   if (ub) { const res = applyUbCatalog(base, ub); if (res.ok) return res.services; }
   return base.map((r) => {
-    const m = UB_LINKS[r.id] && ubMeta.get(r.id);
+    const m = linkOf(r.id) && ubMeta.get(r.id);
     if (!m) return r;
     const out = { ...r, ub: m.ub, ubOff: m.ubOff, hidden: r.hiddenSite || m.ubOff };
     if (m.ubD) out.ubD = true;
@@ -127,10 +130,11 @@ function finalize(rows) {
 function rememberUb(services) {
   ubMeta.clear();
   for (const s of services) {
-    if (s && UB_LINKS[s.id]) ubMeta.set(s.id, { ub: [...UB_LINKS[s.id]], ubOff: s.ubOff === true, ubD: s.ubD === true, v: Array.isArray(s.v) && s.v.length ? s.v : null });
+    const ids = ubLinkIds(s);
+    if (ids) ubMeta.set(s.id, { ub: [...ids], ubOff: s.ubOff === true, ubD: s.ubD === true, v: Array.isArray(s.v) && s.v.length ? s.v : null });
   }
 }
-const variantCount = (id) => ubMeta.get(id)?.v?.length || UB_LINKS[id]?.length || 0;
+const variantCount = (id) => ubMeta.get(id)?.v?.length || linkOf(id)?.length || 0;
 /** «UB Beauty» тэмдгийн тайлбар: олон хувилбартай мөрөнд хувилбар бүрийн нэр · үнэ */
 function ubTitle(id) {
   const v = ubMeta.get(id)?.v;
@@ -159,7 +163,8 @@ async function pullUb(rows) {
     return null;
   }
   const r = res.report;
-  const tail = `Холбоотой ${r.linked} мөр${r.unlinked.length ? `, холбоогүй ${r.unlinked.length}` : ''}${r.off.length ? `, UB Beauty-д идэвхгүй ${r.off.length}` : ''}${r.unused.length ? ` · UB Beauty-ийн ${r.unused.length} үйлчилгээ сайтад холбогдоогүй` : ''}.`;
+  const total = res.services.filter((x) => !x.hidden).length;
+  const tail = `Сайтад ${total} үйлчилгээ (UB Beauty-ийн толь)${r.added?.length ? ` · шинээр нэмэгдсэн ${r.added.length}` : ''}${r.removed?.length ? ` · UB Beauty-д байхгүй тул хасагдсан ${r.removed.length}` : ''}${r.off.length ? ` · UB Beauty-д идэвхгүй ${r.off.length}` : ''}${r.unlinked.length ? ` · гараар нэмсэн ${r.unlinked.length}` : ''}.`;
   ubNote(res.changed.length
     ? `UB Beauty-д ${res.changed.length} мөрийн үнэ/хугацаа/төлөв өөрчлөгдсөн — «Хадгалах» дарж сайтад оруулна. ${tail}`
     : `UB Beauty-тэй тохирч байна. ${tail}`, res.changed.length ? 'warn' : '', false);
@@ -272,7 +277,7 @@ $('#btnCatDefaults').addEventListener('click', async () => {
     // UB татаж чадаагүй: холбоотой мөрийн UB-ийн утгыг (t, p, d, хувилбар, идэвхгүй) одоогийн хүснэгт/ubMeta-аас хадгална
     const cur = new Map(readAll().services.map((s) => [s.id, s]));
     rows = DEFAULTS.treatments.map((t) => {
-      const c = UB_LINKS[t.id] && cur.get(t.id);
+      const c = linkOf(t.id) && cur.get(t.id);
       return c ? { ...t, t: c.t, p: c.p, d: ubMeta.get(t.id)?.ubD ? c.d : t.d } : t;
     });
   }

@@ -24,7 +24,7 @@ window.SKINAID_PAGES_STATUS = {
     "scar-3",
     "glow-3"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮30,000-с"
   },
   {
    "slug": "nuhjilt",
@@ -47,7 +47,7 @@ window.SKINAID_PAGES_STATUS = {
     "scar-3",
     "glow-2"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮80,000-с"
   },
   {
    "slug": "vivace-rf",
@@ -68,7 +68,7 @@ window.SKINAID_PAGES_STATUS = {
     "scar-2",
     "scar-3"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮275,000-с"
   },
   {
    "slug": "batga",
@@ -84,18 +84,22 @@ window.SKINAID_PAGES_STATUS = {
    "catalogIds": [
     "acne-1",
     "acne-2",
+    "ub-cdce1283",
     "acne-3",
+    "ub-e20aa0f5",
     "acne-4",
     "acne-5"
    ],
    "priceIds": [
     "acne-1",
     "acne-2",
+    "ub-cdce1283",
     "acne-3",
+    "ub-e20aa0f5",
     "acne-4",
     "acne-5"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮79,000-с"
   },
   {
    "slug": "co2-lazer",
@@ -114,7 +118,7 @@ window.SKINAID_PAGES_STATUS = {
    "priceIds": [
     "scar-1"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮275,000"
   },
   {
    "slug": "rejuran-pdrn",
@@ -128,18 +132,16 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
-    "inject-1",
     "inject-3",
-    "inject-4",
-    "inject-6"
+    "ub-5d5babeb",
+    "inject-4"
    ],
    "priceIds": [
-    "inject-1",
     "inject-3",
-    "inject-4",
-    "inject-6"
+    "ub-5d5babeb",
+    "inject-4"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮300,000-с"
   },
   {
    "slug": "juvelook-facetem",
@@ -160,7 +162,7 @@ window.SKINAID_PAGES_STATUS = {
     "inject-2",
     "anti-3"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮600,000-с"
   },
   {
    "slug": "botoks",
@@ -175,13 +177,19 @@ window.SKINAID_PAGES_STATUS = {
    "url": null,
    "catalogIds": [
     "anti-1",
+    "ub-5b8e93b2",
+    "ub-59dcae56",
+    "ub-ae2ae2d0",
     "minor-3"
    ],
    "priceIds": [
     "anti-1",
+    "ub-5b8e93b2",
+    "ub-59dcae56",
+    "ub-ae2ae2d0",
     "minor-3"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮10,000-с"
   },
   {
    "slug": "nusuu-tolbo",
@@ -195,16 +203,12 @@ window.SKINAID_PAGES_STATUS = {
    "lastReviewed": null,
    "url": null,
    "catalogIds": [
-    "laser-4",
-    "laser-3",
     "glow-5"
    ],
    "priceIds": [
-    "laser-4",
-    "laser-3",
     "glow-5"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮119,000"
   },
   {
    "slug": "arisnii-emchiin-uzleg",
@@ -242,13 +246,15 @@ window.SKINAID_PAGES_STATUS = {
    "url": null,
    "catalogIds": [
     "anti-2",
+    "ub-d9de66bc",
     "anti-5"
    ],
    "priceIds": [
     "anti-2",
+    "ub-d9de66bc",
     "anti-5"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮100,000-с"
   },
   {
    "slug": "lazer-us-arilgah",
@@ -263,13 +269,41 @@ window.SKINAID_PAGES_STATUS = {
    "url": null,
    "catalogIds": [
     "laser-1",
-    "laser-2"
+    "ub-658d61e1",
+    "ub-5698a797",
+    "ub-f85bb41c",
+    "ub-ea4037d0",
+    "ub-f97ea660",
+    "ub-ae428dee",
+    "ub-49369da7",
+    "ub-3bb3e4c9",
+    "ub-9bae0aaa",
+    "ub-b0d33383",
+    "ub-fc90ab96",
+    "ub-a0c53855",
+    "ub-69a3713b",
+    "ub-3235ebb8",
+    "ub-093b39fc"
    ],
    "priceIds": [
     "laser-1",
-    "laser-2"
+    "ub-658d61e1",
+    "ub-5698a797",
+    "ub-f85bb41c",
+    "ub-ea4037d0",
+    "ub-f97ea660",
+    "ub-ae428dee",
+    "ub-49369da7",
+    "ub-3bb3e4c9",
+    "ub-9bae0aaa",
+    "ub-b0d33383",
+    "ub-fc90ab96",
+    "ub-a0c53855",
+    "ub-69a3713b",
+    "ub-3235ebb8",
+    "ub-093b39fc"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮22,000-с"
   },
   {
    "slug": "us-unalt",
@@ -288,7 +322,7 @@ window.SKINAID_PAGES_STATUS = {
    "priceIds": [
     "inject-9"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮300,000"
   },
   {
    "slug": "nuur-archilgaa",
@@ -303,21 +337,21 @@ window.SKINAID_PAGES_STATUS = {
    "url": null,
    "catalogIds": [
     "glow-1",
+    "ub-d3f975e6",
     "glow-2",
     "glow-3",
     "massage-1",
-    "massage-2",
     "massage-3"
    ],
    "priceIds": [
     "glow-1",
+    "ub-d3f975e6",
     "glow-2",
     "glow-3",
     "massage-1",
-    "massage-2",
     "massage-3"
    ],
-   "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
+   "sitePrice": "₮49,000-с"
   }
  ]
 };
