@@ -194,11 +194,17 @@
     // Firestore-оос өөр жагсаалт ирвэл дахин зурна; гар (keyboard) фокус мөр дээр байсан бол хадгална
     renderTreatments = () => {
       const a = document.activeElement;
-      const focusId = a && a !== listEl && listEl.contains(a) ? a.id : '';
-      draw(); apply();
+      // Олон хувилбартай карт (<div class="row row--multi">): фокус дотор нь (summary / холбоос) байж болно
+      const rowEl = a && a !== listEl && listEl.contains(a) ? (a.id ? a : a.closest('.row')) : null;
+      const focusId = rowEl ? rowEl.id : '';
+      const sub = rowEl && rowEl !== a ? (a.matches('summary') ? 'summary' : a.matches('.row__link') ? '.row__link' : '') : '';
+      const openIds = $$('.row--multi details[open]', listEl).map(d => d.closest('.row').id).filter(Boolean);
+      draw();
+      openIds.forEach(id => { const d = document.getElementById(id)?.querySelector('details'); if (d) d.open = true; });
+      apply();
       if (!focusId) return;
       const same = document.getElementById(focusId);
-      const target = (same && !same.hidden) ? same : ($$('.row', listEl).find(r => !r.hidden) || $('.chip.is-active', chipsEl));
+      const target = (same && !same.hidden) ? ((sub && $(sub, same)) || same) : ($$('.row', listEl).find(r => !r.hidden) || $('.chip.is-active', chipsEl));
       if (target) target.focus({ preventScroll: true });
     };
   }
@@ -297,6 +303,7 @@
           c: Object.prototype.hasOwnProperty.call(CATS, sv.c) ? sv.c : 'minor',
           n: sv.n.trim(), d: typeof sv.d === 'string' ? sv.d : '',
           t: typeof sv.t === 'string' ? sv.t : '', p: typeof sv.p === 'string' ? sv.p : '',
+          v: Array.isArray(sv.v) ? sv.v : undefined,   // UB Beauty-ийн хувилбарууд — catalog-render.js шүүнэ
         }));
       TREATMENTS = list;
       // Дэлгэц дээрх мөрүүдтэй (build-ийн статик HTML) яг ижил бол дахин зурахгүй — фокус, анимейшн хэвээр.

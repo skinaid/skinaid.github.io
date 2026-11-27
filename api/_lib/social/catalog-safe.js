@@ -20,7 +20,8 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMe
 
 /**
  * @typedef {{ id: string, name: string, category?: string|null, description?: string|null, duration?: string|null,
- *   price?: string|null, hidden?: boolean }} CatalogServiceRow  — price = сайтад харагддаг үнийн текст
+ *   price?: string|null, hidden?: boolean,
+ *   variants?: readonly { name?: string, duration?: string, price?: string, description?: string }[] }} CatalogServiceRow  — price = сайтад харагддаг үнийн текст
  * @typedef {{ id: string, name: string, price?: string|null, hidden?: boolean }} CatalogPackageRow
  * @typedef {{ id: string, title: string, body: string }} KbEntry  — admin «Сургалт» (messenger_kb), id = rules-ийн хэлбэр
  * @typedef {{ slug: string, name: string, catalogIds?: readonly string[], text: string }} PageEntry  — эмчилгээний хуудас
@@ -37,7 +38,8 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMe
 /** «contact» баримтын суваг → юуг систем нэмэх вэ (утга биш — нэр л) */
 const CONTACT_CHANNELS = Object.freeze({ утас: 'утасны дугаарыг', имэйл: 'имэйл хаягийг' });
 
-export const CATALOG_LIMITS = Object.freeze({ services: 80, packages: 30, descriptionChars: 200 });
+// variants/variantChars — нэг мөрийн UB Beauty-ийн хувилбарууд (assets/js/ub-catalog.js `v`; Diode лазер = 16 бүс)
+export const CATALOG_LIMITS = Object.freeze({ services: 80, packages: 30, descriptionChars: 200, variants: 20, variantChars: 120 });
 /** Мэдлэгийн (FAQ) бичлэг, эмчилгээний хуудас, брэнд дуу хоолойн хязгаар — prompt-ийн хэмжээ (кэштэй ч) хяналттай */
 // entryChars = гарчиг (≤ 120) + « — » + агуулга (admin ≤ 1500) + мөр шилжилт → « · » (+2 тэмдэгт) — admin-ий хязгаарт
 // багтсан бичлэг ихэнхдээ тасрахгүй (тасарвал «AI-д юу орж байна»-д харагдана)
@@ -114,6 +116,27 @@ export function buildSocialCatalog(input) {
     }
     const desc = clean(s.description, CATALOG_LIMITS.descriptionChars);
     if (desc) bits.push(desc);
+    // UB Beauty-ийн хувилбар бүр (нэр, хугацаа, үнэ, товч тайлбар) — үнэ нь зөвшөөрөгдсөн дүнд орно (бот «₮249,000» гэж хэлж болно)
+    const vars = [];
+    for (const v of (Array.isArray(s.variants) ? s.variants : []).slice(0, CATALOG_LIMITS.variants)) {
+      const vn = clean(v?.name, 120);
+      if (!vn) continue;
+      const parts = [vn];
+      const vdur = clean(v?.duration, 40);
+      if (vdur) parts.push(vdur);
+      const vprice = clean(v?.price, 60);
+      const vfound = priceAmounts(vprice);
+      if (vprice && vfound.length) {
+        parts.push(vprice);
+        for (const n of vfound) amounts.add(n);
+      } else {
+        parts.push('үнийг ажилтан хэлнэ');
+      }
+      const vdesc = clean(v?.description, CATALOG_LIMITS.variantChars);
+      if (vdesc) parts.push(vdesc);
+      vars.push(parts.join(', '));
+    }
+    if (vars.length) bits.push(`сонголтууд: ${vars.join('; ')}`);
     facts.push({ id, kind: 'service', text: bits.filter(Boolean).join(' — ') });
   }
 

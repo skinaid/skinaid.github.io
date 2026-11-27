@@ -45,26 +45,34 @@ test('parseUbServices: буруу хэлбэр null, буруу мөр алга�
   assert.equal(parseUbServices({ services: 'x' }), null);
   const m = parseUbServices({ services: [{ id: 'nope' }, null, { id: EXAM.toUpperCase(), duration_min: 30, price: 50000, price_hidden: false }, { id: UB_LINKS['exam-2'][0], price: null, price_hidden: false }] });
   assert.equal(m.size, 2);
-  assert.deepEqual(m.get(EXAM), { id: EXAM, duration: 30, price: 50000, priceMax: null, priceHidden: false });
+  assert.deepEqual(m.get(EXAM), { id: EXAM, name: '', description: '', duration: 30, price: 50000, priceMax: null, priceHidden: false });
   assert.equal(m.get(UB_LINKS['exam-2'][0]).priceHidden, true);
 });
 
 test('ubFields: ганц үнэ, хэлбэлзэлтэй үнэ, олон үйлчилгээ, нуусан, идэвхгүй', () => {
   const ub = parseUbServices({ services: [
-    { id: 'a0000000-0000-4000-8000-000000000001', duration_min: 30, price: 50000, price_hidden: false },
-    { id: 'a0000000-0000-4000-8000-000000000002', duration_min: 45, price: 80000, price_max: 220000, price_hidden: false },
-    { id: 'a0000000-0000-4000-8000-000000000003', duration_min: 15, price: 22000, price_hidden: false },
-    { id: 'a0000000-0000-4000-8000-000000000004', duration_min: 90, price: null, price_hidden: true },
+    { id: 'a0000000-0000-4000-8000-000000000001', name: 'Үзлэг', description: 'Эмч  үнэлнэ.\nБагтана: зөвлөгөө', duration_min: 30, price: 50000, price_hidden: false },
+    { id: 'a0000000-0000-4000-8000-000000000002', name: 'TCA', duration_min: 45, price: 80000, price_max: 220000, price_hidden: false },
+    { id: 'a0000000-0000-4000-8000-000000000003', name: 'Суга', description: 'Суганы үс', duration_min: 15, price: 22000, price_hidden: false },
+    { id: 'a0000000-0000-4000-8000-000000000004', name: 'Бүтэн бие', duration_min: 90, price: null, price_hidden: true },
   ] });
   const id = (n) => `a0000000-0000-4000-8000-00000000000${n}`;
-  assert.deepEqual(ubFields([id(1)], ub), { off: false, t: '30 мин', p: '₮50,000', missing: [] });
+  // ганц үйлчилгээ: тайлбар UB-ээс (хоосон зай нэгтгэсэн), хувилбаргүй
+  assert.deepEqual(ubFields([id(1)], ub), { off: false, t: '30 мин', p: '₮50,000', d: 'Эмч үнэлнэ. Багтана: зөвлөгөө', v: null, missing: [] });
   assert.equal(ubFields([id(2)], ub).p, '₮80,000-с');
-  assert.deepEqual(ubFields([id(1), id(3)], ub), { off: false, t: '15–30 мин', p: '₮22,000-с', missing: [] });
-  // нэг нь нуусан → бүх мөрийн үнэ нуугдана (нуусан нь хамгийн хямд байж болзошгүй)
-  assert.deepEqual(ubFields([id(3), id(4)], ub), { off: false, t: '15–90 мин', p: '', missing: [] });
+  assert.equal(ubFields([id(2)], ub).d, null, 'UB тайлбаргүй бол сайтынх хэвээр');
+  // олон үйлчилгээ: мөрийн тайлбар сайтынх (null), хувилбар бүр UB_LINKS-ийн дарааллаар
+  assert.deepEqual(ubFields([id(1), id(3)], ub), { off: false, t: '15–30 мин', p: '₮22,000-с', d: null, missing: [],
+    v: [{ n: 'Үзлэг', t: '30 мин', p: '₮50,000', d: 'Эмч үнэлнэ. Багтана: зөвлөгөө' }, { n: 'Суга', t: '15 мин', p: '₮22,000', d: 'Суганы үс' }] });
+  // нэг нь нуусан → мөрийн үнэ нуугдана (нуусан нь хамгийн хямд байж болзошгүй); хувилбар бүр өөрийн үнээр
+  const hid = ubFields([id(3), id(4)], ub);
+  assert.equal(hid.p, ''); assert.equal(hid.t, '15–90 мин');
+  assert.deepEqual(hid.v.map((x) => x.p), ['₮22,000', '']);
+  assert.equal(ubFields([id(2), id(3)], ub).v[0].p, '₮80,000-с', 'хэлбэлзэлтэй хувилбар «-с»');
   // зарим нь алга — үлдсэнээр
-  assert.deepEqual(ubFields([id(1), id(9)], ub), { off: false, t: '30 мин', p: '₮50,000', missing: [id(9)] });
-  assert.deepEqual(ubFields([id(9)], ub), { off: true, t: '', p: '', missing: [id(9)] });
+  const part = ubFields([id(1), id(9)], ub);
+  assert.deepEqual([part.t, part.p, part.missing, part.v.length], ['30 мин', '₮50,000', [id(9)], 1]);
+  assert.deepEqual(ubFields([id(9)], ub), { off: true, t: '', p: '', d: null, v: null, missing: [id(9)] });
 });
 
 test('applyUbCatalog: холбоотой мөрийн t/p/ub/ubOff, холбоогүй хэвээр, нэр/тайлбар хөндөхгүй', () => {
@@ -175,4 +183,100 @@ test('syncUbCatalog: UB дутуу бол зогсоно; admin зэрэг ха�
   assert.equal(fs.s.writes.length, 0);
   const busy = { ...fakeFs({ data, updateTime: 'x' }), async commit() { const e = new Error('pre'); Object.defineProperty(e, 'isPrecondition', { value: true }); throw e; } };
   assert.deepEqual(await syncUbCatalog({ fs: busy, env: { UBBEAUTY_SECRET_KEY: SK }, fetchImpl: ubFetch() }), { status: 'conflict' });
+});
+
+// ---------- Тайлбар, хувилбар (2026-11-27) ----------
+test('applyUbCatalog: ганц мөрөнд UB тайлбар, олон мөрөнд v; холбоо тасарвал v цэвэрлэгдэнэ', () => {
+  const [a1, a2] = UB_LINKS['acne-2'];
+  const ub = parseUbServices(ubJson({
+    [EXAM]: { name: 'Арьсны үзлэг', description: 'Эмч арьсыг үнэлнэ.', duration_min: 30, price: 50000, price_hidden: false },
+    [a1]: { name: 'Батганы багц 1 - Хөнгөн зэрэг', description: '3 удаагийн курс.', duration_min: 60, price: 249000, price_hidden: false },
+    [a2]: { name: 'Батганы багц 2 - Дунд зэрэг', description: '5 удаагийн курс.', duration_min: 60, price: 349000, price_hidden: false },
+  }));
+  const rows = [
+    { id: 'exam-1', c: 'exam', n: 'Арьсны үзлэг, оношлогоо', d: 'хуучин', t: '', p: '', hidden: false },
+    { id: 'acne-2', c: 'acne', n: 'Батганы багц эмчилгээ', d: 'Сайтын товч', t: '', p: '', hidden: false },
+    { id: 'inject-7', c: 'inject', n: 'Япон', d: 'x', t: '', p: '', hidden: false, v: [{ n: 'хуучин' }] },
+  ];
+  const r = applyUbCatalog(rows, ub);
+  const [exam, acne, jp] = r.services;
+  assert.equal(exam.d, 'Эмч арьсыг үнэлнэ.'); assert.equal(exam.n, 'Арьсны үзлэг, оношлогоо', 'нэр сайтынх');
+  assert.equal('v' in exam, false);
+  assert.equal(acne.d, 'Сайтын товч'); assert.equal(acne.p, '₮249,000-с');
+  assert.deepEqual(acne.v, [
+    { n: 'Батганы багц 1 - Хөнгөн зэрэг', t: '1 цаг', p: '₮249,000', d: '3 удаагийн курс.' },
+    { n: 'Батганы багц 2 - Дунд зэрэг', t: '1 цаг', p: '₮349,000', d: '5 удаагийн курс.' },
+  ]);
+  assert.equal('v' in jp, false);
+  assert.deepEqual(applyUbCatalog(r.services, ub).changed, [], 'дахин тавихад өөрчлөлтгүй');
+  // зөвхөн хувилбарын тайлбар өөрчлөгдсөн ч changed
+  const ub2 = parseUbServices(ubJson({ [EXAM]: { name: 'Арьсны үзлэг', description: 'Эмч арьсыг үнэлнэ.', duration_min: 30, price: 50000, price_hidden: false },
+    [a1]: { name: 'Батганы багц 1 - Хөнгөн зэрэг', description: 'ШИНЭ', duration_min: 60, price: 249000, price_hidden: false },
+    [a2]: { name: 'Батганы багц 2 - Дунд зэрэг', description: '5 удаагийн курс.', duration_min: 60, price: 349000, price_hidden: false } }));
+  assert.ok(applyUbCatalog(r.services, ub2).changed.includes('acne-2'));
+});
+
+test('catalog-render: v-тэй мөр = <div> карт + дэлгэх жагсаалт + холбоос; v-гүй мөр хуучнаараа <a>', () => {
+  const g = {};
+  vm.runInNewContext(readFileSync(new URL('../../assets/js/catalog-render.js', import.meta.url), 'utf8'), { window: g });
+  const R = g.SKINAID_RENDER;
+  const cats = { acne: 'Батга' };
+  const plain = R.row({ id: 'acne-1', c: 'acne', n: 'Үрэвсэлт', d: 'тайлбар', t: '30 мин', p: '₮79,000' }, cats);
+  assert.match(plain, /^<a class="row" href="#contact"/);
+  const multi = R.row({ id: 'acne-2', c: 'acne', n: 'Батганы багц <эмчилгээ>', d: 'Товч', t: '1 цаг', p: '₮249,000-с',
+    v: [{ n: 'Багц 1', t: '1 цаг', p: '₮249,000', d: '3 удаа' }, { n: 'Багц 2', t: '', p: '', d: '' }, { n: '' }, null] }, cats, { pages: { 'acne-2': '/emchilgee/batga' } });
+  assert.match(multi, /^<div class="row row--multi" tabindex="-1" data-c="acne" id="t-acne-2">/);
+  assert.match(multi, /<summary>2 сонголт — үнэ, тайлбар<\/summary>/);
+  assert.match(multi, /<strong>Багц 1<\/strong><span>⏱ 1 цаг · ₮249,000<\/span>/);
+  assert.match(multi, /<span class="row__var-d">3 удаа<\/span>/);
+  assert.match(multi, /<a class="row__link" href="\/emchilgee\/batga">Дэлгэрэнгүй →<\/a>/);
+  assert.ok(multi.includes('Батганы багц &lt;эмчилгээ&gt;'), 'escape');
+  assert.ok(!/<a[^>]*>[^]*<details/.test(multi.replace(/<a class="row__link"[^]*$/, '')), 'details нь <a> дотор биш');
+});
+
+test('Messenger каталог: хувилбар бүрийн үнэ зөвшөөрөгдсөн дүнд, текстэд сонголтууд', async () => {
+  const { knowledgeInput } = await import('../../api/_lib/knowledge.js');
+  const { buildSocialCatalog } = await import('../../api/_lib/social/catalog-safe.js');
+  const input = knowledgeInput({}, { services: [{ id: 'acne-2', c: 'acne', n: 'Батганы багц эмчилгээ', d: 'Товч', t: '1 цаг', p: '₮249,000-с', hidden: false,
+    v: [{ n: 'Батганы багц 1', t: '1 цаг', p: '₮249,000', d: '3 удаа' }, { n: 'Батганы багц 2', t: '1 цаг', p: '₮349,000', d: '5 удаа' }] }], packages: [] });
+  const cat = buildSocialCatalog(input);
+  const f = cat.facts.find((x) => x.id === 'service:acne-2');
+  assert.match(f.text, /сонголтууд: Батганы багц 1, 1 цаг, ₮249,000, 3 удаа; Батганы багц 2, 1 цаг, ₮349,000, 5 удаа/);
+  assert.ok(cat.allowedAmounts.includes(349000));
+});
+
+test('applyUbCatalog: Firestore-ийн эрэмбэлсэн түлхүүртэй (d,n,p,t) хувилбар өөрчлөлтгүй гэж тооцогдоно', () => {
+  const [a1, a2] = UB_LINKS['acne-2'];
+  const ub = parseUbServices(ubJson({ [a1]: { name: 'Б1', description: 'x', duration_min: 60, price: 1000, price_hidden: false },
+    [a2]: { name: 'Б2', description: 'y', duration_min: 60, price: 2000, price_hidden: false } }));
+  const rows = TREATMENTS.map((t) => ({ ...t, hidden: false }));
+  const first = applyUbCatalog(rows, ub).services;
+  // Firestore-оос уншсан хэлбэр: map-ийн түлхүүр цагаан толгойн дарааллаар
+  const sorted = first.map((r) => (r.v ? { ...r, v: r.v.map((x) => Object.fromEntries(Object.entries(x).sort(([k1], [k2]) => k1.localeCompare(k2)))) } : r));
+  assert.deepEqual(Object.keys(sorted.find((r) => r.id === 'acne-2').v[0]), ['d', 'n', 'p', 't']);
+  assert.deepEqual(applyUbCatalog(sorted, ub).changed, []);
+});
+
+test('applyUbCatalog: тайлбар — UB-ээс ирсэн (ubD), UB арилгавал хоосон, UB-д хэзээ ч байгаагүй бол сайтынх', () => {
+  const withD = parseUbServices(ubJson({ [EXAM]: { name: 'Ү', description: 'UB текст', duration_min: 30, price: 1, price_hidden: false } }));
+  const noD = parseUbServices(ubJson({ [EXAM]: { name: 'Ү', description: '', duration_min: 30, price: 1, price_hidden: false } }));
+  const others = TREATMENTS.filter((t) => t.id !== 'exam-1').map((t) => ({ ...t, hidden: false }));
+  const pick = (r) => r.services.find((x) => x.id === 'exam-1');
+  const row = { id: 'exam-1', c: 'exam', n: 'Ү', d: 'сайтын текст', t: '', p: '', hidden: false };
+  // UB-д хэзээ ч тайлбаргүй → сайтынх, ubD-гүй (admin засна)
+  const never = pick(applyUbCatalog([row, ...others], noD));
+  assert.equal(never.d, 'сайтын текст'); assert.equal('ubD' in never, false);
+  // UB-ээс ирсэн → ubD
+  const fromUb = pick(applyUbCatalog([row, ...others], withD));
+  assert.equal(fromUb.d, 'UB текст'); assert.equal(fromUb.ubD, true);
+  // UB тайлбараа арилгасан → хоосон (хуучин UB текст үлдэхгүй), changed
+  const cleared = applyUbCatalog([fromUb, ...others], noD);
+  assert.equal(pick(cleared).d, ''); assert.equal('ubD' in pick(cleared), false);
+  assert.ok(cleared.changed.includes('exam-1'));
+  // UB-д түр идэвхгүй → тайлбар, ubD хадгалагдана
+  const off = pick(applyUbCatalog([fromUb, ...others], parseUbServices(ubJson({}, [EXAM]))));
+  assert.equal(off.d, 'UB текст'); assert.equal(off.ubD, true); assert.equal(off.hidden, true);
+  // холбоо тасарвал ubD цэвэрлэгдэнэ
+  const unl = applyUbCatalog([{ ...fromUb, id: 'inject-7' }, ...others], withD).services[0];
+  assert.equal('ubD' in unl, false);
 });
