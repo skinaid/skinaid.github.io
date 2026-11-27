@@ -44,9 +44,12 @@ export function createCronHandler(deps) {
       out.sweptThreads = await rt.pipeline.sweepStale({ maxThreads: 20, deadline: sweepUntil });
       // UB Beauty → «Онцлох эмчилгээ»-ний үнэ, хугацаа (УБ 04:00; content-refresh build 04:17-д уншина). Цэвэрлэгээний
       // давталтаас ӨМНӨ (тэд хугацаа дуустал үргэлжилж болно); алдаа нь бусад ажлыг зогсоохгүй.
-      out.ubCatalog = await syncUbCatalog({ fs: rt.store.fs, env, fetchImpl: deps.fetchImpl, now })
-        .then((r) => r.status + (r.reason ? `:${r.reason}` : r.changed ? `:${r.changed}` : ''))
-        .catch((e) => { log(`[ub-catalog] алдаа: ${describeError(e)}`); return 'error'; });
+      // Хугацааны төсөв: Firestore get + UB fetch + commit (тус бүр ≤10 с) — 30 с-ээс бага үлдсэн бол алгасна (маргааш)
+      out.ubCatalog = Date.now() < deadline - 30_000
+        ? await syncUbCatalog({ fs: rt.store.fs, env, fetchImpl: deps.fetchImpl, now })
+          .then((r) => r.status + (r.reason ? `:${r.reason}` : r.changed ? `:${r.changed}` : ''))
+          .catch((e) => { log(`[ub-catalog] алдаа: ${describeError(e)}`); return 'error'; })
+        : 'skipped:time';
       // Хуудаслан устгана (өдрийн хязгааргүй — хоцрогдол хуримтлагдахгүй), хугацаа дуустал
       for (const c of [COL.events, COL.drafts, COL.runs, COL.echo, COL.usage, COL.status, COL.outbound]) {
         let n = 0;
