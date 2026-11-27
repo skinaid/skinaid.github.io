@@ -7,7 +7,7 @@ import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploa
    ========================================================================== */
 import { doc, getDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus, msOf, scrollMode } from './core.js?v=2c361933';
-import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters, captureFocus } from './ui.js?v=720127aa';
+import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, attachCounters, refreshCounters, captureFocus } from './ui.js?v=46f0448f';
 
 const HR = window.SKINAID_HOME_RENDER;
 const HOME_DATA = window.SKINAID_HOME_DATA || { rev: '', defaults: null, photos: [], internalPaths: [], claimsAllow: [] };
