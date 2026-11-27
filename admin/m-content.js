@@ -9,7 +9,7 @@
 import { uploadControl, openPhotoPicker, setImageValue, queueImage, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=bf8c90c8';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, $$, db, session, errText } from './core.js?v=2c361933';
-import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=720127aa';
+import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=46f0448f';
 import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, MAX_VIDEOS, youtubeId, localVideo, videoPoster, videoItems, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=252ed684';
 import { findClaims } from './claims.js?v=b71d5c91';
 

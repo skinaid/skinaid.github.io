@@ -373,9 +373,27 @@ export function attachCounters(root) {
   });
 }
 export const refreshCounters = (root) => $$('[data-count-chars]', root).forEach((el) => el._counter && el._counter());
+/* Нуугдсан цэс дээр (display:none) scrollHeight = 0 тул өндрийг тооцохгүй — харагдах үед (өргөн өөрчлөгдөхөд)
+   ResizeObserver дахин тааруулна. Ингэхгүй бол «Үйлчилгээ / Багц»-ын тайлбар 2px болж тасарч харагддаг байсан. */
+const growRO = typeof ResizeObserver === 'function'
+  ? new ResizeObserver((entries) => {
+    for (const e of entries) {
+      const w = Math.round(e.contentRect.width);
+      if (w && w !== e.target._growW && e.target._grow) { e.target._growW = w; e.target._grow(); }   // зөвхөн өргөн өөрчлөгдөхөд
+    }
+  })
+  : null;
 export function autoGrow(ta) {
-  const fit = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 320) + 'px'; };
-  if (!ta._grow) { ta.addEventListener('input', fit); ta._grow = fit; }
+  const fit = () => {
+    if (!ta.isConnected || !ta.offsetWidth) return;   // нуугдсан — харагдахад дахин
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight + 2, 640) + 'px';
+  };
+  if (!ta._grow) {
+    ta.addEventListener('input', fit);
+    ta._grow = fit;
+    if (growRO) growRO.observe(ta);
+  }
   fit();
 }
 
