@@ -326,7 +326,7 @@ test('sendGuarded: хамгаалалт бүр — аль нэг нөхцөл ү
   assert.equal(r2.sent, true);
   assert.equal(r2.threadFields.sendDayCount, THREAD_DAILY_SEND_MAX);
   assert.deepEqual([...SEND_KINDS], ['reply', 'handoff', 'media']);
-  assert.deepEqual([...SEND_STATUSES], ['sent', 'failed', 'skipped']);
+  assert.deepEqual([...SEND_STATUSES], ['sending', 'sent', 'failed', 'skipped']);
 });
 
 test('sendGuarded: анхдагч илгээгч — META_PAGE_TOKEN-гүй бол not_configured (Graph руу оролдохгүй)', async () => {
@@ -483,11 +483,13 @@ test('урсгал: туршилтын БИШ акаунт, сүүдэр гор�
   await shadow.post(body([msg('m_s', 'Сайн байна уу')]));
   assert.equal(shadow.sends.length, 0);
   assert.equal(shadow.drafts()[0].mode, 'shadow');
-  // Яаралтай зогсоолт: event ч хадгалахгүй
+  // Яаралтай зогсоолт: агуулгагүй тэмдэг л — ноорог, AI, илгээлт үгүй
   const killed = setup({ settings: { ...AUTO, killSwitch: true } });
   await killed.post(body([msg('m_k', 'Сайн байна уу')]));
   assert.equal(killed.sends.length, 0);
-  assert.deepEqual(killed.fake.list('messenger_events/'), []);
+  assert.equal(killed.claudeCalls.length, 0);
+  assert.deepEqual(killed.drafts(), []);
+  assert.deepEqual(killed.fake.list('messenger_events/').map((p) => killed.fake.read(p).payload), [{}]);
   // Pipeline-д outbound өгөөгүй (хуучин холболт) — «Автомат» ч сүүдэртэй адил
   const none = setup({ withOutbound: false });
   await none.post(body([msg('m_n', 'Сайн байна уу')]));
@@ -694,13 +696,36 @@ test('урсгал: AI алдаа гарсан ч үйлчлүүлэгч чим�
   const urgent = setup({ claude: () => err('api_400') });
   await urgent.post(body([msg('m_u', 'Тариулсны дараа нүүр минь хавдсан байна')]));
   assert.match(urgent.sends[0].text, /7600-0505/);
-  // Хүлээн авагчгүй нөхөлт (cron): алдаа → ноорог handoff, илгээгээгүй (no_recipient), яриа хүнд
+  // Хүлээн авагчгүй нөхөлт (cron): мэдэгдлийг хүргэж чадахгүй тул яриаг хүнд шилжүүлэхгүй (ботыг 12 цаг дуугүй
+  // болгохгүй) — хуучнаар event pending үлдэж дараа дахин оролдогдоно
   const cron = setup({ claude: () => err('timeout') });
   await cron.store.createEvent({ pageId: PAGE, psid: PSID, kind: 'message', mid: 'm_c', eventKey: 'm_c', eventTime: new Date(T0 - 1000), payload: { text: 'Сайн байна уу' } }, HASH);
   await cron.pipeline.processThread(HASH, {});
+  assert.equal(cron.claudeCalls.length, 1);
   assert.equal(cron.sends.length, 0);
-  assert.equal(cron.drafts()[0].sendReason, 'no_recipient');
-  assert.equal(cron.thread().state, 'human');
+  assert.deepEqual(cron.drafts(), []);
+  assert.equal(cron.thread().state, 'bot');
+  assert.equal(cron.fake.read(`messenger_events/${eventDocId(PAGE, 'm_c')}`).status, 'pending');
+  // Оролдлого дуусах гэж буй event (attempts 2) + түр алдаа: дахин оролдоод «failed» болгож чимээгүй алга болгохгүй — мэдэгдэнэ
+  const last = setup({ claude: () => err('api_529') });
+  await last.store.createEvent({ pageId: PAGE, psid: PSID, kind: 'message', mid: 'm_l', eventKey: 'm_l', eventTime: new Date(T0 - 1000), payload: { text: 'Сайн байна уу' } }, HASH);
+  last.fake.seed(`messenger_events/${eventDocId(PAGE, 'm_l')}`, { ...last.fake.read(`messenger_events/${eventDocId(PAGE, 'm_l')}`), attempts: 2 }, encodeFields);
+  await last.pipeline.processThread(HASH, { recipient: PSID });
+  assert.equal(last.claudeCalls.length, 1);
+  assert.equal(last.sends.length, 1);
+  assert.equal(last.fake.read(`messenger_events/${eventDocId(PAGE, 'm_l')}`).status, 'done');
+  // Claude-ийн түлхүүр тохируулаагүй: амьд ярианд чимээгүй орхихгүй — мэдэгдэл
+  const nokey = setup({ env: { ...ENV, ANTHROPIC_API_KEY: '' } });
+  await nokey.post(body([msg('m_nk', 'Сайн байна уу')]));
+  assert.equal(nokey.claudeCalls.length, 0);
+  assert.equal(nokey.sends.length, 1);
+  assert.ok(nokey.sends[0].text.endsWith(HANDOFF_REPLY));
+  // Нэг мессежид нэг webhook-т Claude ≤ 2 удаа: түр алдаа → Firestore алдаа → дахин түр алдаа ч гурав дахь дуудлага үгүй
+  let calls = 0;
+  const cost = setup({ claude: (req, ctx) => { calls++; if (calls === 2) ctx.fake.failNext.push({ match: (u) => u.endsWith(':commit'), status: 503, body: { error: { code: 503, status: 'UNAVAILABLE' } } }); return err('api_529'); } });
+  await cost.post(body([msg('m_cost', 'Сайн байна уу')]));
+  assert.ok(cost.claudeCalls.length <= 2, `Claude ${cost.claudeCalls.length} удаа дуудагдсан`);
+  assert.ok(cost.sends.length <= 1);
   // Сүүдэр ярианд хуучнаар: түр алдаа → event pending (дараа нөхөгдөнө), ноорог/мэдэгдэл үгүй
   const shadow = setup({ settings: { ...AUTO, mode: 'shadow' }, claude: () => err('timeout') });
   await shadow.post(body([msg('m_s', 'Сайн байна уу')]));
@@ -1054,12 +1079,21 @@ test('аудит: яаралтай зогсоолтын үед үйлчлүүл�
   s.fake.seed('messenger_settings/main', { ...AUTO, killSwitch: true }, encodeFields);
   s.advance(60_000);
   const eventsBefore = s.fake.list('messenger_events/').length;
+  const msgsBefore = s.fake.list(`messenger_threads/${HASH}/messages/`).length;
   await s.post(body([msg('m_2', 'Тариулсны дараа хавдлаа, миний утас 99112233', T0 + 30_000)]));
-  assert.equal(s.fake.list('messenger_events/').length, eventsBefore, 'үйлчлүүлэгчийн мессеж хадгалагдахгүй');
-  assert.ok(!allDocsJson(s.fake).includes('хавдлаа'));
+  assert.equal(s.fake.list('messenger_events/').length, eventsBefore + 1, '«хэзээ бичсэн» тэмдэг');
+  assert.deepEqual(s.fake.read(`messenger_events/${eventDocId(PAGE, 'm_2')}`).payload, {}, 'агуулгагүй');
+  assert.ok(!allDocsJson(s.fake).includes('хавдлаа'), 'үйлчлүүлэгчийн мессежийн текст хадгалагдахгүй');
+  // Meta-ийн автомат хариу (3 с) зогсоолтын үед ч «ажилтан» болохгүй — яриа bot хэвээр
+  await s.post(body([echo('m_ir', 'Бид танд тун удахгүй хариу өгөх болно.', T0 + 33_000)]));
+  assert.equal(s.thread().state, 'bot');
+  // Ботын өөрийн хожимдсон echo зогсоолтын үед ирсэн ч урьдчилан бичсэн мөрийг хоосноор дарахгүй
+  await s.post(body([echo('m_bot_1', s.sends[0].text, T0 + 34_000, APP)]));
+  assert.match(s.fake.read(`messenger_threads/${HASH}/messages/${eventDocId(PAGE, 'm_bot_1')}`).text, /Танд юугаар туслах вэ/);
+  // Ажилтан 20 с-ийн дараа хариулсан → хүнд
   await s.post(body([echo('m_staff_k', 'Сайн байна уу, эмчтэй холбож өгье. Нууц текст', T0 + 50_000)]));
-  assert.equal(s.fake.list('messenger_events/').length, eventsBefore + 1);
   assert.ok(!allDocsJson(s.fake).includes('Нууц текст'), 'пэйжийн хариуны текст зогсоолтын үед хадгалагдахгүй');
+  assert.equal(s.fake.list(`messenger_threads/${HASH}/messages/`).length, msgsBefore, 'зогсоолтын үед мессежийн мөр бичигдэхгүй');
   assert.equal(s.claudeCalls.length, 1);
   assert.equal(s.thread().state, 'human');
   assert.ok(s.thread().lastStaffAt instanceof Date);
@@ -1069,6 +1103,14 @@ test('аудит: яаралтай зогсоолтын үед үйлчлүүл�
   await s.post(body([msg('m_3', 'За баярлалаа', T0 + 115_000)]));
   assert.equal(s.sends.length, 1);
   assert.equal(s.claudeCalls.length, 1);
+  // Зогсоолтын үед зөвхөн Meta-ийн автомат хариу авсан яриа: дахин асаахад бот хэвийн хариулна (12 цаг дуугүй болохгүй)
+  const auto = setup();
+  auto.fake.seed('messenger_settings/main', { ...AUTO, killSwitch: true }, encodeFields);
+  await auto.post(body([msg('m_p1', 'Сайн байна уу', T0 - 60_000), echo('m_ir1', 'Бид танд тун удахгүй хариу өгөх болно.', T0 - 57_000)]));
+  assert.equal(auto.thread().state, 'bot');
+  auto.fake.seed('messenger_settings/main', AUTO, encodeFields);
+  await auto.post(body([msg('m_p2', 'Ажлын цаг хэд вэ', T0 - 5000)]));
+  assert.equal(auto.sends.length, 1);
   // Горим «Унтраалттай» + зогсоолт: echo ч хадгалахгүй
   const off = setup({ settings: { ...AUTO, mode: 'off', killSwitch: true } });
   await off.post(body([echo('m_e', 'x', T0 - 1000)]));
@@ -1106,4 +1148,44 @@ test('аудит: латинаар бичсэн мессеж («Автомат»
   const shadow = setup({ settings: { ...AUTO, mode: 'shadow' }, claude: () => claudeOk({ intent: 'greeting', reply: 'Сайн байна уу!' }) });
   await shadow.post(body([msg('m_lat', 'sain bn uu')]));
   assert.equal(shadow.drafts()[0].route, 'auto_candidate');
+});
+
+test('баталгаажуулах аудит: эзэмшсэн даруйд ноорог «sending» (үр дүн бүртгэгдээгүй ч «илгээгээгүй» гэж худал харагдахгүй); mid-гүй хариунд ч ботын мөр үлдэнэ', async () => {
+  const unavailable = { status: 503, body: { error: { code: 503, status: 'UNAVAILABLE' } } };
+  // Үр дүнгийн бичилт бүх оролдлогод унасан: мессеж явсан, ноорог «sending» хэвээр
+  const c = setup({ metaSend: (input, n) => { for (let i = 0; i < FINISH_ATTEMPTS; i++) c.fake.failNext.push({ match: (u) => u.endsWith(':commit'), ...unavailable }); return { mid: `m_bot_${n}` }; } });
+  assert.equal((await c.outbound.sendGuarded(guarded(c))).sent, true);
+  assert.equal(c.fake.read(`messenger_drafts/${DRAFT}`).sendStatus, 'sending');
+  // Ноорог байхгүй бол эзэмшилт бүхэлдээ унана → илгээхгүй
+  const nd = setup();
+  const input = guarded(nd);
+  nd.fake.failNext.push({ match: (u, init) => u.endsWith(':commit') && String(init.body).includes('messenger_outbound'), status: 404, body: { error: { code: 404, status: 'NOT_FOUND' } } });
+  assert.equal((await nd.outbound.sendGuarded(input)).sent, false);
+  assert.equal(nd.sends.length, 0);
+  // Meta mid буцаагаагүй: ботын мөр бүртгэлийн id-аар бичигдэнэ (дараагийн хариу хуучин асуултыг давтахгүй)
+  const nm = setup({ metaSend: () => ({ mid: null }) });
+  await nm.post(body([msg('m_1', 'Сайн байна уу', T0 - 60_000)]));
+  assert.equal(nm.sends.length, 1);
+  const rows = nm.fake.list(`messenger_threads/${HASH}/messages/`).map((p) => ({ id: p.split('/').pop(), ...nm.fake.read(p) })).filter((m) => m.role === 'bot');
+  assert.equal(rows.length, 1);
+  assert.match(rows[0].id, /^b_o_[0-9a-f]{40}$/);
+  assert.equal(nm.outboundDocs()[0].messageDocId, rows[0].id);
+  nm.advance(60_000);
+  await nm.post(body([msg('m_2', 'Ажлын цаг хэд вэ', T0 + 30_000)]));
+  assert.equal(nm.drafts()[1].userText, 'Ажлын цаг хэд вэ', 'аль хэдийн хариулсан мессеж дахин орохгүй');
+});
+
+test('баталгаажуулах аудит: эрсдэлийн шалгалтад зөвхөн ХАРИУЛААГҮЙ мессеж орно — ажилтны хариулсан эрсдэлтэй мессеж дараагийн мэндчилгээг ажилтанд шилжүүлэхгүй', () => {
+  const p = planBatch(CONV0, [
+    ev('u1', 'message', T0, { text: 'Тариулсны дараа нүүр минь хавдсан байна' }),
+    ev('e1', 'echo', T0 + 60_000, { text: 'Эмчид хандаарай', app_id: PAGE_INBOX_APP_ID }),
+    ev('u2', 'message', T0 + 13 * H, { text: 'Сайн байна уу' }),
+  ], { mode: 'auto', ownAppId: APP, now: new Date(T0 + 13 * H), echoPolicy: 'strict' });
+  assert.equal(p.action.type, 'agent');
+  assert.deepEqual(p.unanswered, ['Сайн байна уу']);
+  assert.deepEqual(detectRiskSignals(p.unanswered.join('\n')), []);
+  // Хариулаагүй хэд хэдэн мессеж бүгд орно; үйлдэлгүй багцад хоосон
+  const two = planBatch(CONV0, [ev('a', 'message', T0, { text: 'Сайн уу' }), ev('b', 'message', T0 + 1000, { text: 'Хавдсан байна' })], { mode: 'auto', ownAppId: APP, now: new Date(T0) });
+  assert.deepEqual(two.unanswered, ['Сайн уу', 'Хавдсан байна']);
+  assert.deepEqual(planBatch(CONV0, [ev('e', 'echo', T0, { text: 'x', app_id: APP })], { mode: 'auto', ownAppId: APP, now: new Date(T0) }).unanswered, []);
 });

@@ -50,6 +50,8 @@ export const SEND_TEXT_MAX = 2000;
 export const MAX_REPLY_AGE_MS = 15 * 60_000;
 /** Үр дүнгийн бүртгэлийг бичих оролдлогын тоо (мессеж аль хэдийн явсан — бүртгэл, ярианы төлөв алдагдахгүй байх) */
 export const FINISH_ATTEMPTS = 3;
+/** Үр дүнг дахин бичих оролдлогод зарцуулах дээд хугацаа (бодит цаг) */
+const FINISH_RETRY_BUDGET_MS = 6000;
 /** Ажилтанд шилжүүлсэн мэдэгдэл (handoff, зураг) — илгээсний дараа яриа хүнд */
 const HUMAN_KINDS = new Set(['handoff', 'media']);
 
@@ -156,14 +158,16 @@ export function createOutbound(deps) {
         log(`[messenger] илгээлт амжилтгүй: ${error.kind}${error.code ? ` (${error.code}${error.subcode ? `/${error.subcode}` : ''})` : ''}`);
       }
       const ok = !error;
-      // Meta-ийн mid-г хадгалахгүй — зөвхөн ботын мөрийн id (hash; echo-гийн event id-тай ижил)
-      const botMessage = ok && mid
-        ? { id: eventDocId(cfg.pageId, mid), text: redactForLlm(text).slice(0, SEND_TEXT_MAX), textHash: echoFingerprint(redactForLlm(text)), at: new Date(answeredAt.getTime() + 1) }
+      // Meta-ийн mid-г хадгалахгүй — зөвхөн ботын мөрийн id (hash; echo-гийн event id-тай ижил). Meta mid буцаагаагүй бол
+      // (ховор) бүртгэлийн id-аас: ярианы түүхэнд ботын хариу заавал үлдэнэ (эс бөгөөс дараагийн хариу хуучин асуултыг давтана)
+      const botMessage = ok
+        ? { id: mid ? eventDocId(cfg.pageId, mid) : `b_${claim.id}`, text: redactForLlm(text).slice(0, SEND_TEXT_MAX), textHash: echoFingerprint(redactForLlm(text)), at: new Date(answeredAt.getTime() + 1) }
         : null;
       /** Ярианы төлөв: амжилттай → тоолуур, хариулсан мөч (+ ажилтанд шилжүүлсэн мэдэгдэл бол хүнд); thread_owned → хүнд */
       const threadFields = ok
         ? { lastBotSentAt: t, sendDay: today, sendDayCount: threadCount + 1, lastAnsweredAt: answeredAt, ...(HUMAN_KINDS.has(kind) ? { state: 'human', humanSince: t, lastBotSentAt: null } : {}) }
         : error.kind === 'thread_owned' ? { state: 'human', humanSince: t } : {};
+      const started = Date.now();
       for (let i = 1; i <= FINISH_ATTEMPTS; i++) {
         try {
           await store.finishOutbound({ id: claim.id, draftId, psidHash, kind, ok, error, botMessage, threadFields });
@@ -171,6 +175,8 @@ export function createOutbound(deps) {
         } catch (e) {
           // Мессеж аль хэдийн явсан (эсвэл Meta татгалзсан) — бүртгэл бичигдэхгүй бол `sending` үлдэнэ; ДАХИН ИЛГЭЭХГҮЙ
           log(`[messenger] илгээлтийн бүртгэл бичигдсэнгүй (${i}/${FINISH_ATTEMPTS}): ${describeError(e)}`);
+          // Удаан унаж байвал (Firestore timeout) функцийн хугацааг идэхгүй — pipeline-ий түгжээ тайлах бичилт төлвийг авч явна
+          if (Date.now() - started > FINISH_RETRY_BUDGET_MS) break;
         }
       }
       if (ok) return { sent: true, threadFields };

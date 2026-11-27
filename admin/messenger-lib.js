@@ -92,6 +92,7 @@ export function isLiveThread(settings, threadId) {
 export function sendBlocker(st) {
   const cfg = st && typeof st === 'object' ? st.config : null;
   if (!cfg || typeof cfg !== 'object') return 'сервер хараахан холбогдоогүй (төлөв алга)';
+  if (cfg.anthropicKey !== true) return 'серверт Claude AI-ийн түлхүүр (ANTHROPIC_API_KEY) тохируулаагүй';
   if (cfg.metaPageToken !== true) return 'серверт пэйжийн token (META_PAGE_TOKEN) тохируулаагүй';
   if (cfg.metaAppId !== true || cfg.metaPageId !== true) return 'серверт Meta аппын id эсвэл пэйжийн id тохируулаагүй';
   if (['token_invalid', 'page_mismatch', 'permission'].includes(st.metaToken)) return `пэйжийн token: ${metaTokenText(st.metaToken)}`;
@@ -162,6 +163,8 @@ export function sendBadge(d, when = '') {
   // үйлчлүүлэгч юу ч аваагүй, ажилтан хариулах ёстой
   if (!d.sendStatus) return d.mode === 'auto' ? { tone: 'muted', text: 'Илгээгээгүй — ажилтан хариулна' } : null;
   if (d.sendStatus === 'sent') return { tone: 'ok', text: `✓ Үйлчлүүлэгчид илгээсэн${when ? ` · ${when}` : ''}` };
+  // Илгээхээр эзэмшсэн боловч үр дүн бүртгэгдээгүй — мессеж хүрсэн байж магадгүй (худал «илгээгээгүй» гэхгүй)
+  if (d.sendStatus === 'sending') return { tone: 'warn', text: 'Илгээсэн байж магадгүй — үр дүн бүртгэгдээгүй (Meta Inbox-оос шалгана уу)' };
   if (d.sendStatus === 'failed') return { tone: 'warn', text: `Илгээж чадсангүй: ${sendReasonText(d.sendReason)}` };
   if (d.sendStatus === 'skipped') return { tone: 'muted', text: `Илгээгээгүй: ${sendReasonText(d.sendReason)}` };
   return null;

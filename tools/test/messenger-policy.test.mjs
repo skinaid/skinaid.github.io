@@ -115,11 +115,18 @@ test("бодлого: мэнд → auto_candidate; хүргэлт — зөвхө
 
 test("бодлого («Автомат»): кирилл биш бичвэр (латин галиг, англи) → ажилтанд — кодын эрсдэлийн дохио зөвхөн кирилл уншдаг", () => {
   // Кодын дохио эдгээрийг БАРЬДАГГҮЙ (аудит 2026-11-26) — тиймээс AI-ийн ангилалд дан найдаж шууд хариулахгүй
-  const latin = ["botox hiilgesnees hoish nuur havdaad bn", "jiremsen hun laser hiilgej boloh uu", "mungu butsaaj avmaar bn", "ajiltantai yarimaar bn", "sain bn uu", "une hed ve", "How much is botox?"];
+  // Эмнэлгийн мэдлэгт байгаа латин үгс (брэнд, үйлчилгээний нэр) — «танигдсан»
+  const KNOWN = "Ботокс (Botox) тарилга. Glutathione 1200 дусал. HIFU, Ultraformer өргөлт. www.skinaid.mn";
+  const latin = ["botox hiilgesnees hoish nuur havdaad bn", "jiremsen hun laser hiilgej boloh uu", "mungu butsaaj avmaar bn", "ajiltantai yarimaar bn", "une hed ve", "How much is botox?",
+    // Холимог бичвэр, нууцлалын тэмдэг (аудит: «[утас]» кирилл үгэнд тоологдож шалгалтыг давдаг байв)
+    "nuur havdsan [утас]", "havdsan bna [имэйл]", "Сайн уу. havdsan bna", "нүүр havdsan bn", "мөнгөө butsaaj avna",
+    // Ганц эрсдэлтэй латин үг кирилл өгүүлбэрт (тоон харьцаагаар баригддаггүй байсан), брэндийн нэртэй хамт ч
+    "Сайн байна уу, өчигдөр тариулсан газар havdsan", "Botox hiilgesen чинь хавдаад байна", "你好", "안녕하세요", "https://example.com үзээрэй"];
+  // Эхний 6 нь цэвэр латин: кодын дохио юу ч барихгүй (хэрэв барьдаг болсон бол энэ тестийг шинэчил)
+  for (const t of latin.slice(0, 6)) assert.deepEqual(detectRiskSignals(t).filter((s) => s !== "injection"), [], t);
   for (const t of latin) {
-    assert.deepEqual(detectRiskSignals(t).filter((s) => s !== "injection"), [], `${t}: (хэрэв код барьдаг болсон бол энэ тестийг шинэчил)`);
-    assert.equal(isForeignScript(t), true, t);
-    const d = decide({ mode: "auto", userText: t });
+    assert.equal(isForeignScript(t, KNOWN), true, t);
+    const d = decide({ mode: "auto", userText: t, knowledgeText: KNOWN });
     assert.equal(d.route, "handoff", t);
     assert.ok(d.reasons.includes("foreign_script"), t);
     assert.equal(d.delivery, "send", "ажилтанд дамжууллаа гэсэн тогтмол текст");
@@ -127,12 +134,18 @@ test("бодлого («Автомат»): кирилл биш бичвэр (л�
     assert.ok(!decide({ mode: "shadow", userText: t }).reasons.includes("foreign_script"), t);
   }
   // Кирилл өгүүлбэр доторх 1–2 брэндийн нэр, богино аюулгүй үг, эможи, тоо — саад биш
-  for (const t of ["Botox хэд вэ", "Glutathione дусал хэд вэ", "HIFU, Botox хоёр хэд вэ", "Сайн байна уу", "ok", "Ok thanks", "hi", "👍", "12345", "Миний утас [утас]", ""]) {
-    assert.equal(isForeignScript(t), false, t);
+  // Мэдлэгт байгаа брэндийн нэр (хэдэн ч байсан), аюулгүй үгс, эможи, тоо, нууцлалын тэмдэг — саад биш
+  for (const t of ["Botox хэд вэ", "BOTOX хэд вэ", "Glutathione дусал хэд вэ", "HIFU, Botox, Ultraformer хэд вэ", "www.skinaid.mn-ээс үзлээ", "Сайн байна уу", "ok", "Ok thanks", "hi", "👍", "12345", "Миний утас [утас]", "",
+    // Латинаар бичсэн мэнд, талархал, зөвшөөрөл — аюулгүй үгс (бот мэндэлж, танилцуулна)
+    "sain bn uu", "Sain baina uu", "za bayarlalaa", "tiim", "za"]) {
+    assert.equal(isForeignScript(t, KNOWN), false, t);
   }
-  assert.equal(decide({ mode: "auto", userText: "Botox хэд вэ" }).route, "auto_candidate");
-  // Гурав ба түүнээс олон гадаад үг, эсвэл кирилл үггүй гадаад үг
-  for (const t of ["HIFU, Botox, Ultraformer хэд вэ", "une", "https://www.skinaid.mn үзсэн", "你好", "안녕하세요"]) assert.equal(isForeignScript(t), true, t);
+  assert.equal(decide({ mode: "auto", userText: "sain bn uu" }).route, "auto_candidate");
+  assert.equal(decide({ mode: "auto", userText: "Botox хэд вэ", knowledgeText: KNOWN }).route, "auto_candidate");
+  // Мэдлэгт БАЙХГҮЙ латин үг (брэнд ч гэсэн) → ажилтанд: код танихгүй үгийг эрсдэлгүй гэж таамаглахгүй
+  assert.equal(isForeignScript("Dysport хэд вэ", KNOWN), true);
+  assert.equal(isForeignScript("Botox хэд вэ"), true, "мэдлэг өгөөгүй бол бүх латин үг танихгүй");
+  assert.ok(decide({ mode: "auto", userText: "Dysport хэд вэ", knowledgeText: KNOWN }).reasons.includes("foreign_script"));
   assert.ok(SOCIAL_REASON_TEXT.foreign_script && SOCIAL_REASON_TEXT.ai_error && SOCIAL_REASON_TEXT.thread_cap);
 });
 

@@ -106,7 +106,8 @@ export function decideReply(input) {
   for (const s of signals) if (s !== 'injection') human.push(`signal:${s}`);
   // «Автомат» горим: кирилл биш (латин галиг, англи…) мессежид кодын эрсдэлийн дохио ажилладаггүй — AI-ийн ангилалд дан
   // найдаж шууд хариулахгүй, ажилтанд (аудит 2026-11-26). Сүүдэрт ноорог хэвээр (үнэлгээ, eval өөрчлөгдөхгүй).
-  if (input.mode === 'auto' && isForeignScript(input.userText)) human.push('foreign_script');
+  // Мэдлэгт байгаа латин үг (брэнд, үйлчилгээний нэр) саад биш — танихгүй латин үг нэг л байвал ажилтанд.
+  if (input.mode === 'auto' && isForeignScript(input.userText, input.knowledgeText)) human.push('foreign_script');
   if (p.needs_human) human.push('llm_needs_human');
   if (!(Number(p.confidence) >= CONFIDENCE_MIN)) human.push('low_confidence');
   if (!reply) human.push('empty_reply');

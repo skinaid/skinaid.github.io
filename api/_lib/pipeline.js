@@ -18,7 +18,7 @@
  */
 import { FirestoreError } from './firestore.js';
 import { describeError } from './errors.js';
-import { ubDay } from './store.js';
+import { MAX_ATTEMPTS, ubDay } from './store.js';
 import { AUTOMATION_TEMPLATE_MIN_CONVERSATIONS, echoFingerprint, planBatch } from './social/conversation-logic.js';
 import { isLive } from './social/settings-logic.js';
 
@@ -33,6 +33,10 @@ export const LOCK_POLLS = 3;
 export const LOCK_POLLS_RECIPIENT = 10;
 /** Түгжээ тайлах бичилтийн оролдлого (ярианы төлөв — «ажилтанд шилжүүлсэн» — алдагдахгүй байх) */
 export const RELEASE_ATTEMPTS = 3;
+/** Түгжээ тайлах дахин оролдлогод зарцуулах дээд хугацаа (бодит цаг — Firestore timeout функцийн хугацааг идэхгүй) */
+const RELEASE_RETRY_BUDGET_MS = 6000;
+/** Claude-ийн түр алдааны дараа шууд дахин оролдохын өмнөх завсар */
+export const RETRY_PAUSE_MS = 1000;
 export const THREAD_DAILY_AGENT_MAX = 40;
 /** Webhook-ийн waitUntil-ийн төсөв (maxDuration 60 с) */
 export const WEBHOOK_BUDGET_MS = 50_000;
@@ -119,13 +123,18 @@ export function createPipeline(deps) {
     const echoIds = mode === 'off' ? [] : events.filter((e) => e.kind === 'echo').map((e) => e.id);
     const knownEchoes = echoIds.length ? await store.readEchoMessages(psidHash, echoIds) : new Map();
     const plan = planBatch(conv, events, { mode, ownAppId: deps.ownAppId, now: now(), automationHashes, knownEchoes, echoPolicy: liveIfOn ? 'strict' : 'shadow', stateOnly: paused });
-    await store.saveBatch(psidHash, plan, thread);
+    // Зогсоолтын үед мессежийн мөр БИЧИХГҮЙ (текстгүй тэмдэг л ирдэг — ботын урьдчилан бичсэн мөрийг хоосноор дарахгүй)
+    await store.saveBatch(psidHash, paused ? { ...plan, messages: [] } : plan, thread);
     const nextThread = { ...thread, ...plan.conversation };
     // Ажилтан оролцож байгаа ярианд ботын «сүүлд илгээсэн» мөчийг арилгана — бот буцаж ирэхдээ дахин танилцуулна
     const base = plan.conversation.state !== 'bot' && thread.lastBotSentAt ? { lastBotSentAt: null } : {};
-    // Энэ багцын хэрэглэгчийн мессежүүд — эрсдэлийн дохионы оролтод заавал орно (дараалал алдагдсан ч)
-    const batchText = plan.messages.filter((m) => m.role === 'user' && m.text).map((m) => m.text);
+    // Энэ багцын ХАРИУЛААГҮЙ хэрэглэгчийн мессежүүд — эрсдэлийн дохионы оролтод заавал орно (дараалал алдагдсан ч);
+    // ажилтны аль хэдийн хариулсан мессеж орохгүй
+    const batchText = plan.unanswered ?? [];
     const ctx = { psidHash, recipient, plan, nextThread, events, actions, batchText };
+    // «Ажилтанд дамжууллаа» нөөц хариу ЗӨВХӨН хүлээн авагчтай (webhook) үед: мэдэгдлийг үйлчлүүлэгчид хүргэж чадахгүй
+    // нөхөлтөд (cron) яриаг хүнд шилжүүлээд ботыг 12 цаг дуугүй болгохгүй — хуучнаар дахин оролдоно
+    const canFallback = live && Boolean(recipient);
 
     if (plan.action.type === 'agent') {
       const today = ubDay(now());
@@ -134,7 +143,7 @@ export function createPipeline(deps) {
       if (count >= THREAD_DAILY_AGENT_MAX) {
         actions.push('thread_cap');
         // Амьд ярианд чимээгүй орхихгүй: «ажилтанд дамжууллаа» + хүнд (сүүдэрт хуучнаар — event-ийг л дуусгана)
-        if (live) return { release: { ...base, ...(await fallback({ ...ctx, reason: 'thread_cap', eventStatus: plan.eventStatus })) } };
+        if (canFallback) return { release: { ...base, ...(await fallback({ ...ctx, reason: 'thread_cap', eventStatus: plan.eventStatus })) } };
         await store.finishEvents(plan.eventStatus);
         return { release: { ...base } };
       }
@@ -150,11 +159,14 @@ export function createPipeline(deps) {
         // Түр зуурын Claude алдаа. Амьд ярианд хариуг ЗӨВХӨН энэ хүсэлт (хүлээн авагчтай) илгээж чадна: хугацаа байвал нэг
         // удаа шууд дахин оролдоно; үгүй бол «ажилтанд дамжууллаа» (үйлчлүүлэгч чимээгүй орхигдохгүй — аудит). Сүүдэрт
         // хуучнаар: event pending үлдэж дараа нөхөгдөнө.
-        if (live) {
-          const again = Boolean(recipient) && round.retries < 1 && clock() < deadline - AGENT_MIN_LIVE_MS;
+        if (canFallback) {
+          // Дахин оролдвол event «failed» болох (оролдлого дууссан) бол оролдохгүй — чимээгүй алга болгохгүй
+          const exhausted = events.some((e) => (Number(e.attempts) || 0) + 1 >= MAX_ATTEMPTS);
+          const again = !exhausted && round.again < 1 && clock() + RETRY_PAUSE_MS < deadline - AGENT_MIN_LIVE_MS;
           if (!again) return { release: { ...counted, ...(await fallback({ ...ctx, reason: 'ai_error', eventStatus: plan.eventStatus })) } };
-          round.retries++;
+          round.again++;
           await store.failEvents(events, r.error);
+          await sleep(RETRY_PAUSE_MS);
           return { release: counted };
         }
         await store.failEvents(events, r.error);
@@ -162,8 +174,8 @@ export function createPipeline(deps) {
       }
       if (!r.finalized) await store.finishEvents(plan.eventStatus);
       const release = r.skipped ? { ...base } : counted;
-      // Амьд ярианд Claude засагдахгүй алдаа өгсөн (ноорог бичигдээгүй) → «ажилтанд дамжууллаа»
-      if (live && r.error) Object.assign(release, await fallback({ ...ctx, reason: 'ai_error', eventStatus: undefined }));
+      // Амьд ярианд Claude засагдахгүй алдаа өгсөн / түлхүүр тохируулаагүй (ноорог бичигдээгүй) → «ажилтанд дамжууллаа»
+      if (canFallback && (r.error || r.skipped === 'not_configured')) Object.assign(release, await fallback({ ...ctx, reason: 'ai_error', eventStatus: undefined }));
       else if (live) Object.assign(release, await deliver({ ...ctx, r }));
       else if (r.simulatedBot) release.lastShadowBotAt = now();
       return { release };
@@ -185,12 +197,16 @@ export function createPipeline(deps) {
    * оролдоно — эс бөгөөс «ажилтанд шилжүүлсэн» төлөв алдагдаж бот дараагийн мессежид дахин хариулна (аудит).
    */
   async function release_(psidHash, fields) {
+    const started = Date.now();
     for (let i = 1; i <= RELEASE_ATTEMPTS; i++) {
       try {
         await store.releaseThread(psidHash, fields);
         return;
       } catch {
-        if (i === RELEASE_ATTEMPTS) log('[messenger] түгжээ тайлж чадсангүй (120 с-ийн дараа өөрөө тайлагдана)');
+        if (i === RELEASE_ATTEMPTS || Date.now() - started > RELEASE_RETRY_BUDGET_MS) {
+          log('[messenger] түгжээ тайлж чадсангүй (120 с-ийн дараа өөрөө тайлагдана)');
+          return;
+        }
       }
     }
   }
@@ -215,8 +231,9 @@ export function createPipeline(deps) {
     const deadline = opt.deadline ?? clock() + WEBHOOK_BUDGET_MS;
     const actions = [];
     const recipient = opt.recipient ?? null;
-    /** Энэ дуудлагын дотор хийсэн шууд дахин оролдлого (Claude-ийн түр алдаа, боловсруулалтын алдаа) — тус бүр ≤ 1 */
-    const state = { retries: 0, errors: 0 };
+    /** Энэ дуудлагын дотор хийсэн шууд дахин оролдлого (Claude-ийн түр алдаа ЭСВЭЛ боловсруулалтын алдаа) — НИЙТ ≤ 1:
+     *  нэг мессежид нэг webhook-т Claude ≤ 2 удаа дуудагдана */
+    const state = { again: 0 };
     for (let round = 0; round < ROUNDS_MAX; round++) {
       const lock = await acquire(psidHash, deadline, recipient ? LOCK_POLLS_RECIPIENT : LOCK_POLLS);
       if (!lock.ok) return { rounds: round, locked: true, actions };
@@ -242,7 +259,7 @@ export function createPipeline(deps) {
         actions.push('error');
         // Хүлээн авагчтай (webhook) боловсруулалт: түр зуурын алдаа (Firestore) бол хугацаа байвал НЭГ удаа дахин оролдоно —
         // хариуг зөвхөн энэ хүсэлт илгээж чадна. Давхар илгээлтээс messenger_outbound-ийн эзэмшилт хамгаална.
-        if (recipient && state.errors < 1 && clock() < deadline - AGENT_MIN_LIVE_MS) state.errors++;
+        if (recipient && state.again < 1 && clock() < deadline - AGENT_MIN_LIVE_MS) state.again++;
         else stop = { rounds: round + 1, actions };
       } finally {
         await release_(psidHash, release);

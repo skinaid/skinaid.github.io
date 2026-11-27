@@ -145,13 +145,25 @@ test('webhook: нууцгүй = 503, буруу гарын үсэг = 401, бу�
   assert.deepEqual(s.fake.list('messenger_events/'), []);
 });
 
-test('webhook: горим off / баримт байхгүй / kill switch → event хадгалахгүй, AI ажиллахгүй', async () => {
-  for (const settings of [null, { mode: 'off' }, { mode: 'shadow', killSwitch: true }]) {
+test('webhook: горим off / баримт байхгүй → event хадгалахгүй; kill switch → агуулгагүй тэмдэг л; AI ажиллахгүй', async () => {
+  for (const settings of [null, { mode: 'off' }, { mode: 'off', killSwitch: true }]) {
     const s = setup({ settings });
     assert.equal((await s.post(body([msg('m1', 'Сайн уу')]))).status, 200);
     assert.deepEqual(s.fake.list('messenger_events/'), [], JSON.stringify(settings));
     assert.equal(s.claudeCalls.length, 0);
   }
+  // Яаралтай зогсоолт (горим унтраагаагүй): мессежийн АГУУЛГА хадгалагдахгүй — «хэзээ бичсэн» тэмдэг л (ажилтан хариулсан
+  // эсэхийг мэдэхэд); ноорог, мессежийн мөр, AI дуудлага үгүй
+  const k = setup({ settings: { mode: 'shadow', killSwitch: true } });
+  assert.equal((await k.post(body([msg('m1', 'Нууц асуулт 99112233'), img('m2')]))).status, 200);
+  const evs = k.fake.list('messenger_events/').map((p) => k.fake.read(p));
+  assert.equal(evs.length, 2);
+  for (const e of evs) assert.deepEqual(e.payload, {}, 'текст, хавсралт хадгалагдахгүй');
+  assert.ok(evs.every((e) => e.status === 'done'));
+  assert.ok(!allDocsJson(k.fake).includes('Нууц асуулт'));
+  assert.deepEqual(k.fake.list('messenger_drafts/'), []);
+  assert.equal(k.fake.list('messenger_threads/').filter((p) => p.includes('/messages/')).length, 0);
+  assert.equal(k.claudeCalls.length, 0);
 });
 
 test('webhook: серверийн эрх тохируулаагүй (runtime null) → 200, лог, юу ч хадгалахгүй', async () => {

@@ -251,6 +251,8 @@ export function planBatch(conv, events, opts) {
 
   /** @type {BatchAction} */
   let action;
+  /** Энэ багцын ХАРИУЛААГҮЙ хэрэглэгчийн мессежийн текстүүд (ажилтны сүүлийн хариунаас хойшхи) — эрсдэлийн дохионы оролт */
+  let unanswered = [];
   if (opts.stateOnly) action = { type: 'none', reason: 'paused' };
   else if (!lastUser) action = { type: 'none', reason: 'no_user_message' };
   else if (answeredAfterUser) action = { type: 'none', reason: 'already_answered' };
@@ -264,6 +266,7 @@ export function planBatch(conv, events, opts) {
       (e) => (e.kind === 'message' || e.kind === 'attachment' || e.kind === 'postback') && (!since || e.eventTime >= since),
     );
     const hasText = pending.some((e) => Boolean(e.payload.text));
+    unanswered = pending.map((e) => e.payload.text).filter((x) => typeof x === 'string' && x);
     const standby = lastUser.payload.standby === true ? { standby: /** @type {const} */ (true) } : {};
     // Зөвхөн стикер (👍 г.м.) — «файлыг хүлээн авлаа» гэж хариулах, ажилтанд шилжүүлэх шаардлагагүй
     const stickers = pending.flatMap((e) => e.payload.attachments ?? []);
@@ -278,6 +281,7 @@ export function planBatch(conv, events, opts) {
     conversation: { state, humanSince, lastStaffAt, lastUserAt, addedUserMessages: added, referral },
     action,
     eventStatus: status,
+    unanswered,
   };
 }
 

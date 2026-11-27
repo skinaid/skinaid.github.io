@@ -732,6 +732,9 @@ export function createStore(fs, opt = {}) {
             status: 'sending', kind, threadId: psidHash, draftId, replyToEventId: eventId, text: String(text).slice(0, 2000),
             messageDocId: null, error: null, createdAt: t, sentAt: null, expireAt: new Date(t.getTime() + RETENTION_DAYS.outbound * DAY),
           }, { exists: false }),
+          // Ноорогт «илгээж байна» — үр дүнгийн бичилт хожим унавал ч admin «илгээгээгүй» гэж худал харуулахгүй.
+          // Ноорог байхгүй бол (exists) эзэмшилт бүхэлдээ унана → илгээхгүй.
+          setWrite(`${COL.drafts}/${draftId}`, { sendStatus: 'sending' }, { mask: ['sendStatus'], exists: true }),
           this.dayStatsWrite(t, [['sendClaims', 1]]),
         ]);
         return { ok: true, id };

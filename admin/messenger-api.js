@@ -3,7 +3,7 @@
    ноорогийн үнэлгээний дараах хямралын шалгалт хуваалцана.
    ========================================================================== */
 import { session, errText } from './core.js?v=2c361933';
-import { apiErrorText } from './messenger-lib.js?v=72e1e89d';
+import { apiErrorText } from './messenger-lib.js?v=1b3f2e47';
 
 const codeErr = (code, body) => Object.assign(new Error(code), { apiCode: code, body });
 /** Хариу ирэхгүй (сүлжээ гацсан) бол ийм хугацааны дараа таслана — функцийн дээд хугацаа 60 с (аудит: «Зогсоох» гацдаг байв) */

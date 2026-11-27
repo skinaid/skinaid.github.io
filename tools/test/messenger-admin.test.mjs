@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as A from '../../admin/messenger-lib.js';
-import { SEND_REASON_TEXT, SOCIAL_AUDIENCE_TEXT, SOCIAL_AUDIENCES, SOCIAL_MODE_TEXT, SOCIAL_MODES, SOCIAL_RATING_TEXT, SOCIAL_RATINGS, SOCIAL_ROUTES, TEST_THREADS_MAX } from '../../api/_lib/social/labels.js';
+import { SEND_REASON_TEXT, SEND_STATUSES, SOCIAL_AUDIENCE_TEXT, SOCIAL_AUDIENCES, SOCIAL_MODE_TEXT, SOCIAL_MODES, SOCIAL_RATING_TEXT, SOCIAL_RATINGS, SOCIAL_ROUTES, TEST_THREADS_MAX } from '../../api/_lib/social/labels.js';
 import { isLive, normalizeSettings as serverNormalize, parseSocialCaps, SOCIAL_CAP_LIMITS, SOCIAL_DEFAULTS } from '../../api/_lib/social/settings-logic.js';
 import { SEND_KINDS } from '../../api/_lib/outbound.js';
 import { configStatus } from '../../api/_lib/config.js';
@@ -81,13 +81,14 @@ test('admin («Автомат»): бичих баримт — анхдагч ү�
 });
 
 test('admin («Автомат»): сервер илгээж чадахгүй бол тууз худал хэлэхгүй (sendBlocker); амьд ярианы илгээгээгүй ноорог сүүдрээс ялгарна', () => {
-  const ok = { config: { metaPageToken: true, metaAppId: true, metaPageId: true }, metaToken: 'ok' };
+  const ok = { config: { anthropicKey: true, metaPageToken: true, metaAppId: true, metaPageId: true }, metaToken: 'ok' };
+  assert.match(A.sendBlocker({ ...ok, config: { ...ok.config, anthropicKey: false } }), /ANTHROPIC_API_KEY/, 'AI-ийн түлхүүргүй бол хариулж чадахгүй');
   assert.equal(A.sendBlocker(ok), '');
   assert.equal(A.sendBlocker({ ...ok, metaToken: null }), '', 'token хараахан шалгагдаагүй (cron өдөрт нэг) — саад биш');
   assert.equal(A.sendBlocker({ ...ok, metaToken: 'network' }), '', 'шалгаж чадаагүй нь token буруу гэсэн үг биш');
   for (const st of [null, undefined, {}, { config: null }, { config: 'x' }]) assert.match(A.sendBlocker(st), /холбогдоогүй/);
   assert.match(A.sendBlocker({ config: { ...ok.config, metaPageToken: false } }), /META_PAGE_TOKEN/);
-  assert.match(A.sendBlocker({ config: { metaPageToken: true, metaAppId: true } }), /id/);
+  assert.match(A.sendBlocker({ config: { anthropicKey: true, metaPageToken: true, metaAppId: true } }), /id/);
   assert.match(A.sendBlocker({ config: { ...ok.config, metaAppId: false } }), /id/);
   for (const t of ['token_invalid', 'page_mismatch', 'permission']) assert.match(A.sendBlocker({ ...ok, metaToken: t }), /пэйжийн token/);
   // Ноорогийн тэмдэг
@@ -100,6 +101,9 @@ test('admin («Автомат»): сервер илгээж чадахгүй б�
   assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'skipped', sendReason: 'standby' }).text, /Илгээгээгүй: яриаг өөр апп/);
   assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'skipped', sendReason: 'шинэ_код' }).text, /шинэ_код/, 'танихгүй шалтгаан — кодоороо');
   assert.equal(A.sendBadge({ mode: 'auto', sendStatus: 'weird' }), null);
+  // Эзэмшсэн боловч үр дүн бүртгэгдээгүй — «илгээгээгүй» гэж худал хэлэхгүй
+  assert.match(A.sendBadge({ mode: 'auto', sendStatus: 'sending' }).text, /Илгээсэн байж магадгүй/);
+  for (const st of SEND_STATUSES) assert.ok(A.sendBadge({ mode: 'auto', sendStatus: st, sendReason: 'standby' }), `${st}: тэмдэггүй`);
   // Туршилтын акаунт нэмэх/хасах; түүхий (цэвэрлээгүй) тохиргоонд isLiveThread унахгүй
   const H = 'c'.repeat(64), G = 'd'.repeat(64);
   assert.deepEqual(A.toggleTestThread([], H), [H]);

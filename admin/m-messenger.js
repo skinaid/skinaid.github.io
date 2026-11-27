@@ -12,10 +12,10 @@
 import { collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, fmtDate, errText, session, setStatus } from './core.js?v=2c361933';
 import { dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, captureFocus } from './ui.js?v=4ec734c0';
-import { MODES, AUDIENCES, TEST_THREADS_MAX, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft, AUTO_STOP_TEXT, isThreadId, shortThread, isLiveThread, toggleTestThread, sendBadge, sendReasonText, metaTokenText, sendBlocker, settingsDoc } from './messenger-lib.js?v=72e1e89d';
-import * as training from './m-messenger-train.js?v=0ebb4ce5';
-import * as overview from './m-messenger-overview.js?v=b944e1f3';
-import { api } from './messenger-api.js?v=206d6d4a';
+import { MODES, AUDIENCES, TEST_THREADS_MAX, ROUTE_TONE, RATINGS, ratingLabel, ROLE_TEXT, CONFIG_ITEMS, normalizeSettings, parseCaps, auditId, ubMonth, FILTERS, draftMatches, usd, exampleIdForDraft, AUTO_STOP_TEXT, isThreadId, shortThread, isLiveThread, toggleTestThread, sendBadge, sendReasonText, metaTokenText, sendBlocker, settingsDoc } from './messenger-lib.js?v=1b3f2e47';
+import * as training from './m-messenger-train.js?v=37a16a51';
+import * as overview from './m-messenger-overview.js?v=00934e6a';
+import { api } from './messenger-api.js?v=16070f14';
 
 const PAGE = 30;
 const CAP_TEXT = { runs: '100,000', usd: '1000' };

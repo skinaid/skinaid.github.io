@@ -79,7 +79,7 @@ export const SOCIAL_REASON_TEXT = Object.freeze({
   injection: 'Мессеж AI-д заавар өгөх оролдлоготой',
   media: 'Зураг, видео, дуу — AI харахгүй',
   cap_reached: 'Сарын хязгаарт хүрсэн — AI ажиллаагүй',
-  foreign_script: 'Кирилл биш үсгээр бичсэн (латин г.м.) — кодын эрсдэлийн шалгалт уншдаггүй тул «Автомат» горимд ажилтанд',
+  foreign_script: 'Кирилл биш (латин г.м.), мэдлэгт байхгүй үг орсон — кодын эрсдэлийн шалгалт уншдаггүй тул «Автомат» горимд ажилтанд',
   ai_error: 'AI алдаа гарсан — ажилтанд шилжүүлсэн',
   thread_cap: 'Энэ ярианд өнөөдрийн AI хариуны хязгаарт хүрсэн',
   refusal: 'AI хариулахаас татгалзсан',
@@ -98,11 +98,13 @@ export function socialReasonText(code) {
 }
 
 /**
- * Илгээлтийн төлөв (ноорогийн `sendStatus`: sent | failed | skipped) ба шалтгаан (`sendReason`) → ажилтанд харагдах текст.
+ * Илгээлтийн төлөв (ноорогийн `sendStatus`: sending | sent | failed | skipped) ба шалтгаан (`sendReason`) → ажилтанд
+ * харагдах текст. `sending` = илгээхээр эзэмшсэн боловч үр дүн бүртгэгдээгүй (функц тасарсан / бичилт унасан) — мессеж
+ * хүрсэн байж магадгүй.
  * Шалтгаан = api/_lib/outbound.js-ийн хамгаалалтын код эсвэл Meta-ийн алдааны ангилал (meta-client.js MetaErrorKind).
  * Admin (admin/messenger-lib.js SEND_REASON_TEXT) давхарлана — тест тулгана.
  */
-export const SEND_STATUSES = Object.freeze(['sent', 'failed', 'skipped']);
+export const SEND_STATUSES = Object.freeze(['sending', 'sent', 'failed', 'skipped']);
 export const SEND_REASON_TEXT = Object.freeze({
   no_recipient: 'хожимдож боловсруулсан тул хүлээн авагч тодорхойгүй (ажилтан хариулна)',
   not_configured: 'серверт пэйжийн token эсвэл аппын id тохируулаагүй',

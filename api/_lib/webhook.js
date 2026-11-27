@@ -4,8 +4,9 @@
  * GET  — subscribe verify: hub.verify_token = META_VERIFY_TOKEN (timing-safe) → hub.challenge, эс бөгөөс 403.
  * POST — 1) ТҮҮХИЙ body байт дээр X-Hub-Signature-256 (META_APP_SECRET; байхгүй = 503, буруу = 401) — JSON.parse-аас ӨМНӨ.
  *        2) parseWebhook: текстийг нууцлах, PSID-г hash (PSID_SALT), хавсралтын төрөл л. META_PAGE_ID-ээс бусдыг хаяна.
- *        3) Тохиргоо off → юу ч хадгалахгүй, 200. Яаралтай зогсоолт (kill switch; горим off биш) → үйлчлүүлэгчийн мессежийг
- *           хадгалахгүй, зөвхөн пэйжийн echo / handover-ыг ТЕКСТГҮЙ бүртгэж ярианы төлвийг шинэчилнэ (AI ажиллахгүй).
+ *        3) Тохиргоо off → юу ч хадгалахгүй, 200. Яаралтай зогсоолт (kill switch; горим off биш) → мессежийн АГУУЛГЫГ
+ *           хадгалахгүй; «хэн, хэзээ» тэмдгийг л (үйлчлүүлэгч бичсэн мөч, пэйжийн echo, handover) бүртгэж ярианы төлвийг
+ *           шинэчилнэ (AI ажиллахгүй, юу ч илгээхгүй).
  *        4) `messenger_events/{id}` create (exists=false) — Meta-ийн давтан илгээлт нэг л мөр.
  *        5) 200 шууд (Meta 20 секундэд хариу хүлээдэг) → waitUntil: шинэ event-тэй яриа + гацсан event (≤ 2 яриа).
  *           Шинэ event-тэй ярианы PSID-г (хариу илгээх хүлээн авагч) pipeline-д САНАХ ОЙГООР дамжуулна — «Автомат» горимд
@@ -110,17 +111,20 @@ export function createWebhookHandlers(deps) {
     const threads = new Map();
     try {
       const settings = await rt.store.readSettings();
-      // Яаралтай зогсоолт (горим унтраагаагүй): үйлчлүүлэгчийн мессежийг ХАДГАЛАХГҮЙ; зөвхөн пэйжийн хариу (echo) ба яриа
-      // шилжүүлэлтийг (handover) ТЕКСТГҮЙГЭЭР бүртгэнэ — «ажилтан энэ ярианд хариулсан» гэдгийг мэдэхийн тулд (дахин асаахад
-      // бот ажилтны яриа руу орж ирэхгүй). AI ажиллахгүй, юу ч илгээхгүй.
+      // Яаралтай зогсоолт (горим унтраагаагүй): мессежийн АГУУЛГЫГ ХАДГАЛАХГҮЙ (текст, хавсралт, referral — үйлчлүүлэгчийнх ч,
+      // пэйжийнх ч). Зөвхөн «хэн, хэзээ» гэсэн тэмдгийг бүртгэнэ: үйлчлүүлэгч бичсэн мөч, пэйжийн хариу (echo: аппын id),
+      // яриа шилжүүлэлт (handover) — «ажилтан энэ ярианд хариулсан» гэдгийг мэдэхийн тулд (дахин асаахад бот ажилтны яриа руу
+      // орж ирэхгүй; Meta-ийн автомат хариуг хэрэглэгчийн мессежээс ≤ 8 с гэдгээр нь ялгана). AI ажиллахгүй, юу ч илгээхгүй.
       const paused = !settings.active && settings.mode !== 'off';
       if (!settings.active && !paused) return text('OK', 200);
       for (const ev of ours) {
         const h = psidHash(ev.pageId, ev.psid, cfg.psidKey);
         if (paused) {
-          if (ev.kind !== 'echo' && ev.kind !== 'handover') continue;
           const p = ev.payload || {};
-          await rt.store.createEvent({ ...ev, payload: { ...(p.app_id ? { app_id: p.app_id } : {}), ...(p.handover ? { handover: p.handover } : {}), ...(p.standby ? { standby: true } : {}) } }, h);
+          const marker = ev.kind === 'echo' || ev.kind === 'handover'
+            ? { ...(p.app_id ? { app_id: p.app_id } : {}), ...(p.handover ? { handover: p.handover } : {}), ...(p.standby ? { standby: true } : {}) }
+            : {};
+          await rt.store.createEvent({ ...ev, payload: marker }, h);
           threads.set(h, null);
           continue;
         }
