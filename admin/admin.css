@@ -354,7 +354,7 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size
 .tbl textarea { resize: none; overflow: hidden; min-height: 36px; line-height: 1.4; display: block; }
 .tbl input[type="text"]:focus, .tbl select:focus, .tbl textarea:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(101, 65, 134, .12); }
 .tbl input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--purple); margin-top: 6px; }
-.tbl td.c-name { min-width: 210px; } .tbl td.c-desc { min-width: 280px; } .tbl td.c-cat { width: 150px; } .tbl td.c-time { width: 96px; } .tbl td.c-price { width: 124px; } .tbl td.c-hide { width: 56px; text-align: center; }
+.tbl td.c-name { min-width: 210px; } .tbl td.c-desc { min-width: 280px; } .tbl td.c-cat { width: 150px; } .tbl td.c-time { width: 96px; } .tbl td.c-price { width: 124px; } .tbl td.c-hide { width: 72px; text-align: center; }
 .tbl tr.is-hidden td { background: #faf9fb; }
 .tbl tr.is-hidden td input[type="text"], .tbl tr.is-hidden td textarea, .tbl tr.is-hidden td select { color: var(--muted); }
 .svc-page { display: inline-block; margin-top: 4px; font-size: 12px; color: var(--purple); }

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=bdf60a53">
-  <link rel="stylesheet" href="/admin/admin.css?v=a76e67ed">
+  <link rel="stylesheet" href="/admin/admin.css?v=3a56fa6e">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -464,7 +464,7 @@
               <h2>Үйлчилгээ <span class="badge" id="svcCount">0</span></h2>
               <button class="btn btn--outline btn--sm" type="button" id="btnSvcAdd">+ Үйлчилгээ нэмэх</button>
             </div>
-            <p>«UB Beauty» тэмдэгтэй мөрийн үнэ, хугацааг UB Beauty (os.ubbeauty.mn → Тохиргоо → Үйлчилгээ)-гаас авна — тэнд засна, энд түгжээтэй. Үнийг тэнд «нийтэд харуулах» асаасан үед л сайтад гарна. Холбоогүй мөрийн үнэ, хугацааг зөвхөн баталгаатай үед бичнэ (хоосон үлдээж болно).</p>
+            <p>«UB Beauty» тэмдэгтэй мөрийн үнэ, хугацааг UB Beauty (os.ubbeauty.mn → Тохиргоо → Үйлчилгээ)-гаас авна — тэнд засна, энд түгжээтэй. Үнийг тэнд «нийтэд харуулах» асаасан үед л сайтад гарна. Холбоогүй мөрийн үнэ, хугацааг зөвхөн баталгаатай үед бичнэ (хоосон үлдээж болно). <strong>«Сайтаас нуух»</strong> = үйлчилгээ бүхэлдээ сайтаас алга болно; зөвхөн <strong>үнийг</strong> нуух бол UB Beauty-д «Үнийг нийтэд харуулах»-ыг унтраагаад энд «Хадгалах».</p>
             <div class="ub-sync" id="ubSync" role="status" hidden><span id="ubSyncMsg"></span> <button class="btn btn--outline btn--sm" type="button" id="btnUbSync" hidden>UB Beauty-гээс шинэчлэх</button></div>
             <div class="toolbar">
               <div class="search">
@@ -477,7 +477,7 @@
             <div class="tbl-wrap tbl-wrap--scroll">
               <table class="tbl" id="svcTable">
                 <caption class="sr-only">Үйлчилгээний жагсаалт — мөр бүрийг засна</caption>
-                <thead><tr><th scope="col">Ангилал</th><th scope="col">Нэр</th><th scope="col">Тайлбар</th><th scope="col">Хугацаа</th><th scope="col">Үнэ</th><th scope="col">Нуух</th><th scope="col"><span class="sr-only">Устгах</span></th></tr></thead>
+                <thead><tr><th scope="col">Ангилал</th><th scope="col">Нэр</th><th scope="col">Тайлбар</th><th scope="col">Хугацаа</th><th scope="col">Үнэ</th><th scope="col" title="Үйлчилгээг сайтын жагсаалтаас бүхэлд нь нууна (Messenger бот ч дурдахгүй). Зөвхөн үнийг нуух бол UB Beauty-д «Үнийг нийтэд харуулах»-ыг унтраана.">Сайтаас нуух</th><th scope="col"><span class="sr-only">Устгах</span></th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -488,7 +488,7 @@
             <div class="tbl-wrap">
               <table class="tbl" id="pkgTable">
                 <caption class="sr-only">Шинэ жилийн багцууд</caption>
-                <thead><tr><th scope="col">№</th><th scope="col">Нэр</th><th scope="col">Үнэ</th><th scope="col">Нуух</th></tr></thead>
+                <thead><tr><th scope="col">№</th><th scope="col">Нэр</th><th scope="col">Үнэ</th><th scope="col" title="Багцын картыг сайтаас бүхэлд нь нууна">Сайтаас нуух</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
