@@ -1,4 +1,4 @@
-import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=a303331c';
+import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=bf8c90c8';
 /* ==========================================================================
    SKIN AID admin — Модуль: Нүүр хуудас (settings/home) — hero + «Зөвлөгөө» картууд
    HTML загвар: /assets/js/home-render.js (сайт, build-тэй ижил). Анхны утга, сайтын зургууд, дотоод хуудсууд,
