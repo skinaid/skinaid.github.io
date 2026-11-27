@@ -609,3 +609,7 @@ body.has-savebar .snackbar { bottom: 92px; }
 }
 #contentSectionNav .btn { min-height: 42px; text-align: left; justify-content: flex-start; }
 #homeEditorMount .content-group { scroll-margin-top: 76px; }
+
+.image-upload { gap: 8px; margin-block: 6px 10px; }
+.image-upload .hint { overflow-wrap: anywhere; }
+.hm-photos .image-upload { margin-block: 12px 0; }

@@ -1,3 +1,4 @@
+import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=cf76c2ac';
 import { clinicalFields, reviewDraft } from './clinical-content.js?v=2ad415b2';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, db, session, errText } from './core.js?v=2c361933';
@@ -105,6 +106,7 @@ function renderList(group, spec) {
         });
         wrapper.append(input);
         row.append(wrapper);
+        if (key === 'image') row.append(uploadControl(input));
       }
       const hide = document.createElement('label');
       const checkbox = document.createElement('input');
@@ -172,13 +174,13 @@ function render() {
       preview.alt = '';
       preview.loading = 'lazy';
       preview.referrerPolicy = 'no-referrer';
-      row.append(preview);
+      row.append(uploadControl(input), preview);
     }
     const updatePreview = () => {
       if (!preview) return;
       preview.hidden = !safeValue(field.kind, input.value);
       if (preview.hidden) preview.removeAttribute('src');
-      else preview.src = new URL(input.value, location.origin + page.value).href;
+      else preview.src = new URL(imagePreview(input.value), location.origin + page.value).href;
     };
     const restore = document.createElement('button');
     restore.type = 'button';
@@ -341,6 +343,11 @@ async function save() {
     message('Энэ хуудасны өөрчлөлт хадгалах хэмжээнээс хэтэрсэн байна.');
     return;
   }
+  const images = queuedImages([
+    ...fields.filter(field => field.kind === 'src').map(field => values[field.id]),
+    ...cardLists.flatMap(spec => (values[spec.key] || []).map(item => item.image)),
+  ]);
+  if (images.length > 12) { message('Нэг хадгалалтаар 12 хүртэлх зураг нэмнэ үү.'); return; }
   saving = true;
   lock();
   try {
@@ -366,8 +373,10 @@ async function save() {
       const current = await tx.get(ref);
       if ((current.data()?.values ?? null) !== old) throw new Error('content-conflict');
       if (clinicalSource(path) && (current.data()?.base || null) !== original.storedBase) throw new Error('content-conflict');
+      writeImages(tx, images);
       tx.set(ref, { values: raw, ...(clinicalSource(path) ? { base: original.base } : {}), updatedAt: serverTimestamp() });
     });
+    clearImageUploads(images);
     if (id !== generation) return;
     original.raw = raw;
     original.storedBase = original.base;
@@ -403,6 +412,11 @@ previewButton.addEventListener('click', () => {
     applyContent(contentFields(copy, page.value), draft);
     for (const list of cardLists) applyCards(copy, list, draft[list.key]);
     if (draft[FAQ_KEY]) applyFaq(copy, draft[FAQ_KEY]);
+    for (const img of copy.querySelectorAll('img[src]')) {
+      const src = img.getAttribute('src');
+      const local = imagePreview(src);
+      if (local !== src) img.setAttribute('src', local);
+    }
     const booking = copy.querySelector('#ubForm');
     if (booking) {
       booking.querySelector('[data-ub-intro]').textContent = booking.querySelector('[data-ub-copy="pending_payment"]').textContent;
@@ -459,6 +473,7 @@ registerForm('content', {
   busy: () => saving ? 'Сайтын мэдээлэл хадгалж байна.' : '',
   discard() { if (!saving) { draft = structuredClone(baseline); render(); refreshDirty(); } },
   reset() {
+    clearImageUploads();
     generation++;
     ready = loading = saving = false;
     clearPreview();
