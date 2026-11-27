@@ -97,3 +97,112 @@ export function uploadControl(input, onPick, { label = 'Файлаас зура�
   row.append(select, picker, status);
   return row;
 }
+
+/* ---------- Зургийн сангаас сонгох цонх ----------
+   Сайтын зургийн сан (window.SKINAID_HOME_DATA.photos = assets/img/photos/…) grid-ээр; хайх; дарахад шууд сонгогдоно.
+   Доод талд «Компьютер / утаснаас оруулах» — файлыг шахаж түр хаяг (content-image) буцаана (хадгалахад байршина).
+   Native <dialog>: Esc/«Болих» хаана, хаахад нээсэн товч руу фокус буцна. */
+const noVer = (p) => String(p || '').replace(/^\//, '').replace(/\?.*$/, '');
+const photoName = (p) => noVer(p).split('/').pop().replace(/\.[a-z]+$/i, '').replace(/^lib-/, '').replace(/[-_]+/g, ' ');
+let pickerEl = null;
+let pickerDone = null;
+
+function ensurePicker() {
+  if (pickerEl) return pickerEl;
+  pickerEl = document.createElement('dialog');
+  pickerEl.className = 'dlg pp';
+  pickerEl.setAttribute('aria-labelledby', 'ppTitle');
+  pickerEl.innerHTML = `
+    <div class="pp__box">
+      <div class="pp__head">
+        <h2 class="dlg__title" id="ppTitle">Зураг сонгох</h2>
+        <button type="button" class="btn-icon pp__close" data-pp="close" aria-label="Хаах">✕</button>
+      </div>
+      <div class="search pp__search"><input type="search" data-pp="q" placeholder="Сангаас хайх (жишээ: vivace, laser)" aria-label="Зургийн сангаас хайх" autocomplete="off"></div>
+      <div class="pp__grid" data-pp="grid" role="listbox" aria-label="Сайтын зургийн сан"></div>
+      <p class="hint pp__empty" data-pp="empty" hidden>Тохирох зураг олдсонгүй.</p>
+      <div class="pp__foot">
+        <input type="file" accept="image/jpeg,image/png,image/webp" data-pp="file" hidden>
+        <button type="button" class="btn btn--outline btn--sm" data-pp="upload">Компьютер / утаснаас оруулах</button>
+        <span class="hint" role="status" data-pp="status"></span>
+        <button type="button" class="btn btn--ghost btn--sm pp__cancel" data-pp="close">Болих</button>
+      </div>
+    </div>`;
+  document.body.append(pickerEl);
+  const $p = (k) => pickerEl.querySelector(`[data-pp="${k}"]`);
+  pickerEl.addEventListener('click', (e) => {
+    if (e.target === pickerEl) return finish(null);   // арын бүдэг хэсэг дээр дарвал хаана
+    if (e.target.closest('[data-pp="close"]')) return finish(null);
+    const opt = e.target.closest('[data-photo]');
+    if (opt) finish(opt.dataset.photo);
+  });
+  pickerEl.addEventListener('close', () => finish(null));
+  $p('q').addEventListener('input', () => {
+    const q = $p('q').value.trim().toLowerCase();
+    let n = 0;
+    for (const b of pickerEl.querySelectorAll('[data-photo]')) { const hit = !q || b.dataset.name.includes(q); b.hidden = !hit; if (hit) n++; }
+    $p('empty').hidden = n > 0;
+  });
+  $p('upload').addEventListener('click', () => $p('file').click());
+  $p('file').addEventListener('change', async () => {
+    const file = $p('file').files[0];
+    if (!file) return;
+    $p('upload').disabled = true;
+    $p('status').textContent = 'Зураг бэлдэж байна…';
+    try { finish(await queueImage(file)); } catch (error) { $p('status').textContent = error.message || 'Зураг нээх боломжгүй байна.'; } finally { $p('upload').disabled = false; $p('file').value = ''; }
+  });
+  return pickerEl;
+}
+
+function finish(value) {
+  const done = pickerDone;
+  pickerDone = null;
+  if (pickerEl?.open) pickerEl.close();
+  if (done) done(value);
+}
+
+/** @param {{ current?: string, title?: string, onPick: (value: string) => void }} opts */
+export function openPhotoPicker({ current = '', title = 'Зураг сонгох', onPick }) {
+  const d = ensurePicker();
+  if (pickerDone) finish(null);
+  const prev = document.activeElement;
+  const photos = window.SKINAID_HOME_DATA?.photos || [];
+  const cur = noVer(current);
+  d.querySelector('#ppTitle').textContent = title;
+  d.querySelector('[data-pp="q"]').value = '';
+  d.querySelector('[data-pp="status"]').textContent = '';
+  d.querySelector('[data-pp="empty"]').hidden = photos.length > 0;
+  const grid = d.querySelector('[data-pp="grid"]');
+  grid.replaceChildren(...photos.map((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pp__item';
+    b.setAttribute('role', 'option');
+    const selected = noVer(p) === cur;
+    b.setAttribute('aria-selected', String(selected));
+    b.dataset.photo = '/' + noVer(p);
+    b.dataset.name = photoName(p).toLowerCase();
+    b.title = photoName(p);
+    const img = document.createElement('img');
+    img.src = '/' + String(p).replace(/^\//, '');
+    img.alt = photoName(p);
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    b.append(img);
+    return b;
+  }));
+  pickerDone = (value) => {
+    if (prev && prev.isConnected && typeof prev.focus === 'function') prev.focus({ preventScroll: true });
+    if (value) onPick(value);
+  };
+  d.showModal();
+  (grid.querySelector('[aria-selected="true"]') || d.querySelector('[data-pp="q"]')).focus();
+  grid.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'center' });
+}
+
+/** Талбарт утга тавьж input/change үйл явдлыг дуудна */
+export function setImageValue(input, value) {
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}

@@ -6,7 +6,7 @@
    харагдац дээр дарахад засах талбар нь нээгдэнэ. Зураг: файл сонгох эсвэл чирж оруулах (image-upload.js).
    Өгөгдлийн хэлбэр, шалгалт, сайтад хэрэглэх логик = assets/js/site-content.js (өөрчлөгдөөгүй).
    ========================================================================== */
-import { uploadControl, queueImage, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=a303331c';
+import { uploadControl, openPhotoPicker, setImageValue, queueImage, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=bf8c90c8';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, $$, db, session, errText } from './core.js?v=2c361933';
 import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=720127aa';
@@ -277,7 +277,8 @@ function fieldRow(field, section) {
     img.referrerPolicy = 'no-referrer';
     thumb.append(img, make('span', 'ce-img__hint', 'Зураг солих'));
     const upload = uploadControl(input, null, { label: 'Компьютер / утаснаас зураг оруулах' });
-    thumb.addEventListener('click', () => upload.querySelector('button').click());
+    // Дарахад сайтын зургийн сангаас сонгох цонх (дотор нь «Компьютер / утаснаас оруулах»)
+    thumb.addEventListener('click', () => openPhotoPicker({ current: input.value, title: field.label, onPick: (v) => setImageValue(input, v) }));
     const updateThumb = () => {
       const ok = safeValue('src', input.value);
       thumb.classList.toggle('is-empty', !ok);
@@ -290,9 +291,11 @@ function fieldRow(field, section) {
     const manual = make('details', 'ce-extra');
     const inner = make('div', 'ce-extra__body');
     inner.append(input, make('p', 'hint', 'Сайтын сангийн зургийн зам (жишээ нь /assets/img/photos/…) эсвэл https:// зургийн холбоос.'));
-    manual.append(make('summary', '', 'Сангаас сонгох эсвэл холбоос оруулах'), inner);
+    manual.append(make('summary', '', 'Холбоос гараар оруулах'), inner);
     const body = make('div', 'ce-img__body');
-    body.append(head, upload, make('p', 'hint', 'JPG, PNG, WebP. Энд чирж оруулж болно — зургийг автоматаар шахна.'), manual);
+    const fromLib = button('Сангаас сонгох', () => openPhotoPicker({ current: input.value, title: field.label, onPick: (v) => setImageValue(input, v) }), false, 'btn btn--primary btn--sm');
+    upload.prepend(fromLib);
+    body.append(head, upload, make('p', 'hint', 'Зураг дээр дарж сангаас сонгоно. Файлаа энд чирж оруулж болно — зургийг автоматаар шахна.'), manual);
     row.append(thumb, body);
     // Чирж оруулах
     const drag = (on) => (event) => { if ([...(event.dataTransfer?.types || [])].includes('Files')) { event.preventDefault(); row.classList.toggle('is-drop', on); } };
@@ -380,7 +383,11 @@ function renderList(body, spec) {
         });
         if (check) check(); else wrapper.append(input);
         row.append(wrapper);
-        if (key === 'image') row.append(uploadControl(input, null, { label: 'Компьютер / утаснаас зураг оруулах' }));
+        if (key === 'image') {
+          const up = uploadControl(input, null, { label: 'Компьютер / утаснаас зураг оруулах' });
+          up.prepend(button('Сангаас сонгох', () => openPhotoPicker({ current: input.value, title: spec.name + ' ' + (i + 1) + ' · зураг', onPick: (v) => setImageValue(input, v) }), false, 'btn btn--primary btn--sm'));
+          row.append(up);
+        }
       }
       const hide = make('label', 'ce-item__hide');
       const checkbox = make('input');

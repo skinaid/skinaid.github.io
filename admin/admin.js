@@ -9,10 +9,10 @@
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
 import { ICON, dialog, setCurrentView, anyDirty, busyText, leaveBusy, refreshDirty, resetForms } from './ui.js?v=720127aa';
-import * as contentEditor from './m-content.js?v=5d0aa57b';
+import * as contentEditor from './m-content.js?v=d1dcb964';
 import * as bookings from './m-bookings.js?v=0ad7a194';
 import * as settings from './m-settings.js?v=07329949';
-import * as home from './m-home.js?v=f783747e';
+import * as home from './m-home.js?v=b7567817';
 import * as catalog from './m-catalog.js?v=e544a0b1';
 import { renderPages } from './m-pages.js?v=26a525a2';
 import * as messenger from './m-messenger.js?v=e8cee6ca';
