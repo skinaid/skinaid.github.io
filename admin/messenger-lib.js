@@ -228,7 +228,7 @@ export const KB_STATUS = [
   { key: 'published', label: 'Нийтэлсэн', hint: 'AI 1 минутын дотор ашиглаж эхэлнэ.' },
 ];
 /** Сервер prompt-д оруулах хэмжээ (api/_lib/social/catalog-safe.js KB_LIMITS, examples.js EXAMPLE_LIMITS — тест тулгана) */
-export const KB_BUDGET = { chars: 24000, entries: 60, entryChars: 1900 };
+export const KB_BUDGET = { chars: 40000, entries: 100, entryChars: 1900 };
 export const EX_BUDGET = { items: 30, customer: 500, reply: 600, why: 200, total: 12000 };
 export const EX_KINDS = [
   { key: 'good', label: 'Сайн жишээ', hint: 'AI ингэж хариулбал зөв.' },
@@ -240,6 +240,14 @@ export const exKindLabel = (k) => (EX_KINDS.find((s) => s.key === k) || {}).labe
 const rand36 = (rand, n) => Math.floor(rand() * 36 ** n).toString(36).padStart(n, '0');
 /** Шинэ баримтын id (rules: ^[A-Za-z0-9_-]{1,40}$) */
 export const newKbId = (now = Date.now(), rand = Math.random) => `k_${now.toString(36)}${rand36(rand, 6)}`;
+/**
+ * Үйлчилгээнд холбосон мэдлэгийн id: `s_<үйлчилгээний id>_<санамсаргүй>` (admin «Үйлчилгээ бүрээр»; сервер
+ * api/_lib/catalog-check.js `kbServiceId`-тэй ижил задлал). Үйлчилгээний id ≤ 24 тэмдэгт — rules-ийн 40-д багтана.
+ */
+export const newServiceKbId = (serviceId, now = Date.now(), rand = Math.random) =>
+  `s_${String(serviceId ?? '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 24) || '0'}_${now.toString(36).slice(-5)}${rand36(rand, 4)}`;
+/** Мэдлэгийн id → холбосон үйлчилгээний id ('' = холбоогүй) */
+export const kbServiceId = (id) => (/^s_([A-Za-z0-9-]{1,24})_[A-Za-z0-9]+$/.exec(String(id ?? '')) || [])[1] || '';
 export const newExampleId = (now = Date.now(), rand = Math.random) => `e_${now.toString(36)}${rand36(rand, 6)}`;
 /** Ноорогоос үүсэх жишээний id — ноорог бүрт нэг (давхардахгүй) */
 export const exampleIdForDraft = (draftId) => `x_${String(draftId ?? '').replace(/^d_/, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 38) || '0'}`;
@@ -375,6 +383,7 @@ export const EXCLUDE_TEXT = {
   invalid: 'төрөл буруу',
   limit: 'тооны хязгаар хэтэрсэн',
   total_limit: 'нийт хэмжээний хязгаар хэтэрсэн',
+  hidden: 'холбосон үйлчилгээ / багц нуугдсан — AI-д оруулаагүй',
 };
 
 /* ---------- Eval ---------- */

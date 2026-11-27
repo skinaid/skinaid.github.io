@@ -7,7 +7,7 @@
    ========================================================================== */
 import { collection, query, where, orderBy, limit, getDocs, getDoc, doc, documentId } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { db, $, $$, esc, errText, session, setStatus } from './core.js?v=2c361933';
-import { usd, lastDays, aggregateDays, ratingStats, AUTO_GATE, ECHO_TEXT, RUN_STATUS_TEXT, SEND_KIND_TEXT, sendReasonText, ubMonth } from './messenger-lib.js?v=5a7e37da';
+import { usd, lastDays, aggregateDays, ratingStats, AUTO_GATE, ECHO_TEXT, RUN_STATUS_TEXT, SEND_KIND_TEXT, sendReasonText, ubMonth } from './messenger-lib.js?v=3d191f40';
 
 const RATING_LIMIT = 500;
 const box = $('#msOverview'), status = $('#msOvStatus'), chips = $('#msOvChips');

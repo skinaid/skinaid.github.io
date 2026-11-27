@@ -267,7 +267,14 @@ test('сургалт (аудит 2026-11-27): ноорогийн жишээни�
     { id: '_rev', title: 't', body: 'r', status: 'draft' },
   ]);
   assert.deepEqual(kb, { published: 1, chars: 113, over: false });
-  assert.equal(A.kbBudget(Array.from({ length: 20 }, (_, i) => ({ id: `k_${i}`, title: 'Т', body: 'б'.repeat(1500), status: 'published' }))).over, true);
+  assert.equal(A.kbBudget(Array.from({ length: 30 }, (_, i) => ({ id: `k_${i}`, title: 'Т', body: 'б'.repeat(1500), status: 'published' }))).over, true);
+  assert.equal(A.kbBudget(Array.from({ length: 101 }, (_, i) => ({ id: `k_${i}`, title: 'Т', body: 'б', status: 'published' }))).over, true, 'тооны хязгаар 100');
+  const sid = A.newServiceKbId('ub-cdce1283');
+  assert.match(sid, /^[A-Za-z0-9_-]{1,40}$/, 'rules-ийн id');
+  assert.equal(A.kbServiceId(sid), 'ub-cdce1283');
+  assert.equal(A.kbServiceId(A.newServiceKbId('exam-1')), 'exam-1');
+  assert.equal(A.kbServiceId(A.newKbId()), '', 'энгийн мэдлэг холбоогүй');
+  assert.equal(A.kbServiceId('voice'), '');
   const rows = Array.from({ length: 35 }, (_, i) => ({ userText: 'а', reply: 'б', note: '', updatedAt: new Date(i * 1000) }));
   assert.equal(A.exampleBudget(rows).used, 30, 'тооны хязгаар');
   assert.equal(A.exampleBudget(Array.from({ length: 25 }, () => ({ userText: 'а'.repeat(500), reply: 'б'.repeat(600), note: '' }))).used, 10, 'нийт 12,000 тэмдэгт');

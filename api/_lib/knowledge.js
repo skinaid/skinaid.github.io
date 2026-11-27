@@ -18,6 +18,7 @@ import { CATS, CLINIC } from './clinic-facts.js';
 import { KB_IDS } from './store.js';
 import { PAGES } from './generated/pages-knowledge.js';
 import { buildSocialCatalog } from './social/catalog-safe.js';
+import { catalogCoverage, kbServiceId } from './catalog-check.js';
 import { buildExamples } from './social/examples.js';
 
 /** Толгойг (4 read) хамгийн олондоо ийм давтамжтай шалгана */
@@ -39,6 +40,7 @@ export function knowledgeInput(site, catalog) {
     id: str(x?.id),
     name: str(x?.n),
     category: CATS[str(x?.c)] || '',
+    catKey: str(x?.c),
     description: str(x?.d),
     duration: str(x?.t),
     price: str(x?.p),
@@ -101,16 +103,26 @@ export function buildKnowledge(docs, opt = {}) {
     if (usable(voiceDoc)) voice = str(voiceDoc.body);
     else skipped.push({ id: `kb:${KB_VOICE_ID}`, kind: 'voice', reason: 'draft' });
   }
+  // Нуусан үйлчилгээ/багцад холбосон мэдлэг (`s_<id>_…`) AI-д орохгүй — эс бөгөөс бот нуусан үйлчилгээг дурдана
+  const base = knowledgeInput(docs.site, docs.catalog);
+  const hiddenIds = new Set([...base.services, ...base.packages].filter((x) => x.hidden).map((x) => x.id));
+  // Багцыг promoEnabled === false үед бүхэлд нь нуудаг — тэдгээрийн мэдлэг ч орохгүй
+  if (docs.site && docs.site.promoEnabled === false) for (const p of (Array.isArray(docs.catalog?.packages) ? docs.catalog.packages : [])) hiddenIds.add(str(p?.id));
   for (const r of kbRows) {
     if (special.has(r.id)) continue;
     if (!usable(r.data)) { skipped.push({ id: `kb:${r.id}`, kind: 'kb', reason: 'draft' }); continue; }
+    const sid = kbServiceId(r.id);
+    if (sid && hiddenIds.has(sid)) { skipped.push({ id: `kb:${r.id}`, kind: 'kb', reason: 'hidden' }); continue; }
     kb.push({ id: r.id, title: str(r.data.title), body: str(r.data.body) });
   }
-  const input = { ...knowledgeInput(docs.site, docs.catalog), voiceBrief: voice, kb, pages: opt.pages ?? PAGES };
+  const input = { ...base, voiceBrief: voice, kb, pages: opt.pages ?? PAGES };
   const catalog = buildSocialCatalog(input);
+  // admin «Үйлчилгээ бүрээр»: каталогийн мөр бүр ботод хэрхэн орсон (+ үнэгүй шалгалт; нэмэлт Firestore read 0)
+  const coverage = catalogCoverage(input, catalog, { kbIds: kbRows.filter((r) => !special.has(r.id)).map((r) => r.id) });
   const ex = buildExamples((docs.examples ?? []).map((r) => ({ id: r.id, ...(r.data && typeof r.data === 'object' ? r.data : {}) })));
   return {
     catalog,
+    coverage,
     phone: clinicPhone(docs.site),
     /** Нийтийн имэйл — «Холбоо барих» мөрөнд код нэмнэ (LLM-д очихгүй) */
     email: clinicEmail(docs.site),

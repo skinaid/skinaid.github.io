@@ -30,7 +30,7 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMe
  *   contactChannels?: readonly string[] }} CatalogInput  — contactChannels: «утас», «имэйл» (утга биш, зөвхөн суваг)
  * @typedef {'clinic'|'address'|'hours'|'contact'|'service'|'package'|'page'|'kb'} SocialFactKind
  * @typedef {{ id: string, kind: SocialFactKind, text: string }} SocialFact
- * @typedef {{ id: string, kind: 'kb'|'page'|'voice', reason: 'pii'|'empty'|'limit'|'total_limit' }} ExcludedEntry
+ * @typedef {{ id: string, kind: 'kb'|'page'|'voice', reason: 'pii'|'empty'|'limit'|'total_limit'|'hidden' }} ExcludedEntry  — hidden: knowledge.js (нуусан үйлчилгээнд холбосон)
  * @typedef {{ clinicName: string, facts: SocialFact[], allowedAmounts: number[], allowedPercents: number[], knownNumbers: number[],
  *   knowledgeText: string, voiceBrief: string, excluded: ExcludedEntry[], truncated: string[] }} SocialCatalog
  */
@@ -38,12 +38,15 @@ import { assertNoForbiddenSources, assertNoPii, findPii, moneyMentions, numberMe
 /** «contact» баримтын суваг → юуг систем нэмэх вэ (утга биш — нэр л) */
 const CONTACT_CHANNELS = Object.freeze({ утас: 'утасны дугаарыг', имэйл: 'имэйл хаягийг' });
 
-// variants/variantChars — нэг мөрийн UB Beauty-ийн хувилбарууд (assets/js/ub-catalog.js `v`; Diode лазер = 16 бүс)
-export const CATALOG_LIMITS = Object.freeze({ services: 80, packages: 30, descriptionChars: 200, variants: 20, variantChars: 120 });
+// variants/variantChars — нэг мөрийн UB Beauty-ийн хувилбарууд (assets/js/ub-catalog.js `v`; Diode лазер = 16 бүс).
+// descriptionChars 700 (2026-11-27 эзэмшигч): UB Beauty-ийн бүтэн тайлбар (хамгийн урт ≈ 670) — багцад юу багтдагийг бот
+// бүтнээр нь мэднэ (өмнө 200 тул 74-ийн 34 нь таслагддаг байв). services 120 — UB-д шинэ үйлчилгээ автоматаар нэмэгддэг.
+export const CATALOG_LIMITS = Object.freeze({ services: 120, packages: 30, descriptionChars: 700, variants: 20, variantChars: 120 });
 /** Мэдлэгийн (FAQ) бичлэг, эмчилгээний хуудас, брэнд дуу хоолойн хязгаар — prompt-ийн хэмжээ (кэштэй ч) хяналттай */
 // entryChars = гарчиг (≤ 120) + « — » + агуулга (admin ≤ 1500) + мөр шилжилт → « · » (+2 тэмдэгт) — admin-ий хязгаарт
-// багтсан бичлэг ихэнхдээ тасрахгүй (тасарвал «AI-д юу орж байна»-д харагдана)
-export const KB_LIMITS = Object.freeze({ entries: 60, entryChars: 1900, totalChars: 24_000, voiceChars: 1700 });
+// багтсан бичлэг ихэнхдээ тасрахгүй (тасарвал «AI-д юу орж байна»-д харагдана). entries 100 / totalChars 40k — үйлчилгээ
+// бүрт нэг «асуулт-хариулт» бичлэг (admin «Үйлчилгээ бүрээр», id `s_<үйлчилгээ>_…`) багтахаар; admin READ_LIMIT = 100.
+export const KB_LIMITS = Object.freeze({ entries: 100, entryChars: 1900, totalChars: 40_000, voiceChars: 1700 });
 export const PAGE_LIMITS = Object.freeze({ pages: 40, pageChars: 900, totalChars: 20_000 });
 
 /** 50000 → «50,000» */
@@ -72,7 +75,7 @@ export function priceAmounts(text) {
 }
 
 /** Баримтын id: Firestore-ийн id-г аюулгүй тэмдэгтээр (LLM source_ids-д буцааж заана) */
-const factId = (prefix, id) => `${prefix}:${String(id ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}`;
+export const factId = (prefix, id) => `${prefix}:${String(id ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}`;
 
 /** @param {CatalogInput} input @returns {SocialCatalog} */
 export function buildSocialCatalog(input) {
