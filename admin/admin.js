@@ -9,7 +9,7 @@
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
 import { ICON, dialog, setCurrentView, anyDirty, busyText, leaveBusy, refreshDirty, resetForms } from './ui.js?v=4ec734c0';
-import * as contentEditor from './m-content.js?v=1bb4d7c2';
+import * as contentEditor from './m-content.js?v=c2b85385';
 import * as bookings from './m-bookings.js?v=86d18531';
 import * as settings from './m-settings.js?v=7df0705b';
 import * as home from './m-home.js?v=540566f7';

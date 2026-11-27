@@ -1,0 +1,20 @@
+name: Сайтын статик мэдээлэл шинэчлэх
+on:
+  schedule:
+    - cron: '17 20 * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Нийтэлсэн мэдээллээр үндсэн салбарыг дахин build хийх
+        env:
+          DEPLOY_HOOK: ${{ secrets.SITE_CONTENT_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::SITE_CONTENT_DEPLOY_HOOK тохируулаагүй байна."
+            exit 1
+          fi
+          curl --silent --show-error --fail --max-time 30 --request POST --output /dev/null "$DEPLOY_HOOK"

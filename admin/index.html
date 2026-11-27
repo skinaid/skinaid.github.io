@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=e22f516c">
-  <link rel="stylesheet" href="/admin/admin.css?v=db9e3c27">
+  <link rel="stylesheet" href="/admin/admin.css?v=a1e57964">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -144,9 +144,16 @@
         <form id="contentForm" novalidate>
           <div class="panel field"><label for="contentPage">Хуудас</label><select id="contentPage"></select></div>
           <datalist id="contentPhotos"></datalist>
+          <div class="actions" id="contentShortcuts" hidden>
+            <button type="button" class="btn btn--outline btn--sm" data-content-photo="Эмчийн үзлэг, оношлогооны зураг">Эмчийн үзлэгийн зураг</button>
+            <button type="button" class="btn btn--outline btn--sm" data-content-photo="Бидний тухай · Жижиг зураг">Бидний тухай · Жижиг зураг</button>
+          </div>
           <div id="contentSections"></div>
+          <div id="contentPreviewBox" class="panel" hidden></div>
           <div class="actions" id="contentActions">
             <button class="btn btn--primary" id="contentSave" type="submit">Хадгалах</button>
+            <button class="btn btn--outline" id="contentPreview" type="button">Урьдчилан харах</button>
+            <button class="btn btn--outline" id="clinicalExport" type="button" hidden>Хянуулах ноорог татах</button>
             <button class="btn btn--outline" id="contentRetry" type="button" hidden>Дахин оролдох</button>
             <span role="status" id="contentStatus"></span>
           </div>
@@ -510,7 +517,8 @@
   <script src="/admin/pages-status.js?v=4a0c2dfa"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=4ea81ec8"></script>
-  <script src="/admin/content-pages.js?v=f1a86bdd"></script>
-  <script type="module" src="/admin/admin.js?v=e8e66769"></script>
+  <script src="/admin/clinical-sources.js?v=86a5934a"></script>
+  <script src="/admin/content-pages.js?v=0778a65b"></script>
+  <script type="module" src="/admin/admin.js?v=efc70575"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@
    Энэ файл ачаалагдахгүй (CDN блок, offline) бол main.js fallback сувгуудаа харуулна.
    Firestore хүсэлт бүр App Check (reCAPTCHA) token-той явна — app-check.js.
    ========================================================================== */
-import { pageKey } from './site-content.js?v=03117684';
+import { pageKey } from './site-content.js?v=3f4a8dce';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp, setLogLevel } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore-lite.js';
 import { firebaseConfig } from './firebase-config.js?v=feaeafa8';
@@ -47,7 +47,7 @@ export async function loadPublicSettings() {
   const reads = ids.map((id) => getDoc(doc(db, 'settings', id)));
   if (document.querySelector('script[data-site-content]')) {
     ids.push('content');
-    const page = pageKey(location.pathname);
+    const page = pageKey(document.querySelector('[data-content-path]')?.dataset.contentPath || location.pathname);
     reads.push(getDoc(doc(db, 'public_content', page)));
     if (page !== 'home') {
       ids.push('commonContent');
@@ -57,7 +57,7 @@ export async function loadPublicSettings() {
   const res = await Promise.allSettled(reads);
   if (res.every((r) => r.status === 'rejected')) throw res[0].reason;
   const out = {};
-  ids.forEach((id, i) => { const r = res[i]; out[id] = r.status === 'fulfilled' && r.value.exists() ? r.value.data() : null; });
+  ids.forEach((id, i) => { const r = res[i]; if (r.status === 'fulfilled') out[id] = r.value.exists() ? r.value.data() : null; });
   return out;
 }
 

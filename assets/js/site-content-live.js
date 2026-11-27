@@ -1,25 +1,23 @@
-import { contentFields, parseContent, applyContent, pageKey, applyFaq, FAQ_KEY } from './site-content.js?v=03117684';
+import { parseContent, renderPublicContent, restoreContent } from './site-content.js?v=3f4a8dce';
 
-const home = pageKey(location.pathname) === 'home';
-const fields = contentFields(document, home ? '/' : location.pathname, { includeCommon: true });
-let requested = false;
+const baked = document.querySelector('script[data-content-snapshot]');
+const snapshot = baked ? JSON.parse(baked.textContent) : {};
+let applied = false;
 function apply(settings) {
-  if (requested || !settings) return;
-  requested = true;
-  const values = parseContent(settings.content?.values);
-  const commonValues = parseContent(settings.commonContent?.values);
-  const overrides = home ? values : Object.fromEntries(fields.flatMap((field) => {
-    const source = field.common ? commonValues : values;
-    return Object.hasOwn(source, field.id) ? [[field.id, source[field.id]]] : [];
-  }));
-  applyContent(fields, overrides);
-  if (home && Object.hasOwn(values, FAQ_KEY)) applyFaq(document, values[FAQ_KEY]);
+  if (applied || !settings) return;
+  applied = true;
+  const raw = (key) => Object.hasOwn(settings, key) ? settings[key]?.values || null : snapshot[key] || null;
+  const local = raw('content');
+  const common = raw('commonContent');
+  if (local === (snapshot.content || null) && common === (snapshot.commonContent || null)) return;
+  if (baked) restoreContent(document);
+  renderPublicContent(document, document.querySelector('[data-content-path]')?.dataset.contentPath || location.pathname, parseContent(local), parseContent(common));
 }
 
 document.addEventListener('skinaid:settings', (event) => apply(event.detail));
 if (window.SkinAidBackend?.settings) apply(window.SkinAidBackend.settings);
 if (!document.querySelector('#bookForm')) {
-  const loadContent = () => import('./backend.js?v=0ac8f7bb').catch(() => {});
+  const loadContent = () => import('./backend.js?v=575c292e').catch(() => {});
   if (document.readyState === 'complete') loadContent();
   else window.addEventListener('load', loadContent, { once: true });
 }

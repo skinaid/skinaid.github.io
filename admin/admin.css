@@ -598,3 +598,5 @@ body.has-savebar .snackbar { bottom: 92px; }
 .content-field { margin-top: 16px; min-width: 0; }
 .content-field img { width: min(240px, 100%); max-height: 160px; object-fit: contain; object-position: left; }
 .content-field > button { align-self: flex-start; }
+
+#contentPreviewBox iframe { width: 100%; height: min(75vh, 850px); border: 1px solid var(--line); border-radius: 12px; margin-top: 12px; }
