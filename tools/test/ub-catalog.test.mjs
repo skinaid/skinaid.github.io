@@ -280,3 +280,17 @@ test('applyUbCatalog: тайлбар — UB-ээс ирсэн (ubD), UB арил
   const unl = applyUbCatalog([{ ...fromUb, id: 'inject-7' }, ...others], withD).services[0];
   assert.equal('ubD' in unl, false);
 });
+
+test('adminPriceOf: нуусан үнийг зөвхөн admin-д текст болгоно; сайтын p хоосон хэвээр', async () => {
+  const { adminPriceOf, ubFields } = await import('../../assets/js/ub-catalog.js');
+  const a = '6f1c2a10-0000-4000-8000-00000000000a', b = '6f1c2a10-0000-4000-8000-00000000000b';
+  const ub = new Map([
+    [a, { id: a, duration: 30, price: 80000, priceMax: null, priceHidden: true }],
+    [b, { id: b, duration: 30, price: 44000, priceMax: null, priceHidden: false }],
+  ]);
+  assert.deepEqual(adminPriceOf([a], ub), { text: '₮80,000', hidden: true });
+  assert.deepEqual(adminPriceOf([a, b], ub), { text: '₮44,000-с', hidden: true });
+  assert.deepEqual(adminPriceOf([b], ub), { text: '₮44,000', hidden: false });
+  assert.deepEqual(adminPriceOf(['missing'], ub), { text: '', hidden: false });
+  assert.equal(ubFields([a], ub).p, '', 'сайтын каталогт нуусан үнэ бичигдэхгүй');
+});

@@ -31,6 +31,8 @@ import { capReached } from './agent.js';
 import { buildSocialRequest, SOCIAL_PROMPT_VERSION } from './social/prompt.js';
 import { describeError } from './errors.js';
 import { FirestoreError } from './firestore.js';
+import { ubSyncConfig } from './ub-catalog-sync.js';
+import { fetchUbServices } from '../../assets/js/ub-catalog.js';
 
 export const ADMIN_ORIGIN = 'https://www.skinaid.mn';
 export const ADMIN_MAX_BODY = 16_384;
@@ -80,6 +82,24 @@ export function createAdminHandler(deps) {
 
   /** @type {Record<string, (rt: any, body: Record<string, any>, started: number, who: { email: string }) => Promise<Response>>} */
   const actions = {
+    /**
+     * UB Beauty-ийн үнэ — НУУЦ түлхүүрээр (сервер л), «Үнийг нийтэд харуулах» унтраалттай үйлчилгээнийх ч.
+     * Зөвхөн admin-ий «Үйлчилгээ / Багц» хүснэгтэд харуулна; сайтын каталогт бичихгүй.
+     * Нууц түлхүүр тохируулаагүй бол 503 ub_no_key (admin чимээгүй алгасна).
+     */
+    async ubPrices() {
+      const cfg = ubSyncConfig(env);
+      if (!cfg.key) return fail(503, 'ub_no_key');
+      let map;
+      try {
+        map = await fetchUbServices({ apiBase: cfg.apiBase, key: cfg.key, timeoutMs: 10_000, fetchImpl: deps.fetchImpl });
+      } catch (e) {
+        log(`[admin] ubPrices алдаа: ${describeError(e)}`);
+        return fail(502, 'ub_error');
+      }
+      const services = [...map.values()].filter((s) => s.price).map((s) => ({ id: s.id, price: s.price, priceMax: s.priceMax, priceHidden: s.priceHidden }));
+      return json({ ok: true, services });
+    },
     async knowledge(rt, body) {
       let k;
       let req;
@@ -371,8 +391,9 @@ export function createAdminHandler(deps) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(400, 'bad_json');
     const name = typeof body.action === 'string' && Object.hasOwn(actions, body.action) ? body.action : '';
     if (!name) return fail(404, 'unknown_action');
-    const rt = deps.getRuntime();
-    if (!rt) return fail(503, 'not_configured');
+    // UB Beauty-ийн үнэ нь Messenger-ийн runtime (Meta, Claude) шаардахгүй
+    const rt = name === 'ubPrices' ? null : deps.getRuntime();
+    if (!rt && name !== 'ubPrices') return fail(503, 'not_configured');
     try {
       return await actions[name](rt, body, started, who);
     } catch (e) {

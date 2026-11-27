@@ -144,6 +144,19 @@ export function ubFields(ids, ub) {
   return { off: false, t, p, d, v, missing };
 }
 
+/**
+ * ЗӨВХӨН ADMIN-д: «Үнийг нийтэд харуулах» унтраалттай үйлчилгээний ч жинхэнэ үнийн текст (нууц түлхүүрээр ирсэн үнэ).
+ * Сайтын `p`-д ХЭЗЭЭ Ч бичихгүй — admin хүснэгтийн placeholder-т л. Үнэ ирээгүй бол ''.
+ * @returns {{ text: string, hidden: boolean }}
+ */
+export function adminPriceOf(ids, ub) {
+  const present = (ids || []).map((id) => ub.get(String(id).toLowerCase())).filter((s) => s && s.price);
+  if (!present.length) return { text: '', hidden: false };
+  const single = present.length === 1 && !(present[0].priceMax && present[0].priceMax > present[0].price);
+  const text = single ? money(present[0].price) : money(Math.min(...present.map((s) => s.price))) + '-с';
+  return { text, hidden: present.some((s) => s.priceHidden) };
+}
+
 /** Хувилбаруудын харьцуулах тамга — талбар бүрээр (Firestore map-ийн түлхүүрийг эрэмбэлж буцаадаг тул JSON дараалал зөрнө) */
 const vSig = (v) => JSON.stringify((Array.isArray(v) ? v : []).map((x) => [x?.n ?? '', x?.t ?? '', x?.p ?? '', x?.d ?? '']));
 

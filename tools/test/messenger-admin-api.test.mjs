@@ -615,3 +615,29 @@ test('аудит: cron messenger_status-аас зөвхөн eval-ийн бари
   await s.store.purgeExpired('messenger_status', 200);
   assert.deepEqual(s.fake.list('messenger_status/').sort(), ['messenger_status/evals', 'messenger_status/main']);
 });
+
+test('admin API ubPrices: нууц түлхүүрээр UB Beauty-ийн үнэ (нуусан ч) — runtime шаардахгүй; түлхүүргүй бол 503 ub_no_key', async () => {
+  const sk = 'sk_live_' + 'a'.repeat(43);
+  const id1 = '6f1c2a10-0000-4000-8000-000000000001', id2 = '6f1c2a10-0000-4000-8000-000000000002';
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push({ url: String(url), key: init.headers['X-Api-Key'] });
+    return new Response(JSON.stringify({ services: [
+      { id: id1, name: 'A', duration_min: 30, price: 50000, price_max: null, price_hidden: false },
+      { id: id2, name: 'B', duration_min: 60, price: 80000, price_max: 120000, price_hidden: true },
+    ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const mk = (env) => createAdminHandler({ getRuntime: () => null, env, fetchImpl, verifyIdToken: async () => ({ email: 'hello@skinaid.mn' }), log: () => {} });
+  const req = () => new Request('https://www.skinaid.mn/api/admin', { method: 'POST', headers: { Origin: ADMIN_ORIGIN, 'Content-Type': 'application/json', Authorization: 'Bearer good' }, body: JSON.stringify({ action: 'ubPrices' }) });
+  const none = await mk({})(req());
+  assert.equal(none.status, 503);
+  assert.equal((await none.json()).error, 'ub_no_key');
+  const res = await mk({ UBBEAUTY_SECRET_KEY: sk })(req());
+  assert.equal(res.status, 200);
+  const j = await res.json();
+  assert.deepEqual(j.services, [
+    { id: id1, price: 50000, priceMax: null, priceHidden: false },
+    { id: id2, price: 80000, priceMax: 120000, priceHidden: true },
+  ]);
+  assert.equal(seen[0].key, sk, 'нууц түлхүүрээр (сервер) дуудна');
+});

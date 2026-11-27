@@ -362,6 +362,8 @@ export const API_ERRORS = {
   network: 'Сервертэй холбогдож чадсангүй. Сүлжээгээ шалгана уу.',
   client_timeout: 'Сервер хугацаандаа (75 секунд) хариулсангүй. Сүлжээгээ шалгаад дахин оролдоно уу.',
   no_server: 'Серверийн функц энэ хаяг дээр алга — зөвхөн https://www.skinaid.mn/admin дээр ажиллана.',
+  ub_no_key: 'UB Beauty-ийн нууц түлхүүр (UBBEAUTY_SECRET_KEY) серверт тохируулаагүй — нуусан үнийг татах боломжгүй.',
+  ub_error: 'UB Beauty-ээс үнэ татаж чадсангүй — дараа дахин оролдоно уу.',
 };
 export const apiErrorText = (code) => API_ERRORS[code] || `Алдаа гарлаа (${String(code).slice(0, 40)}).`;
 

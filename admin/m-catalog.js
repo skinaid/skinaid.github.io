@@ -8,7 +8,8 @@ import { db, $, $$, esc, str, fmtDate, errText, session, setStatus, DEFAULTS, CA
 import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow, captureFocus } from './ui.js?v=720127aa';
 import { normSearch } from './lib.js?v=a9638bd3';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import { UB_LINKS, DESC_MAX, applyUbCatalog, fetchUbServices, siteHidden } from '../assets/js/ub-catalog.js?v=e905b158';
+import { api } from './messenger-api.js?v=f85416c4';
+import { UB_LINKS, DESC_MAX, applyUbCatalog, fetchUbServices, siteHidden, adminPriceOf } from '../assets/js/ub-catalog.js?v=670c6109';
 import { API_BASE, PUBLISHABLE_KEY } from '../assets/js/ubbeauty-config.js?v=8eb0f74a';
 
 const ref = doc(db, 'settings', 'catalog');
@@ -160,7 +161,39 @@ function fill(services, packages) {
   const byId = new Map(packages.map(normPkg).map((p) => [p.id, p]));
   pkgBody.replaceChildren(...DEFAULTS.packages.map((d) => pkgRow(byId.get(d.id) || normPkg(d))));
   $$('textarea', svcBody).forEach(autoGrow);
+  markAdminPrices();
   applyFilter();
+}
+
+/* ---------- Зочдод нуусан үнэ (зөвхөн admin-д) ----------
+   UB Beauty-д «Үнийг нийтэд харуулах» унтраалттай үйлчилгээний үнийг сервер НУУЦ түлхүүрээр авна (/api/admin ubPrices).
+   Үнийн нүдний placeholder + «Зочдод нуусан» тэмдгээр л харуулна — талбарын утга хоосон хэвээр тул сайтад хадгалагдахгүй. */
+let adminPrices = null;   // Map(id → { price, priceMax, priceHidden }) | null
+function markAdminPrices() {
+  for (const tr of $$('tr[data-id]', svcBody)) {
+    const ids = UB_LINKS[tr.dataset.id];
+    const input = $('[data-k="p"]', tr);
+    $('.price-hidden', tr)?.remove();
+    input.placeholder = '';
+    if (!ids || !adminPrices || input.value.trim()) continue;
+    const { text, hidden } = adminPriceOf(ids, adminPrices);
+    if (!text) continue;
+    input.placeholder = text;
+    if (hidden) {
+      const tag = document.createElement('span');
+      tag.className = 'price-hidden';
+      tag.textContent = 'Зочдод нуусан';
+      tag.title = 'UB Beauty-д «Үнийг нийтэд харуулах» унтраалттай — үнэ зөвхөн танд (admin) харагдана, сайт ба захиалгын маягтад гарахгүй. Төлбөрийн алхамд л дүн гарна.';
+      input.after(tag);
+    }
+  }
+}
+async function loadAdminPrices() {
+  try {
+    const j = await api('ubPrices', {}, { timeoutMs: 15_000 });
+    adminPrices = new Map((j.services || []).map((s) => [String(s.id).toLowerCase(), s]));
+    markAdminPrices();
+  } catch (_) { /* нууц түлхүүр тохируулаагүй / localhost — нуусан үнэ хоосон хэвээр */ }
 }
 function applyFilter() {
   const nq = normSearch(svcSearch.value), cat = svcCat.value;
@@ -206,6 +239,7 @@ export async function load() {
     const pulled = await pullUb(services);
     ubPending = Boolean(pulled && pulled.changed);
     if (ubPending) { rememberUb(pulled.services); fill(pulled.services, packages); }
+    loadAdminPrices();
     ready = true;
     lock(false);
   } catch (e) {
