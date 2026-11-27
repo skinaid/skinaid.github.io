@@ -85,7 +85,10 @@ export async function loadContent(root, { preview = false } = {}) {
   const hubMod = existsSync(join(root, 'content/hub.mjs')) ? await import(pathToFileURL(join(root, 'content/hub.mjs')).href) : {};
   const pipeMod = existsSync(join(root, 'content/pipeline.mjs')) ? await import(pathToFileURL(join(root, 'content/pipeline.mjs')).href) : {};
   const pipeline = pipeMod.pipeline || [];
-  return { pages: [...bySlug.values()], doctors: doc.doctors || {}, hub: hubMod.hub || null, pipeline, pipelineSlugs: new Set(pipeline.map((p) => p.slug)) };
+  return {
+    pages: [...bySlug.values()], doctors: doc.doctors || {}, hub: hubMod.hub || null, pipeline, pipelineSlugs: new Set(pipeline.map((p) => p.slug)),
+    retiredLegacy: pipeMod.retiredLegacy || [],   // зогссон үйлчилгээний хуудасгүй хуучин URL → hub-ийн ангилал
+  };
 }
 
 const stable = (v) => {

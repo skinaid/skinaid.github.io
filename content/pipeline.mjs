@@ -1,4 +1,4 @@
-// 15 эмчилгээний хуудасны төлөвлөгөө (SEO 3-р үе шат). Нууц мэдээлэлгүй — repo нийтэд нээлттэй.
+// 14 эмчилгээний хуудасны төлөвлөгөө (SEO 3-р үе шат). Нууц мэдээлэлгүй — repo нийтэд нээлттэй.
 // Хуудас бүр нэг гол түлхүүр үгийг (primary) ЭЗЭМШИНЭ; secondary нь зөвхөн тэр хуудсанд (давхардлаас сэргийлнэ).
 // catalogIds — тэр хуудас руу холбогдох үйлчилгээ (нэг үйлчилгээ нэг хуудсанд); alsoIds — үнийн хүснэгтэд харуулах.
 // legacy — хуучин Wix URL (нийтлэгдэхэд 308 redirect, build удирдана). Хуудасны эцсийн өгөгдөл content/pages/<slug>.mjs-д.
@@ -68,10 +68,6 @@ export const pipeline = [
       '/service-page/facetem-caha-тарилга-филлертэй',
       '/service-page/facetem-caha-тарилга-2-бүтэн',
     ] },
-  { slug: 'ultraformer-hifu', week: 4, reviewer: null, category: 'lift', h1: 'Ультраформер III (HIFU) арьс чангалах',
-    primary: 'ультраформер', secondary: ['HIFU', 'арьс чангалах', 'нүүр өргөх'],
-    catalogIds: ['lift-1'], alsoIds: [], related: ['juvelook-facetem'],
-    bookingOption: 'Арьс чангалах (Ультраформер III)', legacy: ['/service-page/ультраформер-iii'] },
   { slug: 'botoks', week: 5, reviewer: null, category: 'anti', h1: 'Ботулинум токсин (ботокс) тарилга',
     primary: 'ботокс тарилга', secondary: ['суганы хөлрөлт', 'V-line ботокс', 'үрчлээний тарилга'],
     catalogIds: ['anti-1', 'minor-3'], alsoIds: [], related: ['filler'],
@@ -143,4 +139,11 @@ export const pipeline = [
       '/service-page/rf-нүүр-хүзүүний-массаж',
       '/service-page/cooling-rf-massage',
     ] },
+];
+
+// Зогссон үйлчилгээний хуучин (Wix) URL: өөрийн хуудас ХЭЗЭЭ Ч гарахгүй тул pipeline-д байхгүй, гэхдээ Google-д индексжсэн
+// хаяг нь catch-all-ын оронд hub-ийн тухайн ангилал руу (/emchilgee#<category>, 307) очно (build удирдана).
+//   2026-11-26: эмнэлэгт уг төхөөрөмж байхгүй (эзэмшигч) — үйлчилгээг каталог, сайтаас хассан.
+export const retiredLegacy = [
+  { category: 'lift', legacy: ['/service-page/ультраформер-iii'] },
 ];

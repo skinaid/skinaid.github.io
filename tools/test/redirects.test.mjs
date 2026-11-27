@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { manageRedirects, isManaged } from '../lib/redirects.mjs';
 import { sourceToRegExp } from '../lib/check.mjs';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import { pipeline, retiredLegacy } from '../../content/pipeline.mjs';
 
 const base = JSON.stringify({
   redirects: [
@@ -39,4 +42,27 @@ test('гараагүй хуудасны legacy → hub-ийн ангилал 307
 
   const bad = manageRedirects(base, [{ slug: 'x', legacy: ['/service-page/a'], dest: '/#treatments' }], sourceToRegExp);
   assert.equal(bad.errors.length, 1, '/emchilgee-ээс гадуур destination-ийг хүлээн авахгүй');
+});
+
+test('зогссон үйлчилгээ (retiredLegacy): хуудас, каталогийн мөргүй ч хуучин URL hub-ийн ангилал руу 307 хэвээр', () => {
+  const vercel = readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8');
+  const sandbox = { window: {} };
+  vm.runInNewContext(readFileSync(new URL('../../assets/js/catalog-defaults.js', import.meta.url), 'utf8'), sandbox);
+  const catalog = sandbox.window.SKINAID_DEFAULTS;
+  // Бодит vercel.json: host-ийн нөхцөлтэй (has) дүрмийг алгасна — манай домэйнд эхний таарах дүрэм
+  const find = (text, path) => JSON.parse(text).redirects.filter((r) => !r.has).find((r) => sourceToRegExp(r.source).test(encodeURI(path)));
+  assert.ok(retiredLegacy.length > 0);
+  for (const r of retiredLegacy) {
+    assert.ok(Object.hasOwn(catalog.cats, r.category), `category "${r.category}" hub-д бий`);
+    for (const path of r.legacy) {
+      const rule = find(vercel, path);
+      assert.equal(rule.destination, '/emchilgee#' + r.category, path);
+      assert.equal(rule.permanent, false, 'түр (307) — catch-all биш, тухайн ангилал');
+      assert.ok(!pipeline.some((p) => (p.legacy || []).includes(path)), 'pipeline-ийн хуудастай давхцахгүй');
+    }
+  }
+  // 2026-11-26 (эзэмшигч): эмнэлэгт Ультраформер / HIFU төхөөрөмж байхгүй — сайт сурталчлахгүй, хуучин хаяг эвдрэхгүй
+  assert.equal(find(vercel, '/service-page/ультраформер-iii').destination, '/emchilgee#lift');
+  assert.ok(!pipeline.some((p) => p.slug === 'ultraformer-hifu'), 'төлөвлөсөн хуудас алга');
+  assert.ok(!catalog.treatments.some((t) => t.id === 'lift-1' || /hifu|ультраформер|ultraformer/i.test(`${t.n} ${t.d}`)), 'анхдагч каталогт алга');
 });

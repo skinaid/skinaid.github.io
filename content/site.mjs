@@ -50,7 +50,7 @@ export const site = {
     { label: 'Сорви, нүхжилт', page: 'batganii-sorvi', hub: 'scar' },
     { label: 'Тарилга эмчилгээ', page: null, hub: 'inject' },
     { label: 'Лазер, гэрлэн эмчилгээ', page: null, hub: 'laser' },
-    { label: 'Арьс чангалах', page: 'ultraformer-hifu', hub: 'lift' },
+    { label: 'Арьс чангалах', page: null, hub: 'lift' },
     { label: 'Дусал эмчилгээ', page: null, hub: 'iv' },
   ],
 };
