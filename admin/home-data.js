@@ -72,12 +72,12 @@ window.SKINAID_HOME_DATA = {
   "assets/img/photos/hero.jpg?v=16588751",
   "assets/img/photos/t-acne.jpg?v=88f4f94c",
   "assets/img/photos/t-co2.jpg?v=a21d7fc5",
+  "assets/img/photos/t-diode-face.jpg?v=e2f86a0a",
   "assets/img/photos/t-diode.jpg?v=0c238357",
   "assets/img/photos/t-glass.jpg?v=8db83fe1",
   "assets/img/photos/t-online.jpg?v=ffc75e84",
   "assets/img/photos/t-rejuran.jpg?v=038b602e",
   "assets/img/photos/t-rf.jpg?v=5c1f5dc4",
-  "assets/img/photos/t-ultraformer.jpg?v=e2f86a0a",
   "assets/img/photos/t-vivace.jpg?v=2a4a50fd"
  ],
  "internalPaths": [
