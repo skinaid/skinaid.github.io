@@ -112,6 +112,7 @@ window.SKINAID_HOME_DATA = {
  ],
  "videos": [
   "/assets/video/carboxy-reasons.mp4",
+  "/assets/video/cellbooster.mp4",
   "/assets/video/ipl.mp4",
   "/assets/video/qa-acne-scar.mp4",
   "/assets/video/qa-injection-safety.mp4",

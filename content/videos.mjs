@@ -10,6 +10,7 @@ export const videos = [
   { url: '/assets/video/qa-recovery.mp4', title: 'Эдгэрэлтийн хугацаа хэд хоног байдаг вэ?' },
   { url: '/assets/video/qa-injection-safety.mp4', title: 'Тарилга арьсанд сөрөг нөлөөтэй юу?' },
   { url: '/assets/video/salmon-injection.mp4', title: 'Загасан тарилга' },
+  { url: '/assets/video/cellbooster.mp4', title: 'Cellbooster Shape — өөх хайлуулах тарилга' },
   { url: '/assets/video/carboxy-reasons.mp4', title: 'Карбокси хийлгэх 5 шалтгаан' },
   { url: '/assets/video/vivace-reel.mp4', title: 'VIVACE эмчилгээ' },
   { url: '/assets/video/ipl.mp4', title: 'IPL эмчилгээ' },
