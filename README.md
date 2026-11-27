@@ -129,7 +129,8 @@ admin → «Эмчилгээний хуудас» цэс төлөв, хуваа�
    Хугацаа дууссаны дараа тус section-ийг бүхэлд нь, мөн цэсний `#promo` холбоосуудыг (3 газар) устгана.
 2. **Ажлын цаг, утас, и-мэйл** — `/admin/` → Тохиргоо хэсэгт бичнэ (код засах шаардлагагүй). Хоосон бол HTML дахь текст харагдана.
 3. **Үйлчилгээний жагсаалт, үнэ, багц** — `/admin/` → Үйлчилгээ / Багц хэсэгт засна. Анхны утга `assets/js/catalog-defaults.js`-д;
-   Firestore-д хадгалсны дараа сайт тэндхийг уншина (сайт нэг нээлтэд 2 л read хийнэ).
+   Firestore-д хадгалсны дараа сайт тэндхийг уншина (сайт нэг нээлтэд 2 л read хийнэ). **Үнэ, хугацаа = UB Beauty** — доорх
+   «Үйлчилгээний үнэ, хугацаа = UB Beauty».
 4. **Цаг захиалах** — үндсэн нь онлайн цаг захиалга (UB Beauty, доорх «Онлайн цаг захиалга»): үйлчлүүлэгч бодит сул цагаас
    сонгож захиалах ба захиалга эмнэлгийн UB Beauty календарьт шууд орно. UB Beauty-ийн API ажиллахгүй (сүлжээ, серверийн
    алдаа, суваг түр зогссон) эсвэл `ubbeauty-config.js`-д түлхүүр хоосон бол хуучин «хүсэлт илгээх» маягт (`#bookForm`)
@@ -212,6 +213,34 @@ node tools/ub-mock-server.mjs
 дугааруудыг (`99000001` = SLOT_TAKEN, `99000003` = хариу тасрах г.м.) `tools/ub-mock-server.mjs`-ийн эхэнд бичсэн.
 Нөөц маягтыг локалаас бүү илгээ — жинхэнэ Firestore-д бичигдэнэ.
 
+### Үйлчилгээний үнэ, хугацаа = UB Beauty (2026-11-27)
+
+Үнэ, хугацааны **цорын ганц эх = UB Beauty** (os.ubbeauty.mn → Тохиргоо → Үйлчилгээ) — нэг мэдээллийг хоёр газар засаж
+зөрүүлэхгүйн тулд. Сайтын «Онцлох эмчилгээ»-ний мөр бүрийг UB Beauty-ийн нэг эсвэл хэд хэдэн үйлчилгээтэй холбоно
+(`assets/js/ub-catalog.js` → `UB_LINKS`; жишээ: «Diode лазер үс арилгах» = 16 бүс).
+
+| Талбар | Эх |
+|---|---|
+| Үнэ, хугацаа | UB Beauty — admin дээр түгжээтэй («UB Beauty» тэмдэг). Үнэ UB Beauty-д «Үнийг нийтэд харуулах» асаалттай үед л гарна; олон үйлчилгээтэй мөрөнд хамгийн бага үнэ «₮44,000-с», аль нэг нь нуусан бол үнэгүй |
+| Харагдах эсэх | UB Beauty-д холбоотой бүх үйлчилгээ идэвхгүй/захиалж болохгүй болбол сайтаас автоматаар нуугдана («UB Beauty-д идэвхгүй»); буцаж идэвхжвэл гарна. Сайтын «Нуух» сонголт (`hiddenSite`) тусдаа хадгалагдана |
+| Нэр, тайлбар, ангилал, дараалал | Сайт (admin) — маркетингийн текст, UB Beauty-ийн кассын нэрээс ялгаатай |
+
+**Шинэчлэл.** (1) Admin «Үйлчилгээ / Багц» нээх бүрт UB Beauty-г (нийтийн `pk_` түлхүүрээр) татаж, өөрчлөлт байвал
+«Хадгалах» дарж оруулна; «UB Beauty-гээс шинэчлэх» товч өөр засваргүй үед шууд хадгална. (2) Өдөр бүр УБ 04:00-д cron
+(`api/_lib/ub-catalog-sync.js`) Firestore-ийг шинэчилнэ — 04:17-ийн content-refresh build статик HTML-д оруулна. Messenger бот
+`settings/catalog`-оос уншдаг тул шинэчлэлийн дараа шинэ утгыг авна.
+
+**Хамгаалалт.** UB Beauty-ийн жагсаалтад холбоотой id-ийн 50%-иас бага нь ирвэл (түлхүүр буруу, API алдаа) шинэчлэхгүй — сайт
+сүүлд хадгалсан утгаараа үлдэнэ. Сервер баримтын `updateTime`-аар бичнэ (admin зэрэг хадгалсан бол дарж бичихгүй).
+
+**Эзэмшигчийн алхам (cron-д, нэг удаа):** os.ubbeauty.mn → Холболт → Вэб суваг → «Түлхүүр үүсгэх» (төрөл: **нууц**) →
+Vercel → Settings → Environment Variables → `UBBEAUTY_SECRET_KEY` = `sk_live_…` (Production). Нууц түлхүүрийг git, сайтын файлд
+ХЭЗЭЭ Ч бүү тавь. Тавиагүй бол cron энэ алхмыг алгасна (`ubCatalog: "skipped:no_key"`), admin-ийн шинэчлэл ажилласаар.
+
+**Шинэ холбоос.** UB Beauty-д шинэ үйлчилгээ нэмж сайтад гаргах бол `UB_LINKS`-д сайтын мөрийн id → UB Beauty-ийн үйлчилгээний id
+(`/api/v1/web/services`-ийн `id`) нэмнэ → `node tools/build.mjs` → тест (`tools/test/ub-catalog.test.mjs`). Холбоогүй мөр
+(2026-11-27: Exo one, Загасан тарилга, Япон гиалурон, IPL ×2, Нөсөө лазер, Эссенциале, RF хүйтэн массаж) хуучнаараа гараар.
+
 ## Firebase backend
 
 | Зүйл | Утга |
@@ -257,7 +286,7 @@ Production-д оруулахдаа `firestore.rules`-ийг Firebase console-о�
 - `bookings/{id}` — `name, phone, service, date, message, status(new|contacted|confirmed|cancelled), source('web'), createdAt`, admin нэмдэг: `note, updatedAt, updatedBy`.
   Хэн ч **зөвхөн үүсгэж** чадна (талбар бүр дүрмээр шалгагдана); унших/засах/устгах — зөвхөн admin.
 - `settings/site` — `hours, phone, email, promoEnabled, bookingEnabled` — нийтэд уншигдана, admin бичнэ.
-- `settings/catalog` — `services[] (id,c,n,d,t,p,hidden), packages[] (id,name,price,hidden)` — нийтэд уншигдана, admin бичнэ.
+- `settings/catalog` — `services[] (id,c,n,d,t,p,hidden,hiddenSite,ub?,ubOff?), packages[] (id,name,price,hidden)`, `ubSyncedAt` — нийтэд уншигдана, admin бичнэ.
 - `settings/home` — `hero{badge,titlePre,titleEm,titlePost,text,btnPrimary,btnSecondary,stats[≤3]{num,suffix,label}}, posts[≤12]{id,cat,title,text,by,img,url,hidden}, baseRev` —
   нийтэд уншигдана (зөвхөн нүүр хуудас; нүүр нээх бүрт 3 read болно), admin «Нүүр хуудас» бичнэ. Урт, төрөл, escape: `assets/js/home-render.js`
   LIMITS + norm() (сайт, admin, build бүгд дамжуулна). `firestore.rules` validHero/validPost нь зөвхөн бүтэц (түлхүүр, ≤3 / ≤12) ба
