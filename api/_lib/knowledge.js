@@ -43,6 +43,8 @@ export function knowledgeInput(site, catalog) {
     duration: str(x?.t),
     price: str(x?.p),
     hidden: x?.hidden === true,
+    // UB Beauty-ийн хувилбарууд (assets/js/ub-catalog.js `v`) — сайт «N сонголт» дэлгэж харуулдаг
+    variants: (Array.isArray(x?.v) ? x.v : []).map((o) => ({ name: str(o?.n), duration: str(o?.t), price: str(o?.p), description: str(o?.d) })),
   }));
   // Сайт багцыг promoEnabled === false үед л нуудаг (assets/js/main.js)
   const packages = s.promoEnabled === false ? [] : (Array.isArray(c.packages) ? c.packages : []).map((x) => ({

@@ -3,11 +3,13 @@
    Үйлчилгээний үнэ, хугацааны ЦОРЫН ГАНЦ эх = UB Beauty (os.ubbeauty.mn → Тохиргоо → Үйлчилгээ).
    Сайтын «Онцлох эмчилгээ» мөр бүрийг UB Beauty-ийн нэг эсвэл хэд хэдэн үйлчилгээтэй холбоно (UB_LINKS).
    Холбоотой мөрийн хугацаа (t), үнэ (p), «UB Beauty-д идэвхгүй» (ubOff)-ийг энэ модуль UB Beauty-ийн
-   `/api/v1/web/services`-ээс тооцно — admin дээр гараар засахгүй (түгжээтэй). Сайтын нэр (n), тайлбар (d),
-   ангилал (c), «Нуух» (hiddenSite) сайтынх хэвээр.
+   `/api/v1/web/services`-ээс тооцно — admin дээр гараар засахгүй (түгжээтэй). Тайлбар (2026-11-27 эзэмшигч):
+   ганц үйлчилгээтэй мөрийн d = UB Beauty-ийн тайлбар; олон үйлчилгээтэй мөрийн d сайтынх (бүлгийн товч), харин
+   v = UB Beauty-ийн хувилбар бүр { n, t, p, d } (сайт «N сонголт» дэлгэж харуулна, бот хувилбар бүрийн үнийг мэднэ).
+   Сайтын нэр (n), ангилал (c), «Сайтаас нуух» (hiddenSite) сайтынх хэвээр.
 
    Хэрэглэгч: admin/m-catalog.js (хөтөч, pk түлхүүр), api/_lib/ub-catalog-sync.js (сервер, sk түлхүүр, өдөр бүр).
-   Firestore `settings/catalog`-ийн мөр: { id, c, n, d, t, p, hidden, hiddenSite, ub?, ubOff? } —
+   Firestore `settings/catalog`-ийн мөр: { id, c, n, d, t, p, hidden, hiddenSite, ub?, ubOff?, ubD?, v? } — ubD = d нь UB-ээс,
    hidden = hiddenSite || ubOff (сайт, build, Messenger бот зөвхөн `hidden`-ийг уншина).
    Тест: tools/test/ub-catalog.test.mjs
    ========================================================================== */
@@ -75,6 +77,11 @@ export const MIN_PRESENT_SHARE = 0.5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const money = (n) => '₮' + Math.round(n).toLocaleString('en-US');
 const posInt = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null);
+const oneLine = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+/** Тайлбарын дээд урт (admin, Firestore мөр) */
+export const DESC_MAX = 1000;
+/** Нэг үйлчилгээний нийтийн үнийн текст: «₮50,000», хэлбэлзэлтэй бол «₮80,000-с», нуусан бол '' */
+const priceOf = (s) => (s.priceHidden || !s.price ? '' : money(s.price) + (s.priceMax && s.priceMax > s.price ? '-с' : ''));
 
 /** 30 → «30 мин», 60 → «1 цаг», 90 → «1 цаг 30 мин» */
 export function formatDuration(min) {
@@ -97,6 +104,8 @@ export function parseUbServices(json) {
     if (!s || typeof s.id !== 'string' || !UUID.test(s.id)) continue;
     out.set(s.id.toLowerCase(), {
       id: s.id.toLowerCase(),
+      name: oneLine(s.name, 120),
+      description: oneLine(s.description, DESC_MAX),
       duration: posInt(s.duration_min),
       price: posInt(s.price),
       priceMax: posInt(s.price_max),
@@ -113,13 +122,15 @@ export function parseUbServices(json) {
  *  - p: бүх (идэвхтэй) үйлчилгээний үнэ нийтэд ил үед л. Ганц үйлчилгээ, дээд үнэгүй → «₮50,000»;
  *       эс бөгөөс хамгийн бага үнэ «₮44,000-с». Аль нэг нь нуусан бол хоосон (нуусан нь хамгийн хямд байж болзошгүй).
  *  - t: ганц хугацаа → «30 мин»; ялгаатай бол «15–90 мин»
+ *  - d: ганц үйлчилгээтэй мөрөнд UB Beauty-ийн тайлбар (хоосон бол null — сайтынх хэвээр); олон бол null
+ *  - v: олон үйлчилгээтэй мөрөнд идэвхтэй хувилбар бүр { n, t, p, d } (UB_LINKS-ийн дарааллаар); ганц бол null
  * @param {readonly string[]} ids
  * @param {Map<string, {duration: number|null, price: number|null, priceMax: number|null, priceHidden: boolean}>} ub
  */
 export function ubFields(ids, ub) {
   const present = ids.map((id) => ub.get(id.toLowerCase())).filter(Boolean);
   const missing = ids.filter((id) => !ub.has(id.toLowerCase()));
-  if (!present.length) return { off: true, t: '', p: '', missing };
+  if (!present.length) return { off: true, t: '', p: '', d: null, v: null, missing };
   const mins = [...new Set(present.map((s) => s.duration).filter(Boolean))].sort((a, b) => a - b);
   const t = !mins.length ? '' : mins.length === 1 ? formatDuration(mins[0]) : `${mins[0]}–${mins[mins.length - 1]} мин`;
   let p = '';
@@ -127,8 +138,14 @@ export function ubFields(ids, ub) {
     const single = present.length === 1 && !(present[0].priceMax && present[0].priceMax > present[0].price);
     p = single ? money(present[0].price) : money(Math.min(...present.map((s) => s.price))) + '-с';
   }
-  return { off: false, t, p, missing };
+  const multi = ids.length > 1;
+  const d = !multi && present[0].description ? present[0].description : null;
+  const v = multi ? present.map((s) => ({ n: s.name, t: formatDuration(s.duration), p: priceOf(s), d: s.description })) : null;
+  return { off: false, t, p, d, v, missing };
 }
+
+/** Хувилбаруудын харьцуулах тамга — талбар бүрээр (Firestore map-ийн түлхүүрийг эрэмбэлж буцаадаг тул JSON дараалал зөрнө) */
+const vSig = (v) => JSON.stringify((Array.isArray(v) ? v : []).map((x) => [x?.n ?? '', x?.t ?? '', x?.p ?? '', x?.d ?? '']));
 
 /** Мөрийн сайтын «Нуух» сонголт (хуучин баримтад hiddenSite байхгүй — тэр үед hidden нь гараар нуусан) */
 export const siteHidden = (row) => (typeof row?.hiddenSite === 'boolean' ? row.hiddenSite : row?.hidden === true);
@@ -157,14 +174,23 @@ export function applyUbCatalog(services, ub, links = UB_LINKS) {
     const hiddenSite = siteHidden(r);
     if (!ids) {
       unlinked.push(r?.id);
-      const { ub: _u, ubOff: _o, ...rest } = r || {};
+      const { ub: _u, ubOff: _o, v: _v, ubD: _d, ...rest } = r || {};
       return { ...rest, hiddenSite, hidden: hiddenSite };
     }
     const f = ubFields(ids, ub);
     if (f.off) off.push(r.id);
     missing.push(...f.missing);
-    const next = { ...r, t: f.t, p: f.p, hiddenSite, ub: [...ids], ubOff: f.off, hidden: hiddenSite || f.off };
-    if (next.t !== r.t || next.p !== r.p || next.hidden !== r.hidden || r.ubOff !== f.off) changed.push(r.id);
+    const { v: _v, ubD: _d, ...base } = r;
+    // d: UB-ийн тайлбар байвал тэр (ubD = true — admin түгжинэ). UB тайлбараа арилгасан бол (өмнө нь UB-ээс ирсэн) хоосон;
+    // UB-д хэзээ ч тайлбаргүй бол сайтынх (admin засна). Олон хувилбартай мөрөнд үргэлж сайтынх.
+    const prevD = typeof r.d === 'string' ? r.d : '';
+    const d = f.d ?? (f.off ? prevD : r.ubD === true ? '' : prevD);
+    const next = { ...base, t: f.t, p: f.p, d, hiddenSite, ub: [...ids], ubOff: f.off, hidden: hiddenSite || f.off };
+    if (f.d) next.ubD = true;
+    else if (f.off && r.ubD === true) next.ubD = true;   // түр идэвхгүй — UB-ийн тайлбарыг хадгална
+    if (f.v && f.v.length) next.v = f.v;
+    if (next.t !== r.t || next.p !== r.p || next.d !== r.d || next.hidden !== r.hidden || r.ubOff !== f.off
+      || (next.ubD === true) !== (r.ubD === true) || vSig(next.v) !== vSig(r.v)) changed.push(r.id);
     return next;
   });
   const unused = [...ub.keys()].filter((id) => !linkedIds.has(id));

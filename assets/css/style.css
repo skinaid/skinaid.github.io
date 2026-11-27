@@ -338,6 +338,23 @@ ul { margin: 0; padding: 0; list-style: none; }
 .row p { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
 .row__meta { font-size: 12.5px; font-weight: 700; color: var(--purple); margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
 .row__cat { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+/* Олон хувилбартай мөр (catalog-render.js multiRow — UB Beauty-ийн хувилбарууд) */
+.row--multi:hover { transform: none; }
+.row--multi:focus { outline: none; }
+.row--multi:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.row__vars { margin-top: 10px; font-size: 13px; }
+.row__vars summary { cursor: pointer; font-weight: 700; color: var(--purple-900); min-height: 32px; display: flex; align-items: center; gap: 6px; list-style: none; }
+.row__vars summary::-webkit-details-marker { display: none; }
+.row__vars summary::after { content: "▾"; font-size: 12px; color: var(--purple); transition: transform .2s var(--ease); }
+.row__vars[open] summary::after { transform: rotate(180deg); }
+.row__vars summary:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-radius: 6px; }
+.row__vars ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 10px; }
+.row__vars li { padding-top: 8px; border-top: 1px solid var(--line); }
+.row__var-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; color: var(--purple-900); }
+.row__var-head span { font-weight: 700; color: var(--purple); white-space: nowrap; }
+.row__var-d { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.row__link { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 700; color: var(--purple); }
+.row__link:hover { text-decoration: underline; }
 .list-empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 40px; }
 .list-more { text-align: center; margin-top: 28px; }
 
