@@ -25,7 +25,7 @@ import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { site, corePages, otherHtml } from '../content/site.mjs';
 import { videos as homeVideos } from '../content/videos.mjs';
-import { validVideos, localVideo, videoPoster, videoCardsHTML } from '../assets/js/site-content.js';
+import { MAX_VIDEOS, validVideos, localVideo, videoPoster, videoCardsHTML } from '../assets/js/site-content.js';
 import { siteHeader, siteFooter } from './lib/layout.mjs';
 import { homeGraph, treatmentGraph, hubGraph } from './lib/schema.mjs';
 import { AssetStamper, BuildError, vercelIgnore } from './lib/assets.mjs';
@@ -286,7 +286,7 @@ function applyPageLinks(html) {
   {
     // «Видео бичлэг»-ийн анхдагч жагсаалт (content/videos.mjs) — site-content.js-ийн ижил загвараар
     const items = homeVideos.map((v) => ({ url: v.url, title: v.title, hidden: false }));
-    if (!validVideos(items)) throw new BuildError('content/videos.mjs: бичлэг бүр /assets/video/<нэр>.mp4 эсвэл YouTube холбоос, гарчиг ≤120 тэмдэгт, нийт ≤12 байна');
+    if (!validVideos(items)) throw new BuildError(`content/videos.mjs: бичлэг бүр /assets/video/<нэр>.mp4 эсвэл YouTube холбоос, гарчиг ≤120 тэмдэгт, нийт ≤${MAX_VIDEOS} байна`);
     for (const v of items) {
       const src = localVideo(v.url);
       if (src && !(existsSync(join(ROOT, src.slice(1))) && existsSync(join(ROOT, videoPoster(src).slice(1))))) throw new BuildError(`content/videos.mjs: ${src} эсвэл нүүр зураг нь алга`);

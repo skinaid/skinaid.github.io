@@ -60,7 +60,9 @@ test('YouTube links resolve to a video id; anything else is rejected', async () 
   assert.equal(validVideos([{ url: 'https://youtu.be/' + id, title: 'x'.repeat(121), hidden: false }]), false);
   assert.equal(validVideos([{ url: 'https://example.org/', title: '', hidden: false }]), false);
   assert.equal(validVideos([{ url: 'https://youtu.be/' + id, title: '' }]), false);
-  assert.equal(validVideos(Array.from({ length: 13 }, () => ({ url: 'https://youtu.be/' + id, title: '', hidden: false }))), false);
+  const many = (n) => Array.from({ length: n }, () => ({ url: 'https://youtu.be/' + id, title: '', hidden: false }));
+  assert.ok(validVideos(many(20)), 'up to 20 videos');
+  assert.equal(validVideos(many(21)), false);
 });
 
 test('site videos: only /assets/video/<name>.mp4 is accepted, poster sits next to it', async () => {
