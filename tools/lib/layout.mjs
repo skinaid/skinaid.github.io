@@ -9,6 +9,8 @@ const NAV = [
   ['promo', 'Урамшуулал', 'Шинэ жилийн урамшуулал', 'Урамшуулал'],
   ['treatments', 'Эмчилгээ', 'Эмчилгээ', 'Онцлох эмчилгээ'],
   ['about', 'Бидний тухай', 'Бидний тухай', 'Бидний тухай'],
+  // Анхдагчаар нуугдмал: site-content.js → applyVideos бичлэгтэй үед л харуулна (data-videos-link)
+  ['videos', 'Бичлэг', 'Видео бичлэг', 'Видео бичлэг'],
   ['faq', 'Асуулт', 'Түгээмэл асуулт', 'Түгээмэл асуулт'],
   ['blog', 'Зөвлөгөө', 'Зөвлөгөө', 'Зөвлөгөө'],
   ['contact', 'Холбоо барих', 'Холбоо барих', 'Холбоо барих'],
@@ -43,7 +45,8 @@ function hrefs(ctx) {
 const navLink = (h, ctx, [id], label) => {
   const href = id === 'treatments' ? h.treatments : h.a(id);
   const cur = id === 'treatments' && ctx.current === 'hub' ? ' aria-current="page"' : '';
-  return `<a href="${href}"${cur}>${label}</a>`;
+  const extra = id === 'videos' ? ' data-videos-link hidden' : '';
+  return `<a href="${href}"${cur}${extra}>${label}</a>`;
 };
 
 /** @param {LayoutCtx} ctx */
@@ -111,7 +114,7 @@ export function siteFooter(ctx) {
     '      <div>',
     '        <h3>Цэс</h3>',
     '        <ul>',
-    ...navFor(ctx).map((n) => `          <li>${navLink(h, ctx, n, n[3])}</li>`),
+    ...navFor(ctx).map((n) => `          <li${n[0] === 'videos' ? ' data-videos-link hidden' : ''}>${navLink(h, ctx, n, n[3]).replace(' data-videos-link hidden', '')}</li>`),
     '        </ul>',
     '      </div>',
     '      <div>',
