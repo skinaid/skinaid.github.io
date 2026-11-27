@@ -103,6 +103,16 @@ service cloud.firestore {
         && incoming().updatedAt == request.time;
     }
 
+    // Admin creates immutable images together with the public content document.
+    // The public image endpoint reads via its service account.
+    match /content_images/{id} {
+      allow create: if isAdmin()
+        && id.matches('^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$')
+        && incoming().keys().hasOnly(['data', 'createdAt'])
+        && isStr(incoming().data, 28, 480000)
+        && incoming().createdAt == request.time;
+    }
+
     // ---------- Тохиргоо (сайт уншина, admin бичнэ) ----------
     match /settings/{doc} {
       allow read: if true;

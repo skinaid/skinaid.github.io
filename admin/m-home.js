@@ -1,3 +1,4 @@
+import { uploadControl, imagePreview, queuedImages, writeImages, clearImageUploads } from './image-upload.js?v=cf76c2ac';
 /* ==========================================================================
    SKIN AID admin — Модуль: Нүүр хуудас (settings/home) — hero + «Зөвлөгөө» картууд
    HTML загвар: /assets/js/home-render.js (сайт, build-тэй ижил). Анхны утга, сайтын зургууд, дотоод хуудсууд,
@@ -139,6 +140,12 @@ function postRow(p, { open = false } = {}) {
   f('imgUrl').value = custom ? p.img : '';
   ['cat', 'by', 'title', 'text', 'url'].forEach((k) => { f(k).value = p[k] || ''; });
   f('hidden').checked = !!p.hidden;
+  $('.hm-photos', el).append(uploadControl(f('imgUrl'), (url) => {
+    const customOption = $('input[type="radio"][value="__url"]', el);
+    customOption.checked = true;
+    f('imgUrl').value = url;
+    f('imgUrl').dispatchEvent(new Event('input', { bubbles: true }));
+  }));
   const thumb = f('thumb');
   // Зураг биш холбоос (Drive, Facebook пост г.м.) эсвэл хаалттай зураг → анхааруулга (сайтад эвдэрсэн зураг гаргахгүй)
   thumb.addEventListener('error', () => { brokenImgs.add(thumb.getAttribute('src')); syncPost(el); scheduleAux(); });
@@ -167,9 +174,10 @@ function syncPost(el) {
   const img = imgOf(el);
   const ok = !!img && !!HR && HR.validImg(img);
   const thumb = f('thumb');
-  if (ok && thumb.getAttribute('src') !== adminSrc(img)) {
+  const source = imagePreview(adminSrc(img));
+  if (ok && thumb.getAttribute('src') !== source) {
     thumb.referrerPolicy = /^https:/i.test(img) ? 'no-referrer' : '';
-    thumb.src = adminSrc(img);
+    thumb.src = source;
   }
   const broken = ok && brokenImgs.has(adminSrc(img));
   thumb.hidden = !ok || broken;
@@ -284,7 +292,7 @@ function renderAux() {
   if (!HR) return;
   const { raw, all, save } = current();
   $('#hmPrevHero').innerHTML = save && save.hero ? HR.hero(save.hero, { titleTag: 'div' }) : '<p class="muted">Гарчиг (h1) хоосон байна.</p>';
-  $('#hmPrevPosts').innerHTML = save ? HR.posts(save.posts, { src: adminSrc }) : '';
+  $('#hmPrevPosts').innerHTML = save ? HR.posts(save.posts, { src: (path) => imagePreview(adminSrc(path)) }) : '';
   const html = homeWarnings(all).map((x) => `<li>${esc(x)}</li>`).join('');
   if (html !== lastWarnHTML) { warnBox.innerHTML = html; lastWarnHTML = html; }   // live region биш — хадгалахад цонхоор харуулна
   const rows = $$('.hm-post', posts);
@@ -462,11 +470,12 @@ $('#btnHmJson').addEventListener('click', async () => {
  * Transaction: уншаад шалгаад бичнэ — нөгөө admin хооронд нь хадгалсан бол бичихгүй (force-гүй үед).
  * @returns {Promise<{ok: true} | {conflict: object|null}>}
  */
-const saveTx = (payload, force) => runTransaction(db, async (tx) => {
+const saveTx = (payload, force, images) => runTransaction(db, async (tx) => {
   const cur = await tx.get(homeRef);
   const c = cur.exists() ? cur.data() : null;
   const same = baseMs === SELF ? !!c && c.updatedBy === session.user.email : (c ? msOf(c.updatedAt) : null) === baseMs;
   if (!force && !same) return { conflict: c };
+  writeImages(tx, images);
   tx.set(homeRef, payload);
   return { ok: true };
 });
@@ -505,7 +514,8 @@ async function save() {
       }
     } catch (_) { /* сүлжээ — HOME_DATA.rev-ээр үргэлжлүүлнэ */ }
     const payload = { hero: n.hero, posts: n.posts, baseRev: rev, updatedAt: serverTimestamp(), updatedBy: session.user.email };
-    let r = await saveTx(payload, false);
+    const images = queuedImages(n.posts.map(post => post.img));
+    let r = await saveTx(payload, false, images);
     if (!r.ok) {
       const c = r.conflict;
       const who = c ? `${c.updatedBy || 'Өөр хүн'} (${fmtDate(c.updatedAt)})` : 'Өөр хүн';
@@ -515,8 +525,9 @@ async function save() {
         confirm: 'Миний хувилбараар дарж хадгалах', cancel: 'Хадгалахгүй', danger: true,
       });
       if (!ok) { setStatus(status, 'Хадгалаагүй — өөр хүний хадгалсан хувилбар бий. Таны засвар маягт дээр хэвээр.', 'err'); announce('Хадгалаагүй. Засвар тань маягт дээр хэвээр.'); return; }
-      r = await saveTx(payload, true);
+      r = await saveTx(payload, true, images);
     }
+    clearImageUploads(images);
     try { const after = await getDoc(homeRef); baseMs = after.exists() ? msOf(after.data().updatedAt) : null; }
     catch (_) { baseMs = SELF; }
     baseline = n;
