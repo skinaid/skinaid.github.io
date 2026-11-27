@@ -115,6 +115,8 @@ export function createAdminHandler(deps) {
           chars: { static: req.system[0].text.length, knowledge: req.system[1].text.length, examples: req.system[2]?.text.length ?? 0 },
           // Эмнэлгийн өөрийн мэдлэг (нийтийн каталог + admin-ий бичсэн) — эзэмшигч prompt-ийг яг харах
           blocks: req.system.slice(1).map((b) => b.text),
+          // «Үйлчилгээ бүрээр»: каталогийн мөр бүр ботод хэрхэн орсон + үнэгүй шалгалт (api/_lib/catalog-check.js)
+          coverage: k.coverage,
         },
       });
     },

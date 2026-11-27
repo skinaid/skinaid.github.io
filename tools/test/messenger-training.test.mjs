@@ -63,9 +63,9 @@ test('мэдлэг: нийтэлсэн FAQ-ийн ₮ дүн, хувь, хөнг
   assert.ok(without.reasons.includes('invented_price') && without.reasons.includes('invented_percent'));
 });
 
-test('мэдлэг: хязгаар — FAQ бичлэг ≤ 1500 тэмдэгт (тасална), нийт ≤ 16,000, тоо ≤ 60; хуудас ≤ 900; voice ≤ 1500, PII-тэй voice хасна', () => {
+test('мэдлэг: хязгаар — FAQ бичлэг ≤ 1900 тэмдэгт (тасална), нийт ≤ 40,000, тоо ≤ 100; хуудас ≤ 900; voice ≤ 1500, PII-тэй voice хасна', () => {
   const long = 'а'.repeat(KB_LIMITS.entryChars + 500);
-  const many = Array.from({ length: 20 }, (_, i) => ({ id: `k_${String(i).padStart(2, '0')}`, title: `Гарчиг ${i}`, body: long }));
+  const many = Array.from({ length: 30 }, (_, i) => ({ id: `k_${String(i).padStart(2, '0')}`, title: `Гарчиг ${i}`, body: long }));
   const c = buildSocialCatalog({ ...base, kb: many, voiceBrief: 'Найрсаг. '.repeat(400), pages: [{ ...PAGE, text: 'б'.repeat(2000) }] });
   const kbFacts = c.facts.filter((f) => f.kind === 'kb');
   assert.ok(kbFacts.every((f) => f.text.length <= KB_LIMITS.entryChars));

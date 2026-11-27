@@ -8,7 +8,7 @@ import { db, $, $$, esc, str, fmtDate, errText, session, setStatus, DEFAULTS, CA
 import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow, captureFocus } from './ui.js?v=720127aa';
 import { normSearch } from './lib.js?v=a9638bd3';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import { api, apiMsg } from './messenger-api.js?v=047b8b55';
+import { api, apiMsg } from './messenger-api.js?v=51b2e3b7';
 import { UB_LINKS, DESC_MAX, applyUbCatalog, fetchUbServices, siteHidden, ubLinkIds } from '../assets/js/ub-catalog.js?v=89ec0850';
 import { API_BASE, PUBLISHABLE_KEY } from '../assets/js/ubbeauty-config.js?v=8eb0f74a';
 

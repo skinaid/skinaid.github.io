@@ -5,6 +5,8 @@
    · Жишээ (messenger_examples: сайн/муу) — ноорогоос (exampleFromDraftAction: урьдчилан бөглөсөн засварлагч — хувийн
      мэдээллийг арилгаад хадгална) эсвэл гараар.
    · AI-д юу орж байна — POST /api/admin {action:'knowledge'} (LLM-гүй).
+   · Үйлчилгээ бүрээр — мөн `knowledge`-ийн `coverage` (api/_lib/catalog-check.js): «Үйлчилгээ / Багц»-ийн мөр бүр AI-д
+     хэрхэн орсон + үнэгүй шалгалт; «Турших» (асуулт бэлдэнэ), «Асуулт-хариулт» (id `s_<үйлчилгээ>_…` мэдлэг).
    · Eval — POST /api/admin eval_start → eval_chunk (6 кейс тутам) → eval_finish (бодит Claude; ≈ $2–3, өдөрт ≤ 3);
      түүх = messenger_status/evals (1 read), дэлгэрэнгүй = messenger_status/eval_<id> (1 read).
    Бичилт бүр `messenger_kb/_rev` тэмдгийг НЭГ batch-д шинэчилнэ — сервер мэдлэгийг ≤ 1 минутад дахин ачаална.
@@ -17,9 +19,9 @@ import { dialog, snack, showErrors, clearErrors, clearFieldError, attachCounters
 import {
   ROUTE_TONE, KB_LIMITS, KB_VOICE_ID, KB_VOICE_TITLE, KB_REV_ID, KB_STATUS, EX_KINDS, kbStatusLabel, exKindLabel, newKbId, newExampleId,
   exampleIdForDraft, validateKb, validateExample, exampleFromDraft, exampleState, sortKb, EXCLUDE_TEXT, usd3,
-  kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText, evalReasonsText, evalHandoffReasons,
-} from './messenger-lib.js?v=5a7e37da';
-import { api, apiMsg } from './messenger-api.js?v=047b8b55';
+  kbBudget, exampleBudget, KB_BUDGET, usd, evalWhyText, evalReasonsText, evalHandoffReasons, newServiceKbId, kbServiceId,
+} from './messenger-lib.js?v=3d191f40';
+import { api, apiMsg } from './messenger-api.js?v=51b2e3b7';
 
 const READ_LIMIT = 100;
 const loadBox = $('#msTrLoad'), loadMsg = $('#msTrLoadMsg');
@@ -28,6 +30,7 @@ const kbForm = $('#msKbForm'), kbErr = $('#msKbErr'), kbTitle = $('#ms-kb-title'
 const exForm = $('#msExForm'), exErr = $('#msExErr'), exUser = $('#ms-ex-user'), exReply = $('#ms-ex-reply'), exNote = $('#ms-ex-note'), exList = $('#msExList'), exMeta = $('#msExMeta'), exStatusEl = $('#msExSaveStatus'), exPrivacy = $('#msExPrivacy');
 const knowOut = $('#msKnowOut'), knowStatus = $('#msKnowStatus'), knowBtn = $('#btnMsKnow'), knowDrafts = $('#ms-know-drafts');
 const btnKbNew = $('#btnMsKbNew'), btnVoice = $('#btnMsVoice'), btnExNew = $('#btnMsExNew');
+const svcSum = $('#msSvcSum'), svcSearch = $('#msSvcSearch'), svcCat = $('#msSvcCat'), svcIssues = $('#msSvcIssues'), svcMeta = $('#msSvcMeta'), svcOut = $('#msSvcOut'), svcReload = $('#btnMsSvcReload');
 
 /** m-messenger.js-ийн callback (таб солих, ноорогийн картын «Жишээ» мөр, хадгалаагүй өөрчлөлтийн тэмдэг) */
 let deps = { selectTab: () => {}, onExamplesChange: () => {}, onDirty: () => {} };
@@ -129,6 +132,7 @@ export function openTraining() {
   if (opened || !session.user) return;
   opened = true;
   load();
+  if (!cov) loadCoverage();
   if (!evalHistReady) loadEvalHistory();
 }
 /** Ноорогийн картын «Жишээ» мөр (m-messenger.js): 'none' | 'new' | 'same' | 'stale' | 'unknown' */
@@ -143,8 +147,8 @@ function sourceLabel(id) {
   if (id === 'address') return 'Хаяг';
   if (id === 'clinic') return 'Эмнэлэг';
   if (id === 'contact') return 'Холбоо барих';
-  if (kind === 'service') return (DEFAULTS.treatments || []).find((t) => t.id === rest)?.n || 'Үйлчилгээ';
-  if (kind === 'package') return (DEFAULTS.packages || []).find((t) => t.id === rest)?.name || 'Багц';
+  if (kind === 'service') return covName('service', rest) || (DEFAULTS.treatments || []).find((t) => t.id === rest)?.n || 'Үйлчилгээ';
+  if (kind === 'package') return covName('package', rest) || (DEFAULTS.packages || []).find((t) => t.id === rest)?.name || 'Багц';
   if (kind === 'kb') return `Мэдлэг «${(kb.get(rest) || {}).title || rest}»`;
   if (kind === 'page') return `Эмчилгээний хуудас «${rest}»`;
   return id;
@@ -218,6 +222,150 @@ tryOut.addEventListener('click', (e) => {
   openEx(null, { prefill: { kind: b.dataset.tryEx, userText: r.userText || '', reply: r.reply || '', note: '' }, focusEl: b.dataset.tryEx === 'bad' ? exNote : exReply, opener: b });
 });
 
+/* ---------- Үйлчилгээ бүрээр (каталог → AI) ---------- */
+/** Сүүлийн `knowledge` хариуны `coverage` (api/_lib/catalog-check.js); null = ачаалаагүй */
+let cov = null;
+let covLoading = false;
+const CHECK_TEXT = {
+  hidden_leak: 'Нуусан боловч AI-д орсон',
+  missing: 'AI-д ороогүй (хязгаар эсвэл нэр/тайлбарт хувийн мэдээлэл)',
+  price_mismatch: 'Үнийг AI хэлж чадахгүй (дүн таарахгүй)',
+  desc_truncated: 'Тайлбар урт — эхний хэсэг л орно',
+  no_desc: 'Тайлбаргүй — AI зөвхөн нэр, үнийг мэднэ',
+  no_duration: 'Хугацаа алга',
+  no_price: 'Үнэ нийтэд харагддаггүй — AI «үнийг ажилтан хэлнэ» гэнэ',
+};
+const CHECK_LEVEL = { hidden_leak: 'err', missing: 'err', price_mismatch: 'err', desc_truncated: 'warn', no_desc: 'warn', no_duration: 'warn', no_price: 'info' };
+const covRows = () => (cov ? [...(cov.services || []), ...(cov.packages || [])] : []);
+function covName(kind, id) { const r = covRows().find((x) => x.kind === kind && x.id === id); return r ? r.name : ''; }
+/** Холбосон мэдлэгийн үйлчилгээний нэр (coverage → сайтын анхдагч каталог) */
+function svcName(id) { return covName('service', id) || covName('package', id) || (DEFAULTS.treatments || []).find((t) => t.id === id)?.n || ''; }
+/** Үйлчилгээнд холбосон мэдлэг (admin-ийн бүх бичлэг: ноорог ч) */
+const linkedKb = (id) => [...kb.values()].filter((r) => kbServiceId(r.id) === id);
+const isIssue = (r) => r.checks.some((c) => CHECK_LEVEL[c] === 'err' || CHECK_LEVEL[c] === 'warn');
+
+function svcRowHtml(r) {
+  const label = r.kind === 'package' ? `Багц «${r.name}»` : r.name;
+  const tone = r.hidden ? 'muted' : r.checks.some((c) => CHECK_LEVEL[c] === 'err') ? 'err' : isIssue(r) ? 'warn' : 'ok';
+  const toneText = r.hidden ? 'Нуусан — AI-д орохгүй' : tone === 'err' ? 'Алдаа' : tone === 'warn' ? 'Анхаарах' : 'AI мэднэ';
+  const facts = [];
+  if (!r.hidden) {
+    facts.push(r.price ? `Үнэ ${r.price}` : 'Үнэ: ажилтан хэлнэ');
+    if (r.kind === 'service') {
+      if (r.duration) facts.push(`Хугацаа ${r.duration}`);
+      facts.push(!r.descChars ? 'Тайлбаргүй' : r.descSent < r.descChars ? `Тайлбар ${fmtN(r.descSent)}/${fmtN(r.descChars)} тэмдэгт` : `Тайлбар бүтэн (${fmtN(r.descChars)} тэмдэгт)`);
+    }
+  }
+  const qa = kbReady ? linkedKb(r.id) : [];
+  const pub = qa.filter((x) => x.status === 'published').length;
+  const qaText = !kbReady ? '' : qa.length ? `Асуулт-хариулт: ${qa.length}${qa.length > pub ? ` (ноорог ${qa.length - pub})` : ''}` : '';
+  if (qaText) facts.push(qaText);
+  // no_price-ийг дээрх «Үнэ: ажилтан хэлнэ» аль хэдийн хэлдэг
+  const notes = r.checks.filter((c) => CHECK_TEXT[c] && c !== 'no_price').map((c) => `<li class="ms-chk ms-chk--${CHECK_LEVEL[c]}">${esc(CHECK_TEXT[c])}</li>`).join('');
+  // Гарчгийн эхний «<нэр> — »-г хасаж богиносгоно; ноорог бол тэмдэглэнэ
+  const short = (t) => {
+    const x = String(t || '');
+    const pre = [`${r.name} — `, `Багц «${r.name}» — `].find((p) => x.startsWith(p));
+    return excerpt(pre ? x.slice(pre.length) : x, 40);
+  };
+  const qaLinks = qa.map((x) => `<button class="btn btn--ghost btn--sm" type="button" data-kb-edit="${esc(x.id)}" aria-label="Засах: ${esc(x.title)}">${esc(short(x.title))}${x.status === 'published' ? '' : ' (ноорог)'}</button>`).join('');
+  const key = `${r.kind}:${r.id}`;
+  return `<li class="ms-item ms-svc" data-key="${esc(key)}">
+    <div class="ms-item__body">
+      <p class="ms-item__title"><span class="ms-tone ms-tone--${tone}">${esc(toneText)}</span> <strong>${esc(label)}</strong></p>
+      ${facts.length ? `<p class="ms-item__meta muted">${facts.map(esc).join(' · ')}</p>` : ''}
+      ${notes ? `<ul class="ms-chks">${notes}</ul>` : ''}
+      ${qaLinks && r.hidden ? '<p class="ms-item__meta muted">Нуусан тул доорх мэдлэг AI-д орохгүй.</p>' : ''}
+      ${qaLinks ? `<div class="ms-svc__qa">${qaLinks}</div>` : ''}
+    </div>
+    <div class="ms-item__act">
+      ${r.hidden ? '' : `<button class="btn btn--outline btn--sm" type="button" data-svc-try="${esc(key)}" aria-label="Турших: ${esc(label)}">Турших</button>`}
+      ${!r.hidden ? `<button class="btn btn--outline btn--sm" type="button" data-svc-qa="${esc(r.id)}" aria-label="Асуулт-хариулт нэмэх: ${esc(label)}"${kbReady ? '' : ' disabled'}>+ Асуулт-хариулт</button>` : ''}
+    </div>
+  </li>`;
+}
+function renderSvc() {
+  if (!cov) { svcOut.innerHTML = ''; setText(svcMeta, ''); return; }
+  const s = cov.summary || {};
+  setText(svcSum, `${N0(s.services)} үйлчилгээ (сайтад ${N0(s.servicesVisible)}) · ${N0(s.packages)} багц · AI-д орсон ${N0(s.inPrompt)} · алдаа ${N0(s.errors)} · анхаарах ${N0(s.warnings)}${(cov.orphans || []).length ? ` · каталогт байхгүй үйлчилгээнд холбосон мэдлэг ${cov.orphans.length}` : ''}`);
+  svcSum.classList.toggle('is-warn', N0(s.errors) > 0);
+  // Ангиллын сонголт (дараалал = каталогийнх)
+  const cats = [];
+  for (const r of cov.services || []) if (r.catKey && !cats.some((c) => c.key === r.catKey)) cats.push({ key: r.catKey, name: r.category || r.catKey });
+  if ((cov.packages || []).length) cats.push({ key: '_pkg', name: 'Багц' });
+  const want = `<option value="">Бүгд</option>${cats.map((c) => `<option value="${esc(c.key)}">${esc(c.name)}</option>`).join('')}`;
+  if (svcCat.dataset.sig !== want) { const cur = svcCat.value; svcCat.innerHTML = want; svcCat.dataset.sig = want; svcCat.value = cats.some((c) => c.key === cur) ? cur : ''; }
+  const q = svcSearch.value.trim().toLowerCase();
+  const cat = svcCat.value;
+  const onlyIssues = svcIssues.checked;
+  const groups = [...cats.map((c) => ({ ...c, rows: c.key === '_pkg' ? cov.packages : cov.services.filter((r) => r.catKey === c.key) })),
+    { key: '_other', name: 'Ангилалгүй', rows: (cov.services || []).filter((r) => !r.catKey) }];
+  let shown = 0;
+  const html = groups.filter((gr) => !cat || gr.key === cat).map((gr) => {
+    const rows = gr.rows.filter((r) => (!q || r.name.toLowerCase().includes(q)) && (!onlyIssues || isIssue(r)));
+    shown += rows.length;
+    return rows.length ? `<h3 class="ms-sub">${esc(gr.name)} <span class="muted">(${rows.length})</span></h3><ul class="ms-items">${rows.map(svcRowHtml).join('')}</ul>` : '';
+  }).join('');
+  // Дахин зурахад фокусыг ижил товч руу буцаана
+  const a = document.activeElement;
+  const keep = a && svcOut.contains(a) ? (a.dataset.svcTry ? `[data-svc-try="${CSS.escape(a.dataset.svcTry)}"]` : a.dataset.svcQa ? `[data-svc-qa="${CSS.escape(a.dataset.svcQa)}"]` : a.dataset.kbEdit ? `[data-kb-edit="${CSS.escape(a.dataset.kbEdit)}"]` : '') : '';
+  svcOut.innerHTML = html || `<p class="empty muted">${q || onlyIssues || cat ? 'Шүүлтэд тохирох мөр алга.' : 'Каталог хоосон.'}</p>`;
+  if (keep) $(keep, svcOut)?.focus();
+  setText(svcMeta, `${shown} мөр`);
+}
+const N0 = (x) => Number(x) || 0;
+/** `knowledge` (ноороггүй) хариуг «Үйлчилгээ бүрээр»-т хадгална */
+function takeCoverage(k) { if (k && k.coverage) { cov = k.coverage; renderSvc(); } }
+async function loadCoverage() {
+  if (covLoading || !session.user) return;
+  const g = gen;
+  covLoading = true;
+  svcReload.setAttribute('aria-disabled', 'true');
+  svcOut.setAttribute('aria-busy', 'true');
+  setText(svcSum, 'Каталогийг шалгаж байна…');
+  try {
+    const j = await api('knowledge', {});
+    if (!alive(g)) return;
+    takeCoverage(j.knowledge);
+    if (!cov) setText(svcSum, 'Сервер каталогийн тайлан буцаасангүй.');
+  } catch (e) {
+    if (!alive(g)) return;
+    setText(svcSum, `${apiMsg(e)} Каталогийг шалгаж чадсангүй.`);
+  } finally {
+    if (alive(g)) { covLoading = false; svcReload.removeAttribute('aria-disabled'); svcOut.setAttribute('aria-busy', 'false'); }
+  }
+}
+svcReload.addEventListener('click', loadCoverage);
+let svcT = 0;
+svcSearch.addEventListener('input', () => { clearTimeout(svcT); svcT = setTimeout(renderSvc, 120); });
+svcCat.addEventListener('change', renderSvc);
+svcIssues.addEventListener('change', renderSvc);
+svcOut.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-svc-try]');
+  if (t) {
+    const [kind, id] = [t.dataset.svcTry.slice(0, t.dataset.svcTry.indexOf(':')), t.dataset.svcTry.slice(t.dataset.svcTry.indexOf(':') + 1)];
+    const r = covRows().find((x) => x.kind === kind && x.id === id);
+    if (!r) return;
+    tryText.value = kind === 'package' ? `«${r.name}» багцад юу багтдаг вэ? Үнэ нь хэд вэ?` : `«${r.name}» гэж юу вэ? Үнэ, хугацаа нь хэд вэ?`;
+    tryText.removeAttribute('aria-invalid');
+    setStatus(tryStatus, 'Асуултыг бэлдлээ — засаад «AI-аас ноорог авах»-ыг дарна уу.', '');
+    refreshCounters(tryForm);
+    tryForm.scrollIntoView({ block: 'start' });
+    tryText.focus({ preventScroll: true });
+    return;
+  }
+  const q = e.target.closest('[data-svc-qa]');
+  if (q) {
+    const id = q.dataset.svcQa;
+    const name = svcName(id);
+    const pkg = covRows().some((x) => x.kind === 'package' && x.id === id);
+    openKb(null, { opener: q, prefill: { id: newServiceKbId(id), title: Array.from(`${pkg ? `Багц «${name}»` : name || 'Үйлчилгээ'} — ${pkg ? 'юу багтдаг, асуулт' : 'түгээмэл асуулт'}`).slice(0, KB_LIMITS.title).join(''), body: 'А: \nХ: ' } });
+    return;
+  }
+  const k = e.target.closest('[data-kb-edit]');
+  if (k) openKb(k.dataset.kbEdit, { opener: k });
+});
+
 /* ---------- Мэдлэг (messenger_kb) ---------- */
 $('#msKbStatus').innerHTML = KB_STATUS.map((s) => `<label class="ms-mode"><input type="radio" name="ms-kb-status" value="${s.key}"> <span><strong>${esc(s.label)}</strong><small>${esc(s.hint)}</small></span></label>`).join('');
 const excerpt = (s, n) => { const a = Array.from(String(s || '').replace(/\s+/g, ' ').trim()); return a.length > n ? `${a.slice(0, n).join('')}…` : a.join(''); };
@@ -236,9 +384,10 @@ function renderKb() {
   kbList.innerHTML = !kbReady ? '' : rows.length ? rows.map((r) => {
     const voice = r.id === KB_VOICE_ID;
     const title = voice ? KB_VOICE_TITLE : r.title;
+    const sid = kbServiceId(r.id);
     return `<li class="ms-item${kbEdit && kbEdit.id === r.id ? ' is-editing' : ''}" data-id="${esc(r.id)}">
       <div class="ms-item__body">
-        <p class="ms-item__title"><span class="ms-tone ms-tone--${r.status === 'published' ? 'ok' : 'muted'}">${esc(kbStatusLabel(r.status) || r.status)}</span> <strong>${esc(title)}</strong></p>
+        <p class="ms-item__title"><span class="ms-tone ms-tone--${r.status === 'published' ? 'ok' : 'muted'}">${esc(kbStatusLabel(r.status) || r.status)}</span>${sid ? ` <span class="ms-tone ms-tone--${svcName(sid) ? 'info' : 'warn'}">${esc(svcName(sid) || 'Каталогт байхгүй үйлчилгээ')}</span>` : ''} <strong>${esc(title)}</strong></p>
         <p class="ms-item__text">${esc(excerpt(r.body, 240))}</p>
         <p class="ms-item__meta muted">${meta(r)}</p>
       </div>
@@ -248,6 +397,7 @@ function renderKb() {
       </div>
     </li>`;
   }).join('') : '<li class="empty"><p><strong>Мэдлэг алга.</strong></p><p class="muted">«Шинэ мэдлэг»-ээр түгээмэл асуулт, бодлогоо нэмнэ үү. Одоо AI зөвхөн сайтын каталогийг мэднэ.</p></li>';
+  if (cov) renderSvc();
 }
 
 const readKb = () => ({
@@ -256,7 +406,7 @@ const readKb = () => ({
   status: ($('input[name="ms-kb-status"]:checked', kbForm) || {}).value || '',
 });
 const kbDirty = () => !!kbEdit && JSON.stringify(readKb()) !== kbEdit.snap;
-async function openKb(id, { voice = false, opener = null } = {}) {
+async function openKb(id, { voice = false, opener = null, prefill = null } = {}) {
   if (busy) { busyMsg(); return; }
   const realId = id || (voice ? KB_VOICE_ID : null);
   // Засаж буй бичлэгийнхээ «Засах»-ыг дахин дарвал хадгалаагүй засварыг ХАЯХГҮЙ — маягт руу аваачна
@@ -264,17 +414,21 @@ async function openKb(id, { voice = false, opener = null } = {}) {
   if (kbEdit && !(await closeKb({ refocus: false }))) return;
   if (!kbReady) return;
   const cur = realId ? kb.get(realId) : null;
-  const finalId = realId || newKbId();
+  const finalId = realId || (prefill && prefill.id) || newKbId();
   const isVoice = finalId === KB_VOICE_ID;
   kbEdit = { id: finalId, isNew: !cur, snap: '', opener: opener || (isVoice ? btnVoice : btnKbNew) };
   $('#msKbFormH').textContent = isVoice ? KB_VOICE_TITLE : cur ? 'Мэдлэг засах' : 'Шинэ мэдлэг';
   $('#msKbTitleField').hidden = isVoice;
-  kbTitle.value = isVoice ? KB_VOICE_TITLE : cur ? cur.title || '' : '';
-  kbBody.value = cur ? cur.body || '' : '';
+  kbTitle.value = isVoice ? KB_VOICE_TITLE : cur ? cur.title || '' : prefill ? prefill.title || '' : '';
+  kbBody.value = cur ? cur.body || '' : prefill ? prefill.body || '' : '';
   $('#ms-kb-body-l').textContent = isVoice ? 'Өнгө аяс, хэллэг, нэмэлт заавар' : 'Агуулга';
   $('#ms-kb-body-hint').textContent = isVoice
     ? 'Жишээ: «Найрсаг, товч, мэргэжлийн. "Та" хэлбэрээр. Захиалгыг сайтаар хийхийг санал болго.» Хатуу дүрмийг (эмнэлгийн зөвлөгөө өгөхгүй, үнэ зохиохгүй) өөрчилж чадахгүй.'
-    : 'AI энэ текстийг баримт болгон иш татна. Товч, тодорхой бичнэ үү. Утас, имэйл бүү бич.';
+    : kbServiceId(finalId)
+      ? covRows().some((x) => x.kind === 'package' && x.id === kbServiceId(finalId))
+        ? `«${svcName(kbServiceId(finalId))}» багцад юу багтдаг (үйлчилгээ × тоо), хэнд тохирох, түгээмэл асуулт. Мөр бүрт «А: асуулт / Х: хариулт». Үнийг каталог аль хэдийн өгдөг. Утас, имэйл бүү бич.`
+        : `«${svcName(kbServiceId(finalId))}»-ийн түгээмэл асуулт, хариулт. Мөр бүрт «А: асуулт / Х: хариулт». Үнэ, хугацааг каталог аль хэдийн өгдөг — давтахгүй. Утас, имэйл бүү бич.`
+      : 'AI энэ текстийг баримт болгон иш татна. Товч, тодорхой бичнэ үү. Утас, имэйл бүү бич.';
   const st = cur ? cur.status : 'draft';
   $$('input[name="ms-kb-status"]', kbForm).forEach((r) => { r.checked = r.value === st; });
   kbEdit.snap = JSON.stringify(readKb());
@@ -298,7 +452,9 @@ async function closeKb({ force = false, refocus = true } = {}) {
   clearErrors(kbForm);
   renderKb();
   if (refocus) {
-    const btn = id && $(`[data-kb-edit="${CSS.escape(id)}"]`, kbList);
+    // «Үйлчилгээ бүрээр»-ээс нээсэн бол тэр мөрийн товч руу (жагсаалт дахин зурагдсан байж болно)
+    const svcBtn = opener && opener.dataset && opener.dataset.svcQa ? $(`[data-svc-qa="${CSS.escape(opener.dataset.svcQa)}"]`, svcOut) : null;
+    const btn = svcBtn || (id && $(`[data-kb-edit="${CSS.escape(id)}"]`, kbList));
     const target = btn || (opener && opener.isConnected && !opener.disabled ? opener : btnKbNew);
     target.focus();
   }
@@ -627,6 +783,7 @@ knowBtn.addEventListener('click', async () => {
     const j = await api('knowledge', { includeDrafts: withDrafts });
     if (!alive(g)) return;
     knowOut.innerHTML = knowHtml(j.knowledge, withDrafts);
+    if (!withDrafts) takeCoverage(j.knowledge);
     setStatus(knowStatus, 'Шалгалаа.', 'ok');
   } catch (err) {
     if (!alive(g)) return;
@@ -842,6 +999,8 @@ export function teardown() {
   tryText.removeAttribute('aria-invalid');
   refreshCounters(tryForm);
   tryOut.innerHTML = ''; knowOut.innerHTML = '';
+  cov = null; covLoading = false; svcReload.removeAttribute('aria-disabled'); svcOut.setAttribute('aria-busy', 'false');
+  svcOut.innerHTML = ''; setText(svcSum, ''); setText(svcMeta, ''); svcSearch.value = ''; svcCat.value = ''; svcIssues.checked = false;
   setStatus(tryStatus, '', ''); setStatus(knowStatus, '', '');
   setText(kbMeta, ''); setText(exMeta, '');
   loadBox.hidden = true;

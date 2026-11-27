@@ -203,6 +203,21 @@ test('admin API knowledge: нийтэлсэн FAQ орно; ноорог, ута
   assert.ok(d.kb.includes('kb:k_draft'));
 });
 
+test('admin API knowledge: «Үйлчилгээ бүрээр» — каталогийн мөр бүрийн хамрах тайлан, холбосон мэдлэг (ноорог ч), шалгалт', async () => {
+  const s = setup();
+  kb(s.fake, 's_exam-1_ab12', { title: 'Арьсны үзлэг — түгээмэл асуулт', body: 'А: Хэр удаан? Х: 1 цаг.', status: 'draft' });
+  kb(s.fake, 's_gone-9_ab12', { title: 'Хуучин', body: 'А: ? Х: .', status: 'published' });
+  const k = (await (await s.call({ action: 'knowledge' })).json()).knowledge;
+  const c = k.coverage;
+  assert.equal(c.summary.services, 1);
+  assert.equal(c.summary.errors, 0);
+  assert.deepEqual(c.services[0].kb, ['s_exam-1_ab12'], 'ноорог мэдлэг ч холбогдсон гэж харагдана');
+  assert.equal(c.services[0].inPrompt, true);
+  assert.equal(c.services[0].price, '₮50,000');
+  assert.deepEqual(c.orphans, ['s_gone-9_ab12']);
+  assert.ok(!JSON.stringify(c).includes('А: Хэр удаан'), 'мэдлэгийн агуулга тайланд орохгүй (id л)');
+});
+
 test('admin API test: үйлдвэрлэлийн prompt + бодлого → ноорог; хадгалахгүй, ai_runs + сар + өдрийн тоологч; текст нууцлагдана', async () => {
   const s = setup();
   kb(s.fake, 'k_a', { title: 'Зогсоол', body: 'Байрны урд үнэгүй зогсоолтой.', status: 'published' });

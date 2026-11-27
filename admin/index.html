@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=92a7a592">
-  <link rel="stylesheet" href="/admin/admin.css?v=7bbd83e6">
+  <link rel="stylesheet" href="/admin/admin.css?v=394028fa">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -306,6 +306,25 @@
             <div class="ms-list ms-try-out" id="msTryOut"></div>
           </section>
 
+          <section class="panel" aria-labelledby="msSvcH">
+            <div class="panel__head">
+              <h2 id="msSvcH">Үйлчилгээ бүрээр — AI юу мэдэж байна</h2>
+              <button class="btn btn--outline btn--sm" type="button" id="btnMsSvcReload">Дахин шалгах</button>
+            </div>
+            <p>«Үйлчилгээ / Багц» хэсгийн (UB Beauty-ийн толь) үйлчилгээ, багц бүрээс AI яг юуг мэдэж байгааг харуулна: нэр, үнэ, хугацаа, тайлбар. Нуусан үйлчилгээ, нуусан үнэ AI-д орохгүй — тэр үед AI «үнийг ажилтан хэлнэ» гэнэ. Шалгалт нь AI-гүй, <strong>төлбөргүй</strong>. <strong>Турших</strong> — тухайн үйлчилгээний талаар асуулт бэлдэнэ. <strong>Асуулт-хариулт</strong> — «Хэдэн удаа хийлгэх вэ?», «Өвддөг үү?» гэх мэт түгээмэл асуултын хариуг тухайн үйлчилгээнд холбосон мэдлэг болгон бичнэ.</p>
+            <p class="ms-summary" id="msSvcSum" role="status"></p>
+            <div class="toolbar">
+              <div class="search">
+                <span class="search__ic" data-icon="search"></span>
+                <input type="search" id="msSvcSearch" placeholder="Үйлчилгээний нэрээр хайх" aria-label="Үйлчилгээ хайх" autocomplete="off" enterkeyhint="search">
+              </div>
+              <label class="select-inline"><span>Ангилал</span><select id="msSvcCat"><option value="">Бүгд</option></select></label>
+              <label class="ms-check"><input type="checkbox" id="msSvcIssues"> <span>Зөвхөн анхаарах</span></label>
+              <span class="toolbar__meta" id="msSvcMeta" role="status"></span>
+            </div>
+            <div id="msSvcOut" aria-busy="false"></div>
+          </section>
+
           <section class="panel" aria-labelledby="msKbH">
             <div class="panel__head">
               <h2 id="msKbH">Мэдлэг — түгээмэл асуулт, бодлого</h2>
@@ -533,6 +552,6 @@
   <script src="/admin/pages-status.js?v=84a1c566"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=7c502362"></script>
-  <script type="module" src="/admin/admin.js?v=296f58e4"></script>
+  <script type="module" src="/admin/admin.js?v=eac61d7d"></script>
 </body>
 </html>
