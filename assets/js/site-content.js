@@ -279,6 +279,7 @@ export function restoreContent(doc) {
       if ('index' in item) {
         const node = el.childNodes[item.index];
         if (node?.nodeType === 3) node.data = item.text;
+        else el.insertBefore(doc.createTextNode(item.text), node || null);
       } else if (item.value === null) el.removeAttribute(item.attr);
       else el.setAttribute(item.attr, item.value);
     }

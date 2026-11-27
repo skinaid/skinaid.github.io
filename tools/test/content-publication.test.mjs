@@ -34,6 +34,13 @@ test('SEO strings are still plain text when Vercel serializes and the browser re
   assert.ok(doc.querySelector('script[data-content-snapshot]'));
 });
 
+test('a cleared text node can be restored after HTML serialization', () => {
+  const doc = parse(bakeHome({ [field('Хуудасны гарчиг')]: '' }));
+  assert.equal(doc.title, '');
+  restoreContent(doc);
+  assert.equal(doc.title, parse(home).title);
+});
+
 test('card positions, hidden reviews, FAQ reset and the trust panel survive a snapshot round trip', () => {
   const service = { title: 'Жишээ', text: 'Тайлбар', url: '#contact', cta: 'Цаг захиалах', image: '', alt: '', hidden: false, position: 1 };
   const review = { title: 'Сэдэв', text: 'Санал', author: 'Нэр', source: '', hidden: false, position: 2 };
