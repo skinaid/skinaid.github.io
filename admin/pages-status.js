@@ -227,7 +227,7 @@ window.SKINAID_PAGES_STATUS = {
     "exam-2",
     "exam-3"
    ],
-   "sitePrice": "₮50,000"
+   "sitePrice": "₮30,000-с"
   },
   {
    "slug": "filler",

@@ -8,6 +8,8 @@ import { db, $, $$, esc, str, fmtDate, errText, session, setStatus, DEFAULTS, CA
 import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow, captureFocus } from './ui.js?v=720127aa';
 import { normSearch } from './lib.js?v=a9638bd3';
 import { renderPages } from './m-pages.js?v=26a525a2';
+import { UB_LINKS, applyUbCatalog, fetchUbServices, siteHidden } from '../assets/js/ub-catalog.js?v=423bb464';
+import { API_BASE, PUBLISHABLE_KEY } from '../assets/js/ubbeauty-config.js?v=8eb0f74a';
 
 const ref = doc(db, 'settings', 'catalog');
 const form = $('#catForm'), svcBody = $('#svcTable tbody'), pkgBody = $('#pkgTable tbody'), status = $('#catStatus'), errBox = $('#catErr');
@@ -16,6 +18,11 @@ const loadBox = $('#catLoad'), loadMsg = $('#catLoadMsg');
 let saved = '';       // сүүлд ачаалсан/хадгалсан хүснэгтийн тамга
 let ready = false;    // ачаалал амжилтгүй бол хадгалахгүй (анхны утгаар бодит каталогийг дарж бичихгүй)
 let saving = false;
+// UB Beauty: үнэ, хугацааны эх (assets/js/ub-catalog.js). ub = сүүлд татсан жагсаалт (null = татаагүй/амжилтгүй),
+// ubMeta = мөрийн id → { ub, ubOff } (UB татаж чадаагүй үед хадгалсан утгаар hidden-ийг тооцно)
+let ub = null;
+const ubMeta = new Map();
+const ubBox = $('#ubSync'), ubMsg = $('#ubSyncMsg'), btnUb = $('#btnUbSync');
 
 const catOptions = (sel) => Object.entries(CATS).map(([k, v]) => `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(v)}</option>`).join('');
 svcCat.insertAdjacentHTML('beforeend', catOptions(''));
@@ -39,14 +46,19 @@ function labelRow(tr) {
 }
 const svcRow = (s) => {
   const tr = document.createElement('tr');
-  tr.dataset.id = s.id; if (s.hidden) tr.classList.add('is-hidden');
+  const linked = Boolean(UB_LINKS[s.id]), off = linked && ubMeta.get(s.id)?.ubOff === true;
+  tr.dataset.id = s.id; if (s.hidden || off) tr.classList.add('is-hidden');
   const page = PAGE_BY_ID[s.id] || PRICE_PAGE_BY_ID[s.id];
+  const tag = !linked ? '' : off
+    ? '<span class="ub-tag" data-tone="off" title="Холбоотой үйлчилгээ UB Beauty-д идэвхгүй эсвэл захиалж болохгүй — сайтаас нуугдана">UB Beauty-д идэвхгүй</span>'
+    : '<span class="ub-tag" title="Үнэ, хугацааг UB Beauty-гаас авна — os.ubbeauty.mn → Тохиргоо → Үйлчилгээ">UB Beauty</span>';
+  const ro = linked ? ' readonly title="UB Beauty-гаас — os.ubbeauty.mn-д засна"' : '';
   tr.innerHTML = `
     <td class="c-cat"><select data-k="c">${catOptions(s.c)}</select></td>
-    <td class="c-name"><input type="text" aria-label="Үйлчилгээний нэр" data-k="n" maxlength="120">${page ? `<a class="svc-page" href="${esc(page)}" target="_blank" rel="noopener" title="Энэ үйлчилгээний үнэ эмчилгээний хуудсанд ч харагдана">↗ ${esc(page)}</a>` : ''}</td>
+    <td class="c-name"><input type="text" aria-label="Үйлчилгээний нэр" data-k="n" maxlength="120">${tag}${page ? `<a class="svc-page" href="${esc(page)}" target="_blank" rel="noopener" title="Энэ үйлчилгээний үнэ эмчилгээний хуудсанд ч харагдана">↗ ${esc(page)}</a>` : ''}</td>
     <td class="c-desc"><textarea rows="1" data-k="d" maxlength="300"></textarea></td>
-    <td class="c-time"><input type="text" data-k="t" maxlength="30"></td>
-    <td class="c-price"><input type="text" data-k="p" maxlength="40"></td>
+    <td class="c-time"><input type="text" data-k="t" maxlength="30"${ro}></td>
+    <td class="c-price"><input type="text" data-k="p" maxlength="40"${ro}></td>
     <td class="c-hide"><input type="checkbox" data-k="hidden"${s.hidden ? ' checked' : ''}></td>
     <td class="c-hide"><button class="btn-icon btn-icon--danger" type="button" data-act="rm" title="Мөр устгах">${ICON.trash}</button></td>`;
   $('[data-k="n"]', tr).value = s.n; $('[data-k="d"]', tr).value = s.d; $('[data-k="t"]', tr).value = s.t; $('[data-k="p"]', tr).value = s.p;
@@ -68,7 +80,50 @@ const pkgRow = (p) => {
   return tr;
 };
 const one = (v, max) => str(typeof v === 'string' ? v.replace(/\s+/g, ' ') : v, max);   // мөр шилжилтгүй (сайт нэг мөрөөр харуулна)
-const normSvc = (s) => ({ id: str(s && s.id, 40) || ('svc-' + Date.now().toString(36)), c: CATS[s && s.c] ? s.c : 'minor', n: one(s && s.n, 120), d: one(s && s.d, 300), t: one(s && s.t, 30), p: one(s && s.p, 40), hidden: !!(s && s.hidden) });
+// hidden = сайтын «Нуух» сонголт (hiddenSite); эцсийн hidden-ийг (UB Beauty-д идэвхгүй бол ч нуух) finalize() тооцно
+const normSvc = (s) => ({ id: str(s && s.id, 40) || ('svc-' + Date.now().toString(36)), c: CATS[s && s.c] ? s.c : 'minor', n: one(s && s.n, 120), d: one(s && s.d, 300), t: one(s && s.t, 30), p: one(s && s.p, 40), hidden: siteHidden(s) });
+/** Хадгалах мөрүүд: hiddenSite, UB Beauty-ийн t/p/ub/ubOff, эцсийн hidden (сайт, build, бот зөвхөн hidden-ийг уншина) */
+function finalize(rows) {
+  const base = rows.map((r) => ({ ...r, hiddenSite: r.hidden }));
+  if (ub) { const res = applyUbCatalog(base, ub); if (res.ok) return res.services; }
+  return base.map((r) => {
+    const m = UB_LINKS[r.id] && ubMeta.get(r.id);
+    return m ? { ...r, ub: m.ub, ubOff: m.ubOff, hidden: r.hiddenSite || m.ubOff } : r;
+  });
+}
+/** Ирсэн (эсвэл UB-ээр тооцсон) мөрүүдээс ubMeta-г шинэчилнэ */
+function rememberUb(services) {
+  ubMeta.clear();
+  for (const s of services) if (s && UB_LINKS[s.id]) ubMeta.set(s.id, { ub: [...UB_LINKS[s.id]], ubOff: s.ubOff === true });
+}
+function ubNote(text, tone, retry) {
+  ubBox.hidden = false; ubBox.dataset.tone = tone || '';
+  ubMsg.textContent = text;
+  btnUb.hidden = false; btnUb.textContent = retry ? 'Дахин оролдох' : 'UB Beauty-гээс шинэчлэх';
+}
+const UB_REASON = { ub_empty: 'жагсаалт хоосон ирсэн', ub_mismatch: 'холбоотой үйлчилгээний ихэнх нь олдсонгүй' };
+/** UB Beauty-г татаж мөрүүдэд тавина. @returns {Promise<{ services: object[], changed: number } | null>} */
+async function pullUb(rows) {
+  try {
+    ub = await fetchUbServices({ apiBase: API_BASE, key: PUBLISHABLE_KEY, timeoutMs: 8000 });
+  } catch (e) {
+    ub = null;
+    ubNote('UB Beauty-д холбогдож чадсангүй — холбоотой мөрийн үнэ, хугацаа сүүлд хадгалсан хэвээр байна.', 'warn', true);
+    return null;
+  }
+  const res = applyUbCatalog(rows, ub);
+  if (!res.ok) {
+    ubNote(`UB Beauty-ийн ${UB_REASON[res.reason] || 'хариу буруу'} тул шинэчлээгүй (${res.present}/${res.expected}). Сайт сүүлд хадгалсан утгаараа байна.`, 'warn', true);
+    ub = null;
+    return null;
+  }
+  const r = res.report;
+  const tail = `Холбоотой ${r.linked} мөр${r.unlinked.length ? `, холбоогүй ${r.unlinked.length}` : ''}${r.off.length ? `, UB Beauty-д идэвхгүй ${r.off.length}` : ''}${r.unused.length ? ` · UB Beauty-ийн ${r.unused.length} үйлчилгээ сайтад холбогдоогүй` : ''}.`;
+  ubNote(res.changed.length
+    ? `UB Beauty-д ${res.changed.length} мөрийн үнэ/хугацаа/төлөв өөрчлөгдсөн — «Хадгалах» дарж сайтад оруулна. ${tail}`
+    : `UB Beauty-тэй тохирч байна. ${tail}`, res.changed.length ? 'warn' : '', false);
+  return { services: res.services, changed: res.changed.length };
+}
 const normPkg = (p) => ({ id: str(p && p.id, 10), name: one(p && p.name, 60), price: one(p && p.price, 40), hidden: !!(p && p.hidden) });
 const readRows = (tbody, keys) => $$('tr[data-id]', tbody).map((tr) => {
   const o = { id: tr.dataset.id };
@@ -115,17 +170,23 @@ export async function load() {
   setStatus(status, 'Ачаалж байна…', '');
   try {
     const snap = await getDoc(ref);
+    let services, packages;
     if (snap.exists() && Array.isArray(snap.data().services)) {
       const c = snap.data();
-      fill(c.services, Array.isArray(c.packages) ? c.packages : []);
+      services = c.services; packages = Array.isArray(c.packages) ? c.packages : [];
       renderPages(c.services);
-      setStatus(status, `Сүүлд хадгалсан: ${fmtDate(c.updatedAt)} · ${c.updatedBy || ''}`, '');
+      const synced = c.ubSyncedAt ? ` · UB Beauty-гээс автоматаар: ${fmtDate(c.ubSyncedAt)}` : '';
+      setStatus(status, `Сүүлд хадгалсан: ${fmtDate(c.updatedAt)} · ${c.updatedBy || ''}${synced}`, '');
     } else {
-      fill(DEFAULTS.treatments, DEFAULTS.packages);
+      services = DEFAULTS.treatments; packages = DEFAULTS.packages;
       setStatus(status, 'Каталог хадгалагдаагүй — анхны утгыг харуулж байна. Хадгалбал сайт эндхийг уншина.', '');
     }
+    rememberUb(services);
+    fill(services, packages);
     clearErrors(form);
-    saved = JSON.stringify(readAll());
+    saved = JSON.stringify(readAll());   // хадгалсан төлөв — UB Beauty-ийн өөрчлөлт «хадгалаагүй» гэж харагдана
+    const pulled = await pullUb(services);
+    if (pulled && pulled.changed) { rememberUb(pulled.services); fill(pulled.services, packages); }
     ready = true;
     lock(false);
   } catch (e) {
@@ -138,11 +199,33 @@ export async function load() {
 }
 $('#btnCatRetry').addEventListener('click', load);
 
+// «UB Beauty-гээс шинэчлэх»: дахин татаж мөрүүдэд тавина. Өөр хадгалаагүй засвар байгаагүй бол шууд хадгална
+// (сайт, Messenger бот дараагийн ачааллаас шинэ утгыг авна); байвал хадгалахыг хэрэглэгчид үлдээнэ.
+btnUb.addEventListener('click', async () => {
+  if (!ready || saving) return;
+  const clean = !isDirty();
+  btnUb.disabled = true;
+  try {
+    const all = readAll();
+    const pulled = await pullUb(finalize(all.services.map(normSvc)));
+    if (!pulled) return;
+    rememberUb(pulled.services);
+    const restore = captureFocus(form);
+    fill(pulled.services, all.packages);
+    restore(btnUb);
+    refreshDirty();
+    if (pulled.changed && clean) await save();
+  } finally { btnUb.disabled = false; }
+});
+
 $('#btnCatDefaults').addEventListener('click', async () => {
   if (!ready || saving) return;
   const ok = await dialog({ title: 'Хүснэгтийг анхны утгаар дүүргэх үү?', body: 'Одоогийн мөрүүд анхны жагсаалтаар солигдоно. «Хадгалах» дарах хүртэл сайт өөрчлөгдөхгүй.', confirm: 'Анхны утгаар дүүргэх', cancel: 'Болих', safe: true });
   if (!ok) return;
-  fill(DEFAULTS.treatments, DEFAULTS.packages);
+  const res = ub ? applyUbCatalog(DEFAULTS.treatments, ub) : null;
+  const rows = res && res.ok ? res.services : DEFAULTS.treatments;
+  rememberUb(rows);
+  fill(rows, DEFAULTS.packages);
   setStatus(status, 'Анхны утга дүүргэгдлээ — хадгалахаа мартуузай.', '');
   announce('Анхны утга дүүргэгдлээ');
   refreshDirty();
@@ -201,7 +284,7 @@ async function save() {
   if (!session.user || saving) return;
   if (!ready) { snack('Каталог ачаалагдаагүй тул хадгалах боломжгүй.', { error: true }); return; }
   const all = readAll();
-  const services = all.services.map(normSvc).filter((s) => s.n);
+  const services = finalize(all.services.map(normSvc).filter((s) => s.n));
   const packages = all.packages.map(normPkg);
   if (services.length > 200) { showErrors(errBox, [{ msg: `Үйлчилгээ 200-аас ихгүй байна (одоо ${services.length}).` }], form); return; }
   clearErrors(form);
@@ -216,6 +299,7 @@ async function save() {
   try {
     await setDoc(ref, { services, packages, updatedAt: serverTimestamp(), updatedBy: session.user.email });
     const dropped = all.services.length - services.length;
+    rememberUb(services);
     fill(services, packages);
     saved = JSON.stringify(readAll());
     renderPages(services);

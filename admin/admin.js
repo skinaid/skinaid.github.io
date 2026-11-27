@@ -13,7 +13,7 @@ import * as contentEditor from './m-content.js?v=3952dde7';
 import * as bookings from './m-bookings.js?v=0ad7a194';
 import * as settings from './m-settings.js?v=07329949';
 import * as home from './m-home.js?v=f783747e';
-import * as catalog from './m-catalog.js?v=a54c2b3b';
+import * as catalog from './m-catalog.js?v=4ed797c1';
 import { renderPages } from './m-pages.js?v=26a525a2';
 import * as messenger from './m-messenger.js?v=194e69ab';
 
