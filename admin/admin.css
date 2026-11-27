@@ -830,3 +830,26 @@ body.is-admin h1, body.is-admin h2, body.is-admin h3 { letter-spacing: -0.005em;
 @media (max-width: 860px) {
   .is-admin .menu { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 }
+
+/* ---------- Зургийн сангаас сонгох цонх (image-upload.js → openPhotoPicker) ---------- */
+.dlg.pp { width: min(920px, calc(100% - 24px)); max-height: calc(100dvh - 32px); border-radius: var(--bo-radius-lg, 16px); }
+.pp__box { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 12px; padding: 18px 20px; max-height: calc(100dvh - 32px); }
+.pp__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pp__close { font-size: 14px; }
+.pp__search { max-width: none; flex: none; }
+.is-admin .pp__search input { padding-left: 14px; }
+.pp__grid { display: grid; align-content: start; grid-auto-rows: max-content; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; overflow-y: auto; min-height: 0; padding: 2px; }
+.pp__item { position: relative; display: block; padding: 0; border: 1px solid var(--bo-line, var(--line)); border-radius: 10px; overflow: hidden; background: var(--purple-50); cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.pp__item img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.pp__item:hover { border-color: var(--purple-400); box-shadow: 0 2px 8px rgba(101, 65, 134, .18); }
+.pp__item:focus-visible { outline: 3px solid var(--purple); outline-offset: 2px; }
+.pp__item[aria-selected="true"] { border: 2px solid var(--purple); }
+.pp__item[aria-selected="true"]::after { content: "✓"; position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--purple); color: #fff; font-size: 12px; font-weight: 800; display: grid; place-items: center; }
+.pp__empty { margin: 0; }
+.pp__foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--bo-line, var(--line)); }
+.pp__foot [role="status"] { flex: 1 1 160px; }
+.pp__cancel { margin-left: auto; }
+@media (max-width: 600px) {
+  .pp__box { padding: 14px; }
+  .pp__grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+}
