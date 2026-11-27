@@ -212,47 +212,72 @@ export function youtubeId(value) {
   return id && /^[\w-]{11}$/.test(id) ? id : null;
 }
 
+/** Сайт дээрх бичлэг (assets/video/<нэр>.mp4) — замыг буцаана, үгүй бол null. Нүүр зураг нь ижил нэртэй .jpg */
+const LOCAL_VIDEO = /^\/assets\/video\/[a-z0-9][a-z0-9-]{0,60}\.mp4(?:\?v=[a-f\d]+)?$/;
+export const localVideo = (value) => (typeof value === 'string' && LOCAL_VIDEO.test(value.trim()) ? value.trim() : null);
+export const videoPoster = (src) => src.replace(/\.mp4(?:\?.*)?$/, '.jpg');
+
 export function validVideos(items) {
   return Array.isArray(items) && items.length <= 12 && items.every((item) =>
-    item && youtubeId(item.url) !== null && typeof item.title === 'string' && item.title.length <= 120 &&
-    typeof item.hidden === 'boolean');
+    item && (youtubeId(item.url) !== null || localVideo(item.url) !== null) &&
+    typeof item.title === 'string' && item.title.length <= 120 && typeof item.hidden === 'boolean');
 }
 
-/** «Видео бичлэг» хэсэг: бичлэг байвал харагдана, үгүй бол нуугдана. Зураг дээр дарахад main.js тоглуулагчийг нээнэ. */
-export function applyVideos(doc, items) {
+const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** Бичлэгийн картууд (HTML) — tools/build.mjs (статик) ба applyVideos (Firestore) хоёулаа үүгээр зурна */
+export function videoCardsHTML(items) {
+  return items.map((item) => {
+    const title = item.title.trim();
+    const label = escHtml((title || 'Видео бичлэг') + ' — тоглуулах');
+    const caption = title ? `<span class="video__title">${escHtml(title)}</span>` : '';
+    const play = '<span class="video__play" aria-hidden="true"></span>';
+    const src = localVideo(item.url);
+    if (src) {
+      return `<a class="video video--short" href="${escHtml(src)}" data-video-src="${escHtml(src)}" aria-label="${label}">` +
+        `<span class="video__media"><img src="${escHtml(videoPoster(src))}" alt="" loading="lazy" width="540" height="960">${play}</span>${caption}</a>`;
+    }
+    const id = youtubeId(item.url);
+    return `<a class="${/\/shorts\//.test(item.url) ? 'video video--short' : 'video'}" href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener" data-video-id="${id}" aria-label="${label}">` +
+      `<img src="https://i.ytimg.com/vi/${id}/hqdefault.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">${play}${caption}</a>`;
+  }).join('');
+}
+
+/** Хуудсан дээрх (статик) бичлэгүүд — admin-ий «Анхны бичлэгүүд» */
+export function videoItems(doc) {
+  return [...doc.querySelectorAll('#videos [data-videos] > a.video')].map((a) => ({
+    url: a.dataset.videoSrc || 'https://www.youtube.com/watch?v=' + a.dataset.videoId,
+    title: a.querySelector('.video__title')?.textContent || '',
+    hidden: false,
+  }));
+}
+
+function rememberHidden(el) {
+  const entries = JSON.parse(el.getAttribute('data-content-original') || '[]');
+  if (entries.some((e) => e.attr === 'hidden')) return;
+  entries.push({ attr: 'hidden', value: el.getAttribute('hidden') });
+  el.setAttribute('data-content-original', JSON.stringify(entries));
+}
+
+/** «Видео бичлэг» хэсэг ба цэсний «Бичлэг» холбоос: харагдах бичлэг байвал харагдана, үгүй бол нуугдана.
+ *  remember — build-ийн snapshot (deployment/build.mjs): restoreContent статик хувилбарыг сэргээнэ. */
+export function applyVideos(doc, items, remember = false) {
   const visible = validVideos(items) ? items.filter((item) => !item.hidden) : [];
-  // Цэсний «Бичлэг» холбоос (бүх хуудсанд) — бичлэгтэй үед л харагдана
-  for (const link of doc.querySelectorAll('[data-videos-link]')) link.hidden = !visible.length;
   const section = doc.querySelector('#videos');
   const grid = section?.querySelector('[data-videos]');
-  if (!grid) return;
-  grid.replaceChildren(...visible.map((item) => {
-    const id = youtubeId(item.url);
-    const title = item.title.trim();
-    const card = doc.createElement('a');
-    card.className = /\/shorts\//.test(item.url) ? 'video video--short' : 'video';
-    card.setAttribute('href', 'https://www.youtube.com/watch?v=' + id);
-    card.setAttribute('target', '_blank');
-    card.setAttribute('rel', 'noopener');
-    card.setAttribute('data-video-id', id);
-    card.setAttribute('aria-label', (title || 'Видео бичлэг') + ' — тоглуулах');
-    const img = doc.createElement('img');
-    img.setAttribute('src', 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg');
-    img.setAttribute('alt', '');
-    img.setAttribute('loading', 'lazy');
-    img.setAttribute('referrerpolicy', 'no-referrer');
-    const play = doc.createElement('span');
-    play.className = 'video__play';
-    play.setAttribute('aria-hidden', 'true');
-    card.append(img, play);
-    if (title) {
-      const caption = doc.createElement('span');
-      caption.className = 'video__title';
-      caption.textContent = title;
-      card.append(caption);
+  const links = [...doc.querySelectorAll('[data-videos-link]')];
+  if (remember) {
+    for (const el of [...links, section].filter(Boolean)) rememberHidden(el);
+    if (grid && !section.querySelector('template[data-content-videos]')) {
+      const original = doc.createElement('template');
+      original.dataset.contentVideos = '';
+      original.innerHTML = grid.innerHTML;
+      grid.after(original);
     }
-    return card;
-  }));
+  }
+  for (const link of links) link.hidden = !visible.length;
+  if (!grid) return;
+  grid.innerHTML = videoCardsHTML(visible);
   section.hidden = !visible.length;
 }
 
@@ -322,7 +347,7 @@ export function renderPublicContent(doc, path, values, common, remember = false)
   applyContent(fields, changes, remember);
   if (home) {
     for (const list of cardLists) applyCards(doc, list, values[list.key]);
-    applyVideos(doc, values[VIDEO_KEY]);
+    if (Object.hasOwn(values, VIDEO_KEY)) applyVideos(doc, values[VIDEO_KEY], remember);
     if (validFaq(values[FAQ_KEY])) {
       const faq = doc.querySelector('#faq .faq');
       if (remember && faq) {
@@ -333,7 +358,7 @@ export function renderPublicContent(doc, path, values, common, remember = false)
       }
       applyFaq(doc, values[FAQ_KEY]);
     }
-  } else applyVideos(doc, common[VIDEO_KEY]);   // дэд хуудас: зөвхөн цэсний «Бичлэг» холбоос (нүүрний бичлэгээр)
+  } else if (Object.hasOwn(common, VIDEO_KEY)) applyVideos(doc, common[VIDEO_KEY], remember);   // дэд хуудас: зөвхөн цэсний «Бичлэг» холбоос
 }
 
 // Only remove baked changes when a newer record arrives. An unavailable read keeps the snapshot.
@@ -350,7 +375,11 @@ export function restoreContent(doc) {
     el.removeAttribute('data-content-original');
   }
   doc.querySelectorAll('[data-added-card]').forEach(el => el.remove());
-  applyVideos(doc, []);
+  const videos = doc.querySelector('template[data-content-videos]');
+  if (videos) {
+    doc.querySelector('#videos [data-videos]').innerHTML = videos.innerHTML;
+    videos.remove();
+  }
   for (const parent of new Set([...doc.querySelectorAll('[data-content-order]')].map(el => el.parentElement))) {
     for (const el of [...parent.children].sort((a, b) => Number(a.dataset.contentOrder) - Number(b.dataset.contentOrder))) {
       el.removeAttribute('data-content-order');

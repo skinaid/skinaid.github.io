@@ -10,7 +10,7 @@ import { uploadControl, queueImage, imagePreview, queuedImages, writeImages, cle
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, $$, db, session, errText } from './core.js?v=2c361933';
 import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=720127aa';
-import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, youtubeId, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=b2ee7878';
+import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, youtubeId, localVideo, videoPoster, videoItems, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=544fa061';
 import { findClaims } from './claims.js?v=b71d5c91';
 
 const PATH = '/';
@@ -31,7 +31,7 @@ let baseline = {};
 let draft = {};
 let original = null;
 const faqList = { key: FAQ_KEY, group: 'Түгээмэл асуулт', name: 'Асуулт', fields: [['question', 'Асуулт'], ['answer', 'Хариулт']] };
-const videoList = { key: VIDEO_KEY, group: 'Видео бичлэг', name: 'Бичлэг', fields: [['url', 'YouTube холбоос'], ['title', 'Гарчиг', true]] };
+const videoList = { key: VIDEO_KEY, group: 'Видео бичлэг', name: 'Бичлэг', fields: [['url', 'Бичлэг (сайтын бичлэг эсвэл YouTube холбоос)'], ['title', 'Гарчиг', true]] };
 /** Жагсаалт бүрийн шалгалт (site-content.js) */
 const validOf = (spec) => spec === faqList ? validFaq : spec === videoList ? validVideos : (items) => validCards(spec, items);
 let lists = [];
@@ -76,6 +76,7 @@ const lock = () => {
 };
 const photos = window.SKINAID_HOME_DATA?.photos || [];
 for (const photo of photos) $('#contentPhotos').append(new Option('/' + photo.replace(/^\//, '')));
+for (const video of window.SKINAID_HOME_DATA?.videos || []) $('#contentVideos').append(new Option(video));
 
 function make(tag, cls, text) {
   const el = document.createElement(tag);
@@ -154,7 +155,7 @@ async function renderPreview() {
   applyContent(copyFields, draft);
   for (const list of cardLists) applyCards(copy, list, draft[list.key]);
   if (draft[FAQ_KEY]) applyFaq(copy, draft[FAQ_KEY]);
-  applyVideos(copy, (draft[VIDEO_KEY] || []).filter((item) => validVideos([item])));   // бичиж дуусаагүй мөрийг алгасна
+  applyVideos(copy, (listValue(draft, videoList) || []).filter((item) => validVideos([item])));   // бичиж дуусаагүй мөрийг алгасна
   for (const img of copy.querySelectorAll('img[src]')) {
     const src = img.getAttribute('src');
     const local = imagePreview(src);
@@ -330,8 +331,8 @@ function renderList(body, spec) {
   const isFaq = spec.key === FAQ_KEY;
   const isVideo = spec === videoList;
   const ordered = isFaq || isVideo;   // дарааллыг «Дээш / Доош»-оор (картууд байрлалын тоогоор)
-  block.append(make('h3', 'ce-list__title', isFaq ? 'Асуулт, хариултууд' : isVideo ? 'YouTube бичлэгүүд' : 'Нэмэлт ' + spec.name.toLowerCase()));
-  if (isVideo) block.append(make('p', 'hint', 'YouTube дээрх бичлэгийнхээ холбоосыг хуулж тавина (youtube.com/watch?v=…, youtu.be/…, Shorts). Бичлэг нэмэхэд сайтад «Видео бичлэг» хэсэг гарч ирнэ; бүгдийг нуувал эсвэл устгавал хэсэг нуугдана.'));
+  block.append(make('h3', 'ce-list__title', isFaq ? 'Асуулт, хариултууд' : isVideo ? 'Бичлэгүүд' : 'Нэмэлт ' + spec.name.toLowerCase()));
+  if (isVideo) block.append(make('p', 'hint', 'Сайтын бичлэгээс сонгох (талбар дээр дарахад жагсаалт гарна) эсвэл YouTube дээрх бичлэгийн холбоосыг тавина (youtube.com/watch?v=…, youtu.be/…, Shorts). «Дээш / Доош»-оор эрэмбэлж, «Сайтаас нуух»-аар түр нууна; бүгдийг нуувал хэсэг ба цэсний «Бичлэг» холбоос нуугдана. Шинэ бичлэгийн файл нэмэхийг хөгжүүлэгчид хандана.'));
   const editor = make('div');
   editor.id = 'editor-' + spec.key;
   block.append(editor);
@@ -353,18 +354,22 @@ function renderList(body, spec) {
         let check = null;
         if (isVideo && key === 'url') {
           input.inputMode = 'url';
-          input.placeholder = 'https://www.youtube.com/watch?v=…';
+          input.placeholder = '/assets/video/… эсвэл https://www.youtube.com/watch?v=…';
+          input.setAttribute('list', 'contentVideos');
           const thumb = make('img', 'ce-video__thumb');
           thumb.alt = '';
           thumb.referrerPolicy = 'no-referrer';
           const note = make('p', 'hint');
           check = () => {
-            const id = youtubeId(input.value);
-            thumb.hidden = !id;
-            if (id) thumb.src = 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+            const id = youtubeId(input.value), local = localVideo(input.value);
+            thumb.hidden = !id && !local;
+            thumb.classList.toggle('is-short', !!local);
+            if (local) thumb.src = videoPoster(local);
+            else if (id) thumb.src = 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
             else thumb.removeAttribute('src');
-            note.classList.toggle('is-err', !id && !!input.value.trim());
-            note.textContent = id ? '' : input.value.trim() ? 'YouTube-ийн холбоос танигдсангүй. Бичлэгийн «Хуваалцах» товчноос холбоосыг хуулна уу.' : '';
+            const bad = !id && !local && !!input.value.trim();
+            note.classList.toggle('is-err', bad);
+            note.textContent = bad ? 'Бичлэг танигдсангүй. Жагсаалтаас сайтын бичлэг сонгох эсвэл YouTube-ийн «Хуваалцах» холбоосыг тавина уу.' : '';
           };
           wrapper.append(input, note, thumb);
         }
@@ -402,7 +407,7 @@ function renderList(body, spec) {
     }, items.length >= (isVideo ? 12 : 30));
     const foot = make('div', 'actions');
     foot.append(add);
-    if (isFaq) foot.append(button('Анхны асуултуудаар дүүргэх', () => {
+    if (ordered) foot.append(button(isFaq ? 'Анхны асуултуудаар дүүргэх' : 'Анхны бичлэгүүдээр дүүргэх', () => {
       draft[spec.key] = structuredClone(listDefaults[spec.key]);
       redraw(0);
     }, false, 'btn btn--ghost btn--sm'));
@@ -582,7 +587,7 @@ export async function load() {
     }
     baseline = parseContent(original.raw);
     lists = [faqList, videoList, ...cardLists];
-    listDefaults = Object.fromEntries(lists.map((spec) => [spec.key, spec === faqList ? faqItems(source) : []]));
+    listDefaults = Object.fromEntries(lists.map((spec) => [spec.key, spec === faqList ? faqItems(source) : spec === videoList ? videoItems(source) : []]));
     for (const spec of lists) {
       const stored = baseline[spec.key];
       if (stored !== undefined && !validOf(spec)(stored)) throw new Error('content-format');
@@ -633,7 +638,7 @@ async function save() {
       openAll(editor);
       const row = editor.querySelectorAll('fieldset')[items.findIndex((item) => !valid([item]))];
       setTimeout(() => { row?.scrollIntoView({ block: 'center' }); row?.querySelector('input, textarea')?.focus(); }, 30);
-      message(spec === videoList ? 'Бичлэг · YouTube-ийн холбоосыг шалгана уу.' : spec.name + ' · Бичвэр, холбоос болон байрлалыг шалгана уу.');
+      message(spec === videoList ? 'Бичлэг · сайтын бичлэг эсвэл YouTube-ийн холбоосыг шалгана уу.' : spec.name + ' · Бичвэр, холбоос болон байрлалыг шалгана уу.');
       return;
     }
     if (same(items, listDefaults[spec.key])) delete values[spec.key];

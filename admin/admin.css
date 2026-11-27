@@ -659,6 +659,7 @@ body.has-savebar .snackbar { bottom: 92px; }
 .ce-item legend { padding-inline: 6px; font-size: 12.5px; font-weight: 800; color: var(--muted); }
 .ce-item textarea { min-height: 76px; field-sizing: content; }
 .ce-video__thumb { width: 160px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.ce-video__thumb.is-short { width: 90px; aspect-ratio: 9 / 16; }
 .ce-item .hint { margin: 0; }
 .ce-item__hide { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; margin-right: auto; }
 
