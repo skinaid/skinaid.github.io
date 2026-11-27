@@ -126,17 +126,13 @@ service cloud.firestore {
     function messengerSettingsAfter() {
       return getAfter(/databases/$(database)/documents/messenger_settings/main).data;
     }
-    // «Автомат» горимын туршилтын акаунт: ярианы id (psidHash, 64 hex), ≤ 10. Rules-д давталт байхгүй тул индексээр шалгана.
-    function isThreadId(v) {
-      return v is string && v.matches('^[0-9a-f]{64}$');
-    }
+    // «Автомат» горимын туршилтын акаунт (testThreads): ярианы id-ийн жагсаалт, ≤ 10. ЭНД ЗӨВХӨН БҮТЭЦ (жагсаалт, тоо) —
+    // элемент бүрийн хэлбэрийг (64 hex) сервер (api/_lib/social/settings-logic.js normalizeSettings) ба admin шүүнэ: буруу
+    // элемент ямар ч яриатай таарахгүй (хэнд ч илгээхгүй). Firestore дүрэм нэг хүсэлтэд ≤ 1000 илэрхийлэл үнэлдэг тул
+    // элемент бүрийг дүрэмд шалгавал (10 × regex) тохиргоо + audit-ийн хадгалалт «Эрх хүрэхгүй» болох эрсдэлтэй
+    // (settings/home-д ийм болсон, 2026-11-26) — «Яаралтай зогсоох» хадгалагдахгүй болно.
     function validTestThreads(l) {
-      return l is list && l.size() <= 10
-        && (l.size() < 1 || isThreadId(l[0])) && (l.size() < 2 || isThreadId(l[1]))
-        && (l.size() < 3 || isThreadId(l[2])) && (l.size() < 4 || isThreadId(l[3]))
-        && (l.size() < 5 || isThreadId(l[4])) && (l.size() < 6 || isThreadId(l[5]))
-        && (l.size() < 7 || isThreadId(l[6])) && (l.size() < 8 || isThreadId(l[7]))
-        && (l.size() < 9 || isThreadId(l[8])) && (l.size() < 10 || isThreadId(l[9]));
+      return l is list && l.size() <= 10;
     }
 
     match /messenger_settings/{doc} {

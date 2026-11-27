@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { COL } from '../../api/_lib/store.js';
 import { SOCIAL_AUDIENCES, SOCIAL_MODES, SOCIAL_RATINGS, TEST_THREADS_MAX } from '../../api/_lib/social/labels.js';
-import { SOCIAL_CAP_LIMITS, THREAD_ID_RE } from '../../api/_lib/social/settings-logic.js';
+import { isLive, normalizeSettings, SOCIAL_CAP_LIMITS, THREAD_ID_RE } from '../../api/_lib/social/settings-logic.js';
 
 const RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8');
 const code = RULES.replace(/\/\/.*$/gm, '');
@@ -69,13 +69,20 @@ test('rules («Автомат»): үзэгчид, туршилтын акаун�
   const all = list(s.match(/keys\(\)\.hasAll\(\[([^\]]+)\]\)/)[1]);
   assert.deepEqual(only.filter((k) => !all.includes(k)).sort(), ['autoAudience', 'testThreads'], 'шинэ талбарууд зөвшөөрөгдсөн ч заавал биш');
   assert.deepEqual(all.sort(), ['killSwitch', 'lastAuditId', 'mode', 'monthlyCostCapUsd', 'monthlyRunCap', 'updatedAt', 'updatedBy']);
-  // Туршилтын акаунт: ≤ TEST_THREADS_MAX, элемент бүр ярианы id (индекс 0…max-1 бүгд шалгагдана)
+  // Туршилтын акаунт: дүрэмд ЗӨВХӨН бүтэц (жагсаалт, ≤ TEST_THREADS_MAX). Элемент бүрийг (64 hex) дүрэмд шалгахгүй —
+  // Firestore нэг хүсэлтэд ≤ 1000 илэрхийлэл үнэлдэг (settings/home-д хэтэрч хадгалалт бүр татгалзагдсан, 2026-11-26);
+  // хэлбэрийг сервер/admin-ий normalizeSettings шүүнэ (буруу элемент хэнтэй ч таарахгүй — доорх шалгалт).
   const fn = code.slice(code.indexOf('function validTestThreads'), code.indexOf('match /messenger_settings/'));
-  assert.match(fn, new RegExp(`l is list && l\\.size\\(\\) <= ${TEST_THREADS_MAX}\\b`));
-  for (let i = 0; i < TEST_THREADS_MAX; i++) assert.ok(fn.includes(`(l.size() < ${i + 1} || isThreadId(l[${i}]))`), `индекс ${i}`);
-  assert.ok(!fn.includes(`l[${TEST_THREADS_MAX}]`));
-  const re = code.match(/function isThreadId\(v\) \{\s*return v is string && v\.matches\('([^']+)'\);/)[1];
-  assert.equal(re, THREAD_ID_RE.source);
+  assert.match(fn, new RegExp(`return l is list && l\\.size\\(\\) <= ${TEST_THREADS_MAX};`));
+  assert.ok(!/l\[\d+\]|matches\(/.test(fn), 'элемент бүрийн шалгалт (илэрхийллийн төсөв) байх ёсгүй');
+  const junk = normalizeSettings({ mode: 'auto', testThreads: ['x', 5, null, { a: 1 }, 'A'.repeat(64), `${'a'.repeat(64)} `] });
+  assert.deepEqual(junk.testThreads, [], 'дүрмээр өнгөрсөн буруу элементийг сервер хаяна');
+  assert.equal(isLive(junk, 'x'), false);
+  assert.equal(THREAD_ID_RE.source, '^[0-9a-f]{64}$');
+  // Илэрхийллийн төсөв: Messenger-ийн тохиргоо, audit-ийн дүрэмд давталт (индекс бүрээр задалсан шалгалт) алга
+  const budget = code.slice(code.indexOf('function messengerAudit'), code.indexOf('match /messenger_kb/'));
+  assert.ok(!/\[\d\]/.test(budget), 'индексээр задалсан шалгалт нэмэхгүй');
+  assert.ok((budget.match(/messengerSettingsAfter\(\)/g) || []).length <= 9 && (budget.match(/messengerAudit\(/g) || []).length <= 4, 'getAfter дуудлага ≤ 10 / бичилт');
   const a = block(COL.audit);
   assert.deepEqual(list(a.match(/detail\.keys\(\)\.hasOnly\(\[([^\]]+)\]\)/)[1]).sort(), ['autoAudience', 'killSwitch', 'mode', 'monthlyCostCapUsd', 'monthlyRunCap', 'testThreads']);
   assert.match(a, /detail\.get\('autoAudience', 'test'\) == messengerSettingsAfter\(\)\.get\('autoAudience', 'test'\)/);
