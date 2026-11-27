@@ -11,5 +11,8 @@
     "@vercel/functions": "^3.11.3",
     "@vercel/oidc": "^4.0.9",
     "google-auth-library": "^11.3.4"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
   }
 }

@@ -84,6 +84,25 @@ service cloud.firestore {
         && incoming().updatedBy == request.auth.token.email;
     }
 
+    // Нийтийн хуудсын текст, зураг, холбоосын өөрчлөлт. Зөвшөөрсөн талбарт л renderer хэрэглэнэ.
+    // Эмчийн хяналтад бэлдэж буй ноорог. Нийтийн сайтын унших замаас тусдаа.
+    match /clinical_drafts/{slug} {
+      allow get: if isAdmin();
+      allow create, update: if isAdmin() && slug.matches('^[a-z0-9-]{1,100}$')
+        && incoming().keys().hasOnly(['values', 'base', 'updatedAt'])
+        && isStr(incoming().values, 2, 80000) && isStr(incoming().base, 1, 100)
+        && incoming().updatedAt == request.time;
+    }
+
+    match /public_content/{page} {
+      allow get: if true;
+      allow create, update: if isAdmin()
+        && page.matches('^[a-z0-9~-]{1,100}$')
+        && incoming().keys().hasOnly(['values', 'updatedAt'])
+        && isStr(incoming().values, 2, 80000)
+        && incoming().updatedAt == request.time;
+    }
+
     // ---------- Тохиргоо (сайт уншина, admin бичнэ) ----------
     match /settings/{doc} {
       allow read: if true;

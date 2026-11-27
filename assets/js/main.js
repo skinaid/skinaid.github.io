@@ -28,7 +28,7 @@
 
   // Active section highlighting
   const navLinks = $$('.nav a[href^="#"]');
-  const sections = navLinks.map(a => $(a.getAttribute('href'))).filter(Boolean);
+  const sections = navLinks.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean);
   if ('IntersectionObserver' in window && sections.length) {
     const spy = new IntersectionObserver((entries) => {
       entries.forEach(e => {
@@ -207,7 +207,7 @@
   $$('.svc[data-cat]').forEach(card => {
     card.addEventListener('click', (e) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;   // шинэ таб г.м.
-      if ((card.getAttribute('href') || '').charAt(0) !== '#') return;   // эмчилгээний хуудас руу холбогдсон карт
+      if (card.getAttribute('href') !== '#treatments') return;   // эмчилгээний хуудас руу холбогдсон карт
       const chip = chipsEl && !chipsEl.hidden && $(`[data-cat="${card.dataset.cat}"]`, chipsEl);
       if (!chip) return;
       e.preventDefault();
@@ -218,14 +218,19 @@
   });
 
   /* ---------- FAQ accordion ---------- */
-  $$('.faq__item').forEach(item => {
-    const q = $('.faq__q', item);
+  document.addEventListener('click', (event) => {
+    const q = event.target.closest('.faq__q');
     if (!q) return;
-    q.addEventListener('click', () => {
-      const open = item.classList.contains('is-open');
-      $$('.faq__item.is-open').forEach(i => { i.classList.remove('is-open'); $('.faq__q', i).setAttribute('aria-expanded', 'false'); });
-      if (!open) { item.classList.add('is-open'); q.setAttribute('aria-expanded', 'true'); }
+    const item = q.closest('.faq__item');
+    const open = item.classList.contains('is-open');
+    $$('.faq__item.is-open').forEach((row) => {
+      row.classList.remove('is-open');
+      $('.faq__q', row).setAttribute('aria-expanded', 'false');
     });
+    if (!open) {
+      item.classList.add('is-open');
+      q.setAttribute('aria-expanded', 'true');
+    }
   });
 
   /* ---------- Site settings (Firestore settings/site, optional) ---------- */
@@ -372,7 +377,15 @@
     // Бүх карт нуугдсан бол картын хэсэг хоосон үлдэнэ; гарчиг, Facebook холбоос, цэсний #blog холбоос ажилласаар
     if (postsEl && h.posts) patchHome(postsEl, HOME.posts(h.posts)).forEach(watchReveal);
   };
-  const applySettings = (s) => { if (!s) return; applySite(s.site); applyCatalog(s.catalog); applyHome(s.home); };
+  const applySettings = (s) => {
+    if (!s) return;
+    $$('[data-static-hide]').forEach(el => {
+      const pending = el.dataset.staticHide.split(' ').filter(key => !Object.hasOwn(s, key));
+      if (!pending.length) { el.hidden = false; el.removeAttribute('data-static-hide'); }
+      else el.dataset.staticHide = pending.join(' ');
+    });
+    applySite(s.site); applyCatalog(s.catalog); applyHome(s.home);
+  };
   document.addEventListener('skinaid:settings', (e) => applySettings(e.detail));
   if (window.SkinAidBackend && window.SkinAidBackend.settings) applySettings(window.SkinAidBackend.settings);
 
@@ -384,7 +397,7 @@
   let backendPromise = null;
   const loadBackend = () => {
     if (!backendPromise) {
-      backendPromise = import('/assets/js/backend.js?v=c029d1fb')
+      backendPromise = import('/assets/js/backend.js?v=9784cc0a')
         .then(() => window.SkinAidBackend || null)
         .catch(() => { document.dispatchEvent(new Event('skinaid:backend-failed')); return null; });
     }
