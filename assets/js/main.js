@@ -397,7 +397,7 @@
   let backendPromise = null;
   const loadBackend = () => {
     if (!backendPromise) {
-      backendPromise = import('/assets/js/backend.js?v=9784cc0a')
+      backendPromise = import('/assets/js/backend.js?v=7dae12c7')
         .then(() => window.SkinAidBackend || null)
         .catch(() => { document.dispatchEvent(new Event('skinaid:backend-failed')); return null; });
     }

@@ -733,6 +733,13 @@
             </div>
             <span class="sr-only" id="ub-status" role="status"></span>
             <div class="form__ok" id="ub-done"></div>
+            <div hidden>
+              <p data-ub-copy="pending_confirmation" data-content-label="Хүсэлтээр захиалах тайлбар">Үйлчилгээ, мэргэжилтэн, сул цагаа сонгоод хүсэлт илгээнэ үү. Ресепшн цагийг баталгаажуулаад тантай холбогдоно.</p>
+              <p data-ub-copy="pending_payment" data-content-label="QPay төлбөрийн тайлбар">Үйлчилгээ, мэргэжилтэн, сул цагаа сонгоод QPay-ээр төлнө үү — төлбөр төлөгдмөгц цаг тань баталгаажна.</p>
+              <span data-ub-submit="pending_confirmation" data-content-label="Хүсэлт илгээх товч">Хүсэлт илгээх</span>
+              <span data-ub-submit="pending_payment" data-content-label="QPay төлөх товч">Төлбөр төлж захиалах</span>
+              <span data-ub-submit="confirmed" data-content-label="Шууд захиалах товч">Захиалах</span>
+            </div>
           </form>
 
           <form class="form" id="bookForm" novalidate hidden>
@@ -895,10 +902,10 @@
   <script src="assets/js/catalog-defaults.js?v=3ca31224"></script>
   <script src="assets/js/home-render.js?v=a84824d3"></script>
   <script src="assets/js/catalog-render.js?v=8d0d4450"></script>
-  <script src="assets/js/main.js?v=02a1e890"></script>
+  <script src="assets/js/main.js?v=dbedf005"></script>
   <!-- Firebase (backend.js: захиалга бүртгэх, admin-ы тохиргоо/каталог) нь хуудас зурагдсаны дараа main.js-ийн loadBackend()-ээр ачаалагдана. -->
   <!-- Онлайн цаг захиалга (UB Beauty вэб суваг). Ачаалагдахгүй бол #bookForm (Firestore хүсэлт) нөөцөөр гарна. -->
-  <script type="module" src="assets/js/booking.js?v=f1fd2d65" onerror="var u=document.getElementById('ubForm'),b=document.getElementById('bookForm');if(u&&b){u.hidden=true;b.hidden=false}"></script>
-  <script type="module" data-site-content src="/assets/js/site-content-live.js?v=7f3e937c"></script>
+  <script type="module" src="assets/js/booking.js?v=e239bac3" onerror="var u=document.getElementById('ubForm'),b=document.getElementById('bookForm');if(u&&b){u.hidden=true;b.hidden=false}"></script>
+  <script type="module" data-site-content src="/assets/js/site-content-live.js?v=9545a4a6"></script>
 </body>
 </html>

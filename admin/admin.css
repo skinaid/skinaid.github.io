@@ -600,3 +600,12 @@ body.has-savebar .snackbar { bottom: 92px; }
 .content-field > button { align-self: flex-start; }
 
 #contentPreviewBox iframe { width: 100%; height: min(75vh, 850px); border: 1px solid var(--line); border-radius: 12px; margin-top: 12px; }
+
+#contentSectionNav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 8px;
+  margin-block: 14px;
+}
+#contentSectionNav .btn { min-height: 42px; text-align: left; justify-content: flex-start; }
+#homeEditorMount .content-group { scroll-margin-top: 76px; }

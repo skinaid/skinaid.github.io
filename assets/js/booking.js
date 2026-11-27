@@ -145,7 +145,16 @@ function setup(form) {
     dupOk: '',                         // давхар захиалгын анхааруулгад «Тийм, дахин захиалах» дарсан `${serviceId}|${phone}`
   };
   const prepayMode = () => S.channel.new_booking_status === 'pending_payment';
-  const submitLabel = () => (S.channel.new_booking_status === 'pending_confirmation' ? 'Хүсэлт илгээх' : prepayMode() ? 'Төлбөр төлж захиалах' : 'Захиалах');
+  const bookingMode = () => prepayMode() ? 'pending_payment' :
+    S.channel.new_booking_status === 'pending_confirmation' ? 'pending_confirmation' : 'confirmed';
+  const submitLabel = () => form.querySelector(`[data-ub-submit="${bookingMode()}"]`)?.textContent.trim() ||
+    (prepayMode() ? 'Төлбөр төлж захиалах' : bookingMode() === 'pending_confirmation' ? 'Хүсэлт илгээх' : 'Захиалах');
+  const refreshBookingCopy = () => {
+    const intro = form.querySelector(`[data-ub-copy="${bookingMode()}"]`);
+    if (intro?.textContent.trim() && el.intro) el.intro.textContent = intro.textContent.trim();
+    if (S.ready && !S.busy) el.submit.textContent = submitLabel();
+  };
+  document.addEventListener('skinaid:content-applied', refreshBookingCopy);
   const prepayText = (s) => {
     // Нуусан үнэ: тогтмол урьдчилгаа ч үнээр хязгаарлагддаг тул урьдчилан тооцохгүй (үнийг задруулна)
     if (s && !hasPrice(s)) return 'Төлөх дүн төлбөрийн алхамд харагдана';
@@ -252,14 +261,8 @@ function setup(form) {
     S.doctorRequired = Boolean(dc && dc.doctor_required) || S.all.length > 0;
     if (!S.services.length) { fallback('paused'); return; }
 
-    if (S.channel.new_booking_status === 'pending_confirmation' && el.intro) {
-      el.intro.textContent = 'Үйлчилгээ, мэргэжилтэн, сул цагаа сонгоод хүсэлт илгээнэ үү. Ресепшн цагийг баталгаажуулаад тантай холбогдоно.';
-    }
-    if (prepayMode()) {
-      // Эмнэлгийн QPay холболт бэлэн биш бол захиалга бүр PAYMENT_UNAVAILABLE болно — шууд нөөц маягт
-      if (S.channel.prepay && S.channel.prepay.ready === false) { fallback('paused'); return; }
-      if (el.intro) el.intro.textContent = 'Үйлчилгээ, мэргэжилтэн, сул цагаа сонгоод QPay-ээр төлнө үү — төлбөр төлөгдмөгц цаг тань баталгаажна.';
-    }
+    if (prepayMode() && S.channel.prepay && S.channel.prepay.ready === false) { fallback('paused'); return; }
+    refreshBookingCopy();
     renderServices();
     renderDoctors();
     S.week = monday(ubToday());

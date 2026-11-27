@@ -2,12 +2,14 @@ import { clinicalFields, reviewDraft } from './clinical-content.js?v=2ad415b2';
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, db, session, errText } from './core.js?v=2c361933';
 import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=4ec734c0';
-import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=68c496d1';
+import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=0c1b948e';
 import { findClaims } from './claims.js?v=b71d5c91';
 
 const form = $('#contentForm');
 const page = $('#contentPage');
 const sections = $('#contentSections');
+const sectionNav = $('#contentSectionNav');
+let homeMode = false;
 const status = $('#contentStatus');
 const saveButton = $('#contentSave');
 const retry = $('#contentRetry');
@@ -141,6 +143,7 @@ function renderList(group, spec) {
 
 function render() {
   sections.replaceChildren();
+  sectionNav.replaceChildren();
   const groups = new Map();
   for (const field of fields) {
     if (!groups.has(field.group)) {
@@ -197,6 +200,38 @@ function render() {
     groups.get(field.group).append(row);
   }
   for (const spec of lists) renderList(groups.get(spec.group), spec);
+  if (!homeMode) return;
+  for (const [name, group] of groups) {
+    const shortcut = button(name, () => {
+      group.open = true;
+      group.querySelector('summary').focus({ preventScroll: true });
+      group.scrollIntoView({ block: 'start' });
+    });
+    sectionNav.append(shortcut);
+  }
+}
+
+export async function mount(onHome) {
+  homeMode = onHome;
+  const target = onHome ? $('#homeEditorMount') : $('#contentEditorMount');
+  if (form.parentNode !== target) target.append(form);
+  $('#contentPagePicker').hidden = onHome;
+  sectionNav.hidden = !onHome;
+  if (onHome && page.value !== '/') {
+    if (saving || (dirty() && !await dialog({
+      title: 'Өөр хуудасны засвар байна',
+      confirm: 'Хаяад нүүр хуудас нээх',
+      cancel: 'Засвартаа буцах',
+      danger: true,
+    }))) {
+      if (location.hash === '#/home') location.hash = '#/content';
+      return;
+    }
+    if (!homeMode) return;
+    page.value = '/';
+  }
+  if (ready && original?.path === page.value) render();
+  else load();
 }
 
 export async function load() {
@@ -368,6 +403,12 @@ previewButton.addEventListener('click', () => {
     applyContent(contentFields(copy, page.value), draft);
     for (const list of cardLists) applyCards(copy, list, draft[list.key]);
     if (draft[FAQ_KEY]) applyFaq(copy, draft[FAQ_KEY]);
+    const booking = copy.querySelector('#ubForm');
+    if (booking) {
+      booking.querySelector('[data-ub-intro]').textContent = booking.querySelector('[data-ub-copy="pending_payment"]').textContent;
+      booking.querySelector('button[type="submit"]').textContent = booking.querySelector('[data-ub-submit="pending_payment"]').textContent;
+      booking.querySelector('#ub-service option').textContent = 'Үйлчилгээ сонгох…';
+    }
     copy.querySelectorAll('script,iframe,link:not([rel="stylesheet"]),base,meta[http-equiv],noscript').forEach(el => el.remove());
     const base = copy.createElement('base');
     base.href = new URL(page.value, location.origin).href;
@@ -388,7 +429,8 @@ previewButton.addEventListener('click', () => {
       preview.append(heading, body);
     }
   }
-  close.focus();
+  preview.scrollIntoView({ block: 'nearest' });
+  close.focus({ preventScroll: true });
 });
 form.addEventListener('input', clearPreview);
 exportButton.addEventListener('click', () => {

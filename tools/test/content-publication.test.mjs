@@ -80,3 +80,18 @@ test('saved catalog, promo visibility and page metadata agree with the static ho
   assert.equal(clinic.hasOfferCatalog.itemListElement[0].itemListElement[0].price, '50000');
   assert.equal(clinic.telephone, '+97699112233');
 });
+
+test('homepage sections expose technology, catalog and booking fields without changing saved text IDs', () => {
+  const doc = parse(home);
+  const known = contentFields(doc, '/');
+  assert.ok(known.some(({ group }) => group === 'Технологийн мөр'));
+  assert.ok(known.some(({ group }) => group === 'Үйлчилгээний жагсаалт'));
+  const intro = known.find(({ label }) => label === 'QPay төлбөрийн тайлбар');
+  assert.equal(intro.group, 'Захиалгын маягт');
+  const copy = 'Төлбөр төлсний дараа цаг баталгаажна.';
+  assert.equal(parse(bakeHome({ [intro.id]: copy })).querySelector('[data-ub-copy="pending_payment"]').textContent, copy);
+  doc.querySelectorAll('[data-ub-copy],[data-ub-submit]').forEach(node => node.remove());
+  const previous = contentFields(doc, '/');
+  assert.deepEqual(known.filter(({ label }) => !/^(Хүсэлтээр захиалах тайлбар|QPay төлбөрийн тайлбар|Хүсэлт илгээх товч|QPay төлөх товч|Шууд захиалах товч)$/.test(label)).map(({ id }) => id),
+    previous.map(({ id }) => id));
+});
