@@ -18,6 +18,8 @@
  *                 мэдлэгтэй; хэсэг тус бүр ≤ 6 кейс (зэрэг, функцийн 60 с-т багтана; Claude-ээс ӨМНӨ хэсгийг эзэмшинэ — давхар
  *                 төлөхгүй). Өдөрт ≤ 3 ажиллагаа, нэг ажиллагаа ≤ $5 (хэтэрвэл зогсоно), сарын хязгаар ба туршилттай ижил admin-ий
  *                 дэд хязгаарт (20%) тоологдоно; үр дүн messenger_status/eval_<id>, түүх messenger_status/evals.
+ *   · ub_prices — «Үйлчилгээ / Багц»: UB Beauty-д нийтэд нуусан үнийг нууц түлхүүрээр татаж admin_private/ub_prices-д
+ *                 (зөвхөн admin уншина) шинэчилнэ; инстанст 20 с-д нэг.
  */
 import { anthropicConfigured } from './config.js';
 import { AuthError, createTokenVerifier } from './admin-auth.js';
@@ -31,6 +33,7 @@ import { capReached } from './agent.js';
 import { buildSocialRequest, SOCIAL_PROMPT_VERSION } from './social/prompt.js';
 import { describeError } from './errors.js';
 import { FirestoreError } from './firestore.js';
+import { refreshHiddenPrices } from './ub-catalog-sync.js';
 
 export const ADMIN_ORIGIN = 'https://www.skinaid.mn';
 export const ADMIN_MAX_BODY = 16_384;
@@ -77,6 +80,7 @@ export function createAdminHandler(deps) {
   /** Инстанст нэг удаад нэг туршилт (олон таб, давхар дарах) */
   let testInFlight = false;
   let lastCrisisCheck = -Infinity;
+  let lastUbPrices = -Infinity;
 
   /** @type {Record<string, (rt: any, body: Record<string, any>, started: number, who: { email: string }) => Promise<Response>>} */
   const actions = {
@@ -113,6 +117,21 @@ export function createAdminHandler(deps) {
           blocks: req.system.slice(1).map((b) => b.text),
         },
       });
+    },
+
+    /** «Үйлчилгээ / Багц» — нуусан үнийг UB Beauty-ээс (нууц түлхүүр) шинэчилнэ; үнэ хариунд ОРОХГҮЙ (Firestore-оос уншина) */
+    async ub_prices(rt) {
+      const wait = 20_000 - (clock() - lastUbPrices);
+      if (wait > 0) return json({ ok: true, throttled: true, retryAfterMs: wait });
+      lastUbPrices = clock();
+      try {
+        const r = await refreshHiddenPrices({ fs: rt.store.fs, env, fetchImpl: deps.fetchImpl, now });
+        if (r.status === 'skipped') return fail(503, 'ub_not_configured');
+        return json({ ok: true, count: r.count });
+      } catch (e) {
+        log(`[ub-catalog] admin ub_prices алдаа: ${describeError(e)}`);
+        return fail(502, 'ub_error');
+      }
     },
 
     /** «Буруу» үнэлгээ хадгалсны дараа (admin) — хямралын шалгалт (≤ 200 read; инстанст 30 с-д нэг) */

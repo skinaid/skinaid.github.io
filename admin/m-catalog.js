@@ -8,7 +8,8 @@ import { db, $, $$, esc, str, fmtDate, errText, session, setStatus, DEFAULTS, CA
 import { ICON, dialog, snack, announce, registerForm, refreshDirty, showErrors, clearErrors, clearFieldError, autoGrow, captureFocus } from './ui.js?v=720127aa';
 import { normSearch } from './lib.js?v=a9638bd3';
 import { renderPages } from './m-pages.js?v=26a525a2';
-import { UB_LINKS, DESC_MAX, applyUbCatalog, fetchUbServices, siteHidden } from '../assets/js/ub-catalog.js?v=e905b158';
+import { api, apiMsg } from './messenger-api.js?v=047b8b55';
+import { UB_LINKS, DESC_MAX, applyUbCatalog, fetchUbServices, siteHidden } from '../assets/js/ub-catalog.js?v=b7d125a2';
 import { API_BASE, PUBLISHABLE_KEY } from '../assets/js/ubbeauty-config.js?v=8eb0f74a';
 
 const ref = doc(db, 'settings', 'catalog');
@@ -22,6 +23,27 @@ let saving = false;
 // ubMeta = мөрийн id → { ub, ubOff } (UB татаж чадаагүй үед хадгалсан утгаар hidden-ийг тооцно)
 let ub = null;
 const ubMeta = new Map();
+/** UB Beauty-д нийтэд нуусан үнэ (admin_private/ub_prices — зөвхөн admin уншина): мөрийн id → '₮80,000'.
+ *  Үнийн талбарын PLACEHOLDER-т л харуулна — утга (value) биш тул хадгалахад settings/catalog руу (нийтэд) ОРОХГҮЙ. */
+let privatePrices = {};
+const privateRef = doc(db, 'admin_private', 'ub_prices');
+const PRIVATE_TITLE = 'Үйлчлүүлэгчдэд нуусан үнэ (UB Beauty «Үнийг нийтэд харуулах» унтраалттай) — зөвхөн танд харагдана';
+function showPrivatePrice(tr) {
+  const id = tr.dataset.id, input = $('[data-k="p"]', tr);
+  if (!input) return;
+  const v = !input.value && UB_LINKS[id] ? privatePrices[id] : '';
+  input.placeholder = v || '';   // тасархай хүрээ + tooltip = «нуусан» (нарийн баганад текст тасрахгүй)
+  input.classList.toggle('is-private', !!v);
+  if (v) { input.title = PRIVATE_TITLE; input.setAttribute('aria-description', 'Үйлчлүүлэгчдэд нуусан үнэ: ' + v); }
+}
+async function loadPrivatePrices() {
+  try {
+    const snap = await getDoc(privateRef);
+    const p = snap.exists() ? snap.data().prices : null;
+    privatePrices = p && typeof p === 'object' ? p : {};
+    return snap.exists() ? snap.data().updatedAt : null;
+  } catch (_) { privatePrices = {}; return null; }
+}
 // UB Beauty-ийн өөрчлөлт хадгалагдаагүй (зөвхөн хувилбар `v` өөрчлөгдсөн бол хүснэгтийн DOM ижил тул тусад нь тэмдэглэнэ)
 let ubPending = false;
 const ubBox = $('#ubSync'), ubMsg = $('#ubSyncMsg'), btnUb = $('#btnUbSync');
@@ -68,6 +90,7 @@ const svcRow = (s) => {
     <td class="c-hide"><button class="btn-icon btn-icon--danger" type="button" data-act="rm" title="Мөр устгах">${ICON.trash}</button></td>`;
   $('[data-k="n"]', tr).value = s.n; $('[data-k="d"]', tr).value = s.d; $('[data-k="t"]', tr).value = s.t; $('[data-k="p"]', tr).value = s.p;
   labelRow(tr);
+  showPrivatePrice(tr);
   return tr;
 };
 const pkgRow = (p) => {
@@ -187,7 +210,7 @@ export async function load() {
   loadBox.hidden = true;
   setStatus(status, 'Ачаалж байна…', '');
   try {
-    const snap = await getDoc(ref);
+    const [snap] = await Promise.all([getDoc(ref), loadPrivatePrices()]);
     let services, packages;
     if (snap.exists() && Array.isArray(snap.data().services)) {
       const c = snap.data();
@@ -343,4 +366,26 @@ registerForm('catalog', {
   discard: () => { if (saving || !saved) return; ubPending = false; const s = JSON.parse(saved); fill(s.services, s.packages); clearErrors(form); refreshDirty(); },
   reset: () => { ready = false; saved = ''; ubPending = false; lock(true); clearErrors(form); setStatus(status, '', ''); },
   anchor: $('#catActions'),
+});
+
+/* ---------- Нуусан үнэ (UB Beauty нууц түлхүүрээр, сервер) ---------- */
+const btnPrivate = $('#btnUbPrices');
+if (btnPrivate) btnPrivate.addEventListener('click', async () => {
+  if (!ready) return;
+  btnPrivate.disabled = true;
+  setStatus(status, 'Нуусан үнийг UB Beauty-гээс шинэчилж байна…', '');
+  try {
+    const r = await api('ub_prices', {}, { timeoutMs: 30_000 });
+    await loadPrivatePrices();
+    $$('tr[data-id]', svcBody).forEach(showPrivatePrice);
+    const n = Object.keys(privatePrices).length;
+    const msg = r.throttled ? 'Саяхан шинэчилсэн — хэдэн секундын дараа дахин оролдоно уу.' : `Нуусан үнэ шинэчлэгдлээ (${n} үйлчилгээ). Зөвхөн танд харагдана.`;
+    setStatus(status, msg, r.throttled ? '' : 'ok');
+    announce(msg);
+  } catch (e) {
+    const msg = e && e.apiCode === 'ub_not_configured'
+      ? 'UB Beauty-ийн нууц түлхүүр (UBBEAUTY_SECRET_KEY) серверт тохируулагдаагүй байна.'
+      : `Нуусан үнийг шинэчилж чадсангүй: ${apiMsg(e)}`;
+    setStatus(status, msg, 'err');
+  } finally { btnPrivate.disabled = false; }
 });

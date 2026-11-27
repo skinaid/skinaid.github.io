@@ -111,6 +111,9 @@ export function parseUbServices(json) {
       priceMax: posInt(s.price_max),
       // fail-closed: UB Beauty үнэ нууснаа тодорхой хэлээгүй ч үнэ ирээгүй бол нуусан гэж үзнэ
       priceHidden: s.price_hidden === true || posInt(s.price) === null,
+      // Нуусан үнэ — ЗӨВХӨН нууц (sk) түлхүүрийн хариунд (сервер). Нийтэд хэзээ ч бичихгүй: hiddenPrices → admin_private
+      internalPrice: posInt(s.internal_price),
+      internalPriceMax: posInt(s.internal_price_max),
     });
   }
   return out;
@@ -142,6 +145,32 @@ export function ubFields(ids, ub) {
   const d = !multi && present[0].description ? present[0].description : null;
   const v = multi ? present.map((s) => ({ n: s.name, t: formatDuration(s.duration), p: priceOf(s), d: s.description })) : null;
   return { off: false, t, p, d, v, missing };
+}
+
+/**
+ * Админд л: нийтэд нуусан үнэтэй холбоотой мөрийн жинхэнэ үнэ — { мөрийн id: '₮80,000' | '₮44,000-с' }.
+ * UB Beauty-ийн нууц (sk) түлхүүрийн `internal_price` шаардана (нийтийн түлхүүрээр хоосон). Үр дүнг ЗӨВХӨН
+ * `admin_private/ub_prices` (admin уншина, сайт уншдаггүй) — `settings/catalog` руу хэзээ ч бичихгүй.
+ * @param {readonly object[]} services
+ * @param {Map<string, object>} ub
+ * @param {Readonly<Record<string, readonly string[]>>} [links]
+ * @returns {Record<string, string>}
+ */
+export function hiddenPrices(services, ub, links = UB_LINKS) {
+  const out = {};
+  for (const r of Array.isArray(services) ? services : []) {
+    const ids = links[r?.id];
+    if (!ids) continue;
+    const present = ids.map((id) => ub.get(id.toLowerCase())).filter(Boolean);
+    if (!present.length || !present.some((s) => s.priceHidden)) continue;
+    const priceOfRow = (s) => (s.priceHidden ? s.internalPrice : s.price);
+    const maxOfRow = (s) => (s.priceHidden ? s.internalPriceMax : s.priceMax);
+    const prices = present.map(priceOfRow);
+    if (prices.some((p) => !p)) continue;
+    const single = present.length === 1 && !(maxOfRow(present[0]) && maxOfRow(present[0]) > prices[0]);
+    out[r.id] = single ? money(prices[0]) : money(Math.min(...prices)) + '-с';
+  }
+  return out;
 }
 
 /** Хувилбаруудын харьцуулах тамга — талбар бүрээр (Firestore map-ийн түлхүүрийг эрэмбэлж буцаадаг тул JSON дараалал зөрнө) */
