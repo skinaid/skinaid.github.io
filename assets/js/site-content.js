@@ -220,10 +220,12 @@ export function validVideos(items) {
 
 /** «Видео бичлэг» хэсэг: бичлэг байвал харагдана, үгүй бол нуугдана. Зураг дээр дарахад main.js тоглуулагчийг нээнэ. */
 export function applyVideos(doc, items) {
+  const visible = validVideos(items) ? items.filter((item) => !item.hidden) : [];
+  // Цэсний «Бичлэг» холбоос (бүх хуудсанд) — бичлэгтэй үед л харагдана
+  for (const link of doc.querySelectorAll('[data-videos-link]')) link.hidden = !visible.length;
   const section = doc.querySelector('#videos');
   const grid = section?.querySelector('[data-videos]');
   if (!grid) return;
-  const visible = validVideos(items) ? items.filter((item) => !item.hidden) : [];
   grid.replaceChildren(...visible.map((item) => {
     const id = youtubeId(item.url);
     const title = item.title.trim();
@@ -331,7 +333,7 @@ export function renderPublicContent(doc, path, values, common, remember = false)
       }
       applyFaq(doc, values[FAQ_KEY]);
     }
-  }
+  } else applyVideos(doc, common[VIDEO_KEY]);   // дэд хуудас: зөвхөн цэсний «Бичлэг» холбоос (нүүрний бичлэгээр)
 }
 
 // Only remove baked changes when a newer record arrives. An unavailable read keeps the snapshot.

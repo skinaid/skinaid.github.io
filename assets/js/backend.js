@@ -5,7 +5,7 @@
    Энэ файл ачаалагдахгүй (CDN блок, offline) бол main.js fallback сувгуудаа харуулна.
    Firestore хүсэлт бүр App Check (reCAPTCHA) token-той явна — app-check.js.
    ========================================================================== */
-import { pageKey } from './site-content.js?v=c6faf93c';
+import { pageKey } from './site-content.js?v=b2ee7878';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp, setLogLevel } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore-lite.js';
 import { firebaseConfig } from './firebase-config.js?v=feaeafa8';

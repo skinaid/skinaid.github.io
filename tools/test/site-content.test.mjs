@@ -70,6 +70,7 @@ test('video section shows only while it has visible videos, and restores to hidd
   const doc = new JSDOM(readFileSync(new URL('../../index.html', import.meta.url), 'utf8')).window.document;
   const section = doc.querySelector('#videos');
   assert.ok(section.hidden, 'static page ships the section hidden');
+  assert.ok([...doc.querySelectorAll('[data-videos-link]')].every((el) => el.hidden), 'menu links ship hidden');
   const before = contentFields(doc, '/').map((f) => f.id);
   const items = [
     { url: 'https://youtu.be/dQw4w9WgXcQ', title: 'Танилцуулга <b>', hidden: false },
@@ -85,9 +86,28 @@ test('video section shows only while it has visible videos, and restores to hidd
   assert.equal(cards[0].querySelector('b'), null, 'titles are text, never HTML');
   assert.ok(cards[1].classList.contains('video--short'));
   assert.deepEqual(contentFields(doc, '/').map((f) => f.id), before, 'video cards never become editable fields');
+  const links = [...doc.querySelectorAll('[data-videos-link]')];
+  assert.equal(links.length, 3, 'header, drawer, footer');
+  assert.ok(links.every((el) => !el.hidden), 'menu links appear with the section');
   restoreContent(doc);
   assert.ok(section.hidden);
+  assert.ok(links.every((el) => el.hidden), 'and hide again without videos');
   assert.equal(section.querySelectorAll('a.video').length, 0);
   applyVideos(doc, [{ url: 'https://example.org/x', title: '', hidden: false }]);
   assert.ok(section.hidden, 'invalid records render nothing');
+});
+
+test('sub pages show the menu link from the home page videos', async () => {
+  const { JSDOM } = await import('jsdom');
+  const { renderPublicContent, VIDEO_KEY } = await import('../../assets/js/site-content.js');
+  const { readFileSync } = await import('node:fs');
+  const doc = new JSDOM(readFileSync(new URL('../../privacy/index.html', import.meta.url), 'utf8')).window.document;
+  const links = [...doc.querySelectorAll('[data-videos-link]')];
+  assert.equal(links.length, 3);
+  assert.ok(links.every((el) => el.hidden));
+  assert.equal(doc.querySelector('a[href="/#videos"]').textContent, 'Бичлэг');
+  renderPublicContent(doc, '/privacy', {}, { [VIDEO_KEY]: [{ url: 'https://youtu.be/dQw4w9WgXcQ', title: '', hidden: false }] });
+  assert.ok(links.every((el) => !el.hidden));
+  renderPublicContent(doc, '/privacy', {}, { [VIDEO_KEY]: [{ url: 'https://youtu.be/dQw4w9WgXcQ', title: '', hidden: true }] });
+  assert.ok(links.every((el) => el.hidden));
 });
