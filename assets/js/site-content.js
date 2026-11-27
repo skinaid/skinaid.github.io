@@ -60,7 +60,7 @@ export function contentFields(doc, path, { includeCommon = false } = {}) {
       el.matches('.about__img-sub img') ? 'Бидний тухай · Жижиг зураг' :
       el.matches('.about__img-main img') ? 'Бидний тухай · Үндсэн зураг' : null;
     const context = special || card?.querySelector('h3,.testi__tag')?.textContent.trim();
-    const label = [context, attrs[kind] || textLabels[el.tagName] || 'Бичвэр'].filter(Boolean).join(' · ');
+    const label = [context, el.dataset.contentLabel || attrs[kind] || textLabels[el.tagName] || 'Бичвэр'].filter(Boolean).join(' · ');
     // Keep photo overrides when a developer replaces the underlying static photo file.
     const signature = special ? special : value;
     const sig = hash([group, kind, el.tagName, signature].join('\0'));
@@ -68,7 +68,11 @@ export function contentFields(doc, path, { includeCommon = false } = {}) {
     const nth = occurrences.get(occurrenceKey) || 0;
     occurrences.set(occurrenceKey, nth + 1);
     fields.push({
-      id: sig + '-' + nth, group, label, kind, value, common,
+      id: sig + '-' + nth,
+      group: path === '/' && el.closest('.marquee') ? 'Технологийн мөр' :
+        path === '/' && el.closest('.booking') ? 'Захиалгын маягт' :
+        path === '/' && el.closest('#treatments') && el.closest('.scroller-wrap') === null && el.closest('.container')?.querySelector('#treatList') ? 'Үйлчилгээний жагсаалт' : group,
+      label, kind, value, common,
       remember() {
         const entries = JSON.parse(el.getAttribute('data-content-original') || '[]');
         if (node) entries.push({ index: [...el.childNodes].indexOf(node), text: node.data });

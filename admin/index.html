@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=e22f516c">
-  <link rel="stylesheet" href="/admin/admin.css?v=a1e57964">
+  <link rel="stylesheet" href="/admin/admin.css?v=9fd22172">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -136,18 +136,20 @@
       <section class="view" id="view-content" aria-labelledby="h-content" hidden>
         <div class="main__head"><div><h1 id="h-content">Мэдээлэл засах</h1><p>Хуудас сонгоод текст, зураг, холбоосоо засна.</p></div></div>
         <div class="panel actions" aria-label="Агуулгын бусад засварлагч">
-          <a class="btn btn--outline btn--sm" href="#/home">Hero ба зөвлөгөөний карт</a>
+          <a class="btn btn--outline btn--sm" href="#/home/hero">Эхний баннер ба зөвлөгөөний карт</a>
           <a class="btn btn--outline btn--sm" href="#/settings">Утас, имэйл, ажлын цаг</a>
           <a class="btn btn--outline btn--sm" href="#/catalog">Үйлчилгээ ба багц</a>
           <a class="btn btn--outline btn--sm" href="#/pages">Эмчилгээний хуудасны хяналт</a>
         </div>
+        <div id="contentEditorMount">
         <form id="contentForm" novalidate>
-          <div class="panel field"><label for="contentPage">Хуудас</label><select id="contentPage"></select></div>
+          <div class="panel field" id="contentPagePicker"><label for="contentPage">Хуудас</label><select id="contentPage"></select></div>
           <datalist id="contentPhotos"></datalist>
           <div class="actions" id="contentShortcuts" hidden>
             <button type="button" class="btn btn--outline btn--sm" data-content-photo="Эмчийн үзлэг, оношлогооны зураг">Эмчийн үзлэгийн зураг</button>
             <button type="button" class="btn btn--outline btn--sm" data-content-photo="Бидний тухай · Жижиг зураг">Бидний тухай · Жижиг зураг</button>
           </div>
+          <nav id="contentSectionNav" aria-label="Нүүр хуудасны хэсгүүд" hidden></nav>
           <div id="contentSections"></div>
           <div id="contentPreviewBox" class="panel" hidden></div>
           <div class="actions" id="contentActions">
@@ -158,11 +160,22 @@
             <span role="status" id="contentStatus"></span>
           </div>
         </form>
+        </div>
       </section>
 
-      <section class="view" id="view-home" aria-labelledby="h-home" hidden>
+      <section class="view" id="view-home" aria-labelledby="h-home-all" hidden>
+        <div class="main__head"><div><h1 id="h-home-all">Нүүр хуудас</h1><p>Засах хэсгээ сонгоод бичвэр, зураг, холбоосоо шинэчилнэ үү.</p></div></div>
+        <div class="panel actions" aria-label="Нүүр хуудасны бусад тохиргоо">
+          <a class="btn btn--outline btn--sm" href="#/home/hero">Эхний баннер ба зөвлөгөөний карт</a>
+          <a class="btn btn--outline btn--sm" href="#/catalog">Үйлчилгээ ба багц</a>
+          <a class="btn btn--outline btn--sm" href="#/settings">Холбоо барих ба захиалгын тохиргоо</a>
+        </div>
+        <div id="homeEditorMount"></div>
+      </section>
+
+      <section class="view" id="view-home-hero" aria-labelledby="h-home" hidden>
         <div class="main__head">
-          <div><h1 id="h-home">Нүүр хуудас</h1><p>Нүүрний эхний хэсэг (hero) болон «Зөвлөгөө» картууд. Хадгалмагц зочдод дараагийн ачааллаас харагдана.</p></div>
+          <div><h1 id="h-home">Эхний баннер ба зөвлөгөөний карт</h1><a href="#/home">← Нүүр хуудасны бүх хэсэг</a><p>Нүүрний эхний хэсэг (hero) болон «Зөвлөгөө» картууд. Хадгалмагц зочдод дараагийн ачааллаас харагдана.</p></div>
           <div class="actions actions--head">
             <button class="btn btn--outline btn--sm" type="button" id="btnHomeReload">Дахин ачаалах</button>
             <button class="btn btn--outline btn--sm" type="button" id="btnHomeDefaults">Анхны утгаар дүүргэх</button>
@@ -519,6 +532,6 @@
   <script src="/admin/home-data.js?v=4ea81ec8"></script>
   <script src="/admin/clinical-sources.js?v=86a5934a"></script>
   <script src="/admin/content-pages.js?v=0778a65b"></script>
-  <script type="module" src="/admin/admin.js?v=ea737a4d"></script>
+  <script type="module" src="/admin/admin.js?v=c323b9de"></script>
 </body>
 </html>
