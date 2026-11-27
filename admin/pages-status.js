@@ -163,25 +163,6 @@ window.SKINAID_PAGES_STATUS = {
    "sitePrice": "Эмчийн үзлэгийн дараа тодорхойлно"
   },
   {
-   "slug": "ultraformer-hifu",
-   "h1": "Ультраформер III (HIFU) арьс чангалах",
-   "primary": "ультраформер",
-   "week": 4,
-   "weekStart": "2026-11-30",
-   "stage": "planned",
-   "reviewer": null,
-   "reviewerConsent": false,
-   "lastReviewed": null,
-   "url": null,
-   "catalogIds": [
-    "lift-1"
-   ],
-   "priceIds": [
-    "lift-1"
-   ],
-   "sitePrice": "₮300,000-с"
-  },
-  {
    "slug": "botoks",
    "h1": "Ботулинум токсин (ботокс) тарилга",
    "primary": "ботокс тарилга",

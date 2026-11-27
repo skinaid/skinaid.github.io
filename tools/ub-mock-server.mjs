@@ -39,7 +39,7 @@ const services = [
   { id: '6f1c2a10-0000-4000-8000-000000000002', name: 'Батганы цогц эмчилгээ', category: '02. Батга, сорви', duration_min: 60, price: 80000, price_max: 120000 },
   { id: '6f1c2a10-0000-4000-8000-000000000003', name: 'Сорвины лазер эмчилгээ', category: '02. Батга, сорви', duration_min: 45, price: 150000, price_max: null },
   { id: '6f1c2a10-0000-4000-8000-000000000004', name: 'Rejuran Healer', category: '03. Тарилга', duration_min: 60, price: 450000, price_max: null },
-  { id: '6f1c2a10-0000-4000-8000-000000000005', name: 'Ультраформер III (HIFU)', category: '04. Арьс чангалах', duration_min: 90, price: 300000, price_max: 900000 },
+  { id: '6f1c2a10-0000-4000-8000-000000000005', name: 'Моно Thread утсан эмчилгээ', category: '04. Арьс чангалах', duration_min: 90, price: 300000, price_max: 900000 },
   // Эмнэлэг үнийг НУУСАН (UB Beauty 0212 «Үнийг нийтэд харуулах» унтраалттай): API price: null, price_hidden: true;
   // төлөх дүн (prepay) = жинхэнэ үнэ → зөвхөн payment.amount-д
   { id: '6f1c2a10-0000-4000-8000-000000000006', name: 'REJURAN Healer 2 мл', category: '03. Тарилга', duration_min: 60, price: 750000, price_max: null, hidden: true },

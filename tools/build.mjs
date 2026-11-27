@@ -104,6 +104,11 @@ const contentErrors = [...sdkErrors], contentWarnings = [];
       owner.set(id, p.slug);
     }
   }
+  // retiredLegacy: зогссон үйлчилгээний хуучин URL — category нь hub-ийн хэсэг (буух газар) байх ёстой
+  for (const r of content.retiredLegacy) {
+    if (!r || !Object.prototype.hasOwnProperty.call(catalog.cats, r.category)) contentErrors.push(`content/pipeline.mjs: retiredLegacy — category "${r && r.category}" catalog-defaults.js cats-д алга`);
+    else if (!Array.isArray(r.legacy) || !r.legacy.length) contentErrors.push(`content/pipeline.mjs: retiredLegacy "${r.category}" — legacy хоосон`);
+  }
 }
 { // content/hub.mjs: эмнэлгийн мэдэгдэлгүй, тэмдэггүй, бүрэн (эхний хуудастай хамт нийтлэгдэнэ)
   const hub = content.hub;
@@ -379,8 +384,13 @@ if (PREVIEW) {
     ? content.pipeline.filter((p) => !visibleSlugs.has(p.slug) && !blockedSlugs.has(p.slug))
       .map((p) => ({ slug: p.slug, legacy: p.legacy || [], dest: '/emchilgee#' + p.category, permanent: false }))
     : [];
+  // Зогссон үйлчилгээ (content/pipeline.mjs retiredLegacy): хуудас гарахгүй тул hub-ийн ангилал руу 307 хэвээр үлдэнэ
+  const retired = hubLive
+    ? content.retiredLegacy.filter((x) => x && Array.isArray(x.legacy))
+      .map((x) => ({ slug: 'retired:' + x.category, legacy: x.legacy, dest: '/emchilgee#' + x.category, permanent: false }))
+    : [];
   const r = manageRedirects(read('vercel.json'),
-    [...visible.map((pg) => ({ slug: pg.slug, legacy: [...new Set([...(pg.legacy || []), ...pipeLegacy(pg.slug)])] })), ...pending],
+    [...visible.map((pg) => ({ slug: pg.slug, legacy: [...new Set([...(pg.legacy || []), ...pipeLegacy(pg.slug)])] })), ...pending, ...retired],
     sourceToRegExp, { liveSlugs: new Set([...visibleSlugs, ...blockedSlugs]) });
   contentErrors.push(...r.errors.map((e) => 'vercel.json: ' + e));
   contentWarnings.push(...r.warnings);
