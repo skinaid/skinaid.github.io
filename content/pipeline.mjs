@@ -29,7 +29,7 @@ export const pipeline = [
     bookingOption: 'Сорви, нүхжилт', legacy: ['/service-page/vivace', '/service-page/mts-microneedling-therapy-бичил-зүүн-эмчилгээ'] },
   { slug: 'batga', week: 2, reviewer: null, category: 'acne', h1: 'Батга эмчилгээ',
     primary: 'батга эмчилгээ', secondary: ['батганы үрэвсэл', 'нуруу цээжний батга', 'өсвөр насны батга', 'карбокси'],
-    catalogIds: ['acne-1', 'acne-2', 'acne-3', 'acne-4', 'acne-5'], alsoIds: [], related: ['batganii-sorvi', 'nusuu-tolbo'],
+    catalogIds: ['acne-1', 'acne-2', 'ub-cdce1283', 'acne-3', 'ub-e20aa0f5', 'acne-4', 'acne-5'], alsoIds: [], related: ['batganii-sorvi', 'nusuu-tolbo'],
     bookingOption: 'Батга эмчилгээ', legacy: [
       '/service-page/батга-үрэвсэл',
       '/service-page/үрэвсэлт-батганы-нэг-удаагийн-эмчилгээ',
@@ -52,7 +52,7 @@ export const pipeline = [
     bookingOption: 'Сорви, нүхжилт', legacy: ['/service-page/laser-эмчилгээ'] },
   { slug: 'rejuran-pdrn', week: 3, reviewer: null, category: 'inject', h1: 'Rejuran ба PDRN (загасан) тарилга',
     primary: 'rejuran тарилга', secondary: ['загасан тарилга', 'PDRN тарилга', 'Cellbooster Glow', 'Lapuroon', 'skin booster'],
-    catalogIds: ['inject-1', 'inject-3', 'inject-4', 'inject-6'], alsoIds: [], related: ['juvelook-facetem', 'nuur-archilgaa'],
+    catalogIds: ['inject-3', 'ub-5d5babeb', 'inject-4'], alsoIds: [], related: ['juvelook-facetem', 'nuur-archilgaa'],
     bookingOption: 'Тарилга эмчилгээ (Rejuran, филлер, ботокс)', legacy: [
       '/service-page/загасан-тарилга',
       '/service-page/rejuran-4ml-тарилга',
@@ -70,7 +70,7 @@ export const pipeline = [
     ] },
   { slug: 'botoks', week: 5, reviewer: null, category: 'anti', h1: 'Ботулинум токсин (ботокс) тарилга',
     primary: 'ботокс тарилга', secondary: ['суганы хөлрөлт', 'V-line ботокс', 'үрчлээний тарилга'],
-    catalogIds: ['anti-1', 'minor-3'], alsoIds: [], related: ['filler'],
+    catalogIds: ['anti-1', 'ub-5b8e93b2', 'ub-59dcae56', 'ub-ae2ae2d0', 'minor-3'], alsoIds: [], related: ['filler'],
     bookingOption: 'Тарилга эмчилгээ (Rejuran, филлер, ботокс)', legacy: [
       '/service-page/ботокс',
       '/service-page/хуян-арилгах-ботокс',
@@ -79,7 +79,7 @@ export const pipeline = [
     ] },
   { slug: 'nusuu-tolbo', week: 6, reviewer: null, category: 'laser', h1: 'Нөсөө, толбо, улайлтын лазер эмчилгээ',
     primary: 'нөсөө толбо арилгах', secondary: ['пигмент лазер', 'IPL улайлт', 'сэвх арилгах'],
-    catalogIds: ['laser-4', 'laser-3', 'glow-5'], alsoIds: [], related: ['batga', 'nuur-archilgaa'],
+    catalogIds: ['glow-5'], alsoIds: [], related: ['batga', 'nuur-archilgaa'],
     bookingOption: 'Лазер, гэрлэн эмчилгээ', legacy: [
       '/service-page/нөсөө-лазер-эмчилгээ-pigmentation-laser',
       '/service-page/ipl-гэрлэн-эмчилгээ',
@@ -97,7 +97,7 @@ export const pipeline = [
     ] },
   { slug: 'filler', week: 7, reviewer: null, category: 'anti', h1: 'Филлер тарилга',
     primary: 'филлер тарилга', secondary: ['уруулын филлер', 'филлер хайлуулах'],
-    catalogIds: ['anti-2', 'anti-5'], alsoIds: [], related: ['botoks', 'juvelook-facetem'],
+    catalogIds: ['anti-2', 'ub-d9de66bc', 'anti-5'], alsoIds: [], related: ['botoks', 'juvelook-facetem'],
     bookingOption: 'Тарилга эмчилгээ (Rejuran, филлер, ботокс)', legacy: [
       '/service-page/уруулын-филлер-1-мл',
       '/service-page/нүүрний-хэлбэр-засах-филлер',
@@ -105,7 +105,7 @@ export const pipeline = [
     ] },
   { slug: 'lazer-us-arilgah', week: 7, reviewer: null, category: 'laser', h1: 'Лазераар үс арилгах',
     primary: 'лазер үс арилгах', secondary: ['суганы үс арилгах', 'diode лазер', 'бикини лазер'],
-    catalogIds: ['laser-1', 'laser-2'], alsoIds: [], related: [],
+    catalogIds: ['laser-1', 'ub-658d61e1', 'ub-5698a797', 'ub-f85bb41c', 'ub-ea4037d0', 'ub-f97ea660', 'ub-ae428dee', 'ub-49369da7', 'ub-3bb3e4c9', 'ub-9bae0aaa', 'ub-b0d33383', 'ub-fc90ab96', 'ub-a0c53855', 'ub-69a3713b', 'ub-3235ebb8', 'ub-093b39fc'], alsoIds: [], related: [],
     bookingOption: 'Лазер, гэрлэн эмчилгээ', legacy: [
       '/service-page/ipl-үсний-ургалт-зогсоох-лазер',
       '/service-page/diode-laser-hair-removal',
@@ -127,7 +127,7 @@ export const pipeline = [
     bookingOption: 'Бусад / Мэдэхгүй байна', legacy: ['/service-page/үс-хуйх-оношлогоо', '/service-page/cellbooster-hair-үсний-мезо-тарилга'] },
   { slug: 'nuur-archilgaa', week: 8, reviewer: null, category: 'glow', h1: 'Нүүрний арчилгаа, химийн пийл, RF массаж',
     primary: 'нүүр цэвэрлэгээ', secondary: ['glass skin', 'химийн пийл', 'AHA пийл', 'RF массаж'],
-    catalogIds: ['glow-1', 'glow-2', 'glow-3', 'massage-1', 'massage-2', 'massage-3'], alsoIds: [], related: ['nuhjilt', 'rejuran-pdrn'],
+    catalogIds: ['glow-1', 'ub-d3f975e6', 'glow-2', 'glow-3', 'massage-1', 'massage-3'], alsoIds: [], related: ['nuhjilt', 'rejuran-pdrn'],
     bookingOption: 'Гоо сайхан, массаж', legacy: [
       '/service-page/rf-хүйтэн-массаж',
       '/service-page/glass-skin-therapy-массажгүй',
