@@ -9,6 +9,7 @@
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { auth, ADMIN_EMAILS, $, $$, errText, session, updateTitle } from './core.js?v=2c361933';
 import { ICON, dialog, setCurrentView, anyDirty, busyText, leaveBusy, refreshDirty, resetForms } from './ui.js?v=4ec734c0';
+import * as contentEditor from './m-content.js?v=1bb4d7c2';
 import * as bookings from './m-bookings.js?v=86d18531';
 import * as settings from './m-settings.js?v=7df0705b';
 import * as home from './m-home.js?v=540566f7';
@@ -79,7 +80,7 @@ function teardown() {
 }
 
 /* ---------- Hash routing: #/bookings, #/settings, #/home, #/catalog, #/pages, #/messenger ---------- */
-const VIEWS = ['bookings', 'settings', 'home', 'catalog', 'pages', 'messenger'];
+const VIEWS = ['bookings', 'settings', 'content', 'home', 'catalog', 'pages', 'messenger'];
 let firstRoute = true;
 const viewFromHash = () => { const v = (location.hash.match(/^#\/([a-z]+)/) || [])[1]; return VIEWS.includes(v) ? v : 'bookings'; };
 let currentRoute = '';
@@ -92,6 +93,7 @@ function route() {
   $('#topTitle').textContent = h1 ? h1.textContent : '';
   updateTitle({ view: h1 ? h1.textContent : '' });
   setCurrentView(view);
+  if (view === 'content') contentEditor.load();
   if (!firstRoute && h1) {   // цэс сольсон: шинэ хэсгийн гарчиг руу фокус (дэлгэц уншигч, гарын хэрэглэгч)
     h1.tabIndex = -1;
     h1.focus({ preventScroll: true });

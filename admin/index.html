@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/style.css?v=e22f516c">
-  <link rel="stylesheet" href="/admin/admin.css?v=4f59d994">
+  <link rel="stylesheet" href="/admin/admin.css?v=db9e3c27">
   <link rel="icon" type="image/png" sizes="48x48" href="/assets/img/favicon-48.png?v=044af2e2">
 </head>
 <body class="is-admin">
@@ -55,6 +55,7 @@
       <nav class="menu" aria-label="Үндсэн цэс">
         <a href="#/bookings" data-nav="bookings"><span class="nav__ic" data-icon="bookings"></span><span class="nav__label">Захиалга</span><span class="nav__short" aria-hidden="true">Захиалга</span><span class="count" id="newCount"><span class="sr-only">, шинэ: </span><span data-n>0</span></span><span class="nav__dirty sr-only"></span></a>
         <a href="#/settings" data-nav="settings"><span class="nav__ic" data-icon="settings"></span><span class="nav__label">Тохиргоо</span><span class="nav__short" aria-hidden="true">Тохиргоо</span><span class="nav__dirty sr-only"></span></a>
+        <a href="#/content" data-nav="content"><span class="nav__ic" data-icon="home"></span><span class="nav__label">Мэдээлэл засах</span><span class="nav__short" aria-hidden="true">Мэдээлэл</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/home" data-nav="home"><span class="nav__ic" data-icon="home"></span><span class="nav__label">Нүүр хуудас</span><span class="nav__short" aria-hidden="true">Нүүр</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/catalog" data-nav="catalog"><span class="nav__ic" data-icon="catalog"></span><span class="nav__label">Үйлчилгээ / Багц</span><span class="nav__short" aria-hidden="true">Үйлчилгээ</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/pages" data-nav="pages"><span class="nav__ic" data-icon="pages"></span><span class="nav__label">Эмчилгээний хуудас</span><span class="nav__short" aria-hidden="true">Хуудас</span><span class="nav__dirty sr-only"></span></a>
@@ -132,6 +133,26 @@
       </section>
 
       <!-- Модуль: Нүүр хуудас (settings/home) — hero + «Зөвлөгөө» картууд -->
+      <section class="view" id="view-content" aria-labelledby="h-content" hidden>
+        <div class="main__head"><div><h1 id="h-content">Мэдээлэл засах</h1><p>Хуудас сонгоод текст, зураг, холбоосоо засна.</p></div></div>
+        <div class="panel actions" aria-label="Агуулгын бусад засварлагч">
+          <a class="btn btn--outline btn--sm" href="#/home">Hero ба зөвлөгөөний карт</a>
+          <a class="btn btn--outline btn--sm" href="#/settings">Утас, имэйл, ажлын цаг</a>
+          <a class="btn btn--outline btn--sm" href="#/catalog">Үйлчилгээ ба багц</a>
+          <a class="btn btn--outline btn--sm" href="#/pages">Эмчилгээний хуудасны хяналт</a>
+        </div>
+        <form id="contentForm" novalidate>
+          <div class="panel field"><label for="contentPage">Хуудас</label><select id="contentPage"></select></div>
+          <datalist id="contentPhotos"></datalist>
+          <div id="contentSections"></div>
+          <div class="actions" id="contentActions">
+            <button class="btn btn--primary" id="contentSave" type="submit">Хадгалах</button>
+            <button class="btn btn--outline" id="contentRetry" type="button" hidden>Дахин оролдох</button>
+            <span role="status" id="contentStatus"></span>
+          </div>
+        </form>
+      </section>
+
       <section class="view" id="view-home" aria-labelledby="h-home" hidden>
         <div class="main__head">
           <div><h1 id="h-home">Нүүр хуудас</h1><p>Нүүрний эхний хэсэг (hero) болон «Зөвлөгөө» картууд. Хадгалмагц зочдод дараагийн ачааллаас харагдана.</p></div>
@@ -489,6 +510,7 @@
   <script src="/admin/pages-status.js?v=ffc92ad4"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=695218e6"></script>
-  <script type="module" src="/admin/admin.js?v=54ace6be"></script>
+  <script src="/admin/content-pages.js?v=f1a86bdd"></script>
+  <script type="module" src="/admin/admin.js?v=e8e66769"></script>
 </body>
 </html>

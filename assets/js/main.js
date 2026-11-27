@@ -218,14 +218,19 @@
   });
 
   /* ---------- FAQ accordion ---------- */
-  $$('.faq__item').forEach(item => {
-    const q = $('.faq__q', item);
+  document.addEventListener('click', (event) => {
+    const q = event.target.closest('.faq__q');
     if (!q) return;
-    q.addEventListener('click', () => {
-      const open = item.classList.contains('is-open');
-      $$('.faq__item.is-open').forEach(i => { i.classList.remove('is-open'); $('.faq__q', i).setAttribute('aria-expanded', 'false'); });
-      if (!open) { item.classList.add('is-open'); q.setAttribute('aria-expanded', 'true'); }
+    const item = q.closest('.faq__item');
+    const open = item.classList.contains('is-open');
+    $$('.faq__item.is-open').forEach((row) => {
+      row.classList.remove('is-open');
+      $('.faq__q', row).setAttribute('aria-expanded', 'false');
     });
+    if (!open) {
+      item.classList.add('is-open');
+      q.setAttribute('aria-expanded', 'true');
+    }
   });
 
   /* ---------- Site settings (Firestore settings/site, optional) ---------- */
@@ -384,7 +389,7 @@
   let backendPromise = null;
   const loadBackend = () => {
     if (!backendPromise) {
-      backendPromise = import('/assets/js/backend.js?v=c029d1fb')
+      backendPromise = import('/assets/js/backend.js?v=0ac8f7bb')
         .then(() => window.SkinAidBackend || null)
         .catch(() => { document.dispatchEvent(new Event('skinaid:backend-failed')); return null; });
     }

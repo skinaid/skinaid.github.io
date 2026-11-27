@@ -84,6 +84,16 @@ service cloud.firestore {
         && incoming().updatedBy == request.auth.token.email;
     }
 
+    // Нийтийн хуудсын текст, зураг, холбоосын өөрчлөлт. Зөвшөөрсөн талбарт л renderer хэрэглэнэ.
+    match /public_content/{page} {
+      allow get: if true;
+      allow create, update: if isAdmin()
+        && page.matches('^[a-z0-9~-]{1,100}$')
+        && incoming().keys().hasOnly(['values', 'updatedAt'])
+        && isStr(incoming().values, 2, 80000)
+        && incoming().updatedAt == request.time;
+    }
+
     // ---------- Тохиргоо (сайт уншина, admin бичнэ) ----------
     match /settings/{doc} {
       allow read: if true;
