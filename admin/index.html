@@ -55,7 +55,6 @@
       <nav class="menu" aria-label="Үндсэн цэс">
         <a href="#/bookings" data-nav="bookings"><span class="nav__ic" data-icon="bookings"></span><span class="nav__label">Захиалга</span><span class="nav__short" aria-hidden="true">Захиалга</span><span class="count" id="newCount"><span class="sr-only">, шинэ: </span><span data-n>0</span></span><span class="nav__dirty sr-only"></span></a>
         <a href="#/settings" data-nav="settings"><span class="nav__ic" data-icon="settings"></span><span class="nav__label">Тохиргоо</span><span class="nav__short" aria-hidden="true">Тохиргоо</span><span class="nav__dirty sr-only"></span></a>
-        <a href="#/content" data-nav="content"><span class="nav__ic" data-icon="home"></span><span class="nav__label">Мэдээлэл засах</span><span class="nav__short" aria-hidden="true">Мэдээлэл</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/home" data-nav="home"><span class="nav__ic" data-icon="home"></span><span class="nav__label">Нүүр хуудас</span><span class="nav__short" aria-hidden="true">Нүүр</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/catalog" data-nav="catalog"><span class="nav__ic" data-icon="catalog"></span><span class="nav__label">Үйлчилгээ / Багц</span><span class="nav__short" aria-hidden="true">Үйлчилгээ</span><span class="nav__dirty sr-only"></span></a>
         <a href="#/pages" data-nav="pages"><span class="nav__ic" data-icon="pages"></span><span class="nav__label">Эмчилгээний хуудас</span><span class="nav__short" aria-hidden="true">Хуудас</span><span class="nav__dirty sr-only"></span></a>
@@ -132,24 +131,22 @@
         </form>
       </section>
 
-      <!-- Модуль: Нүүр хуудас (settings/home) — hero + «Зөвлөгөө» картууд -->
-      <section class="view" id="view-content" aria-labelledby="h-content" hidden>
-        <div class="main__head"><div><h1 id="h-content">Мэдээлэл засах</h1><p>Хуудас сонгоод текст, зураг, холбоосоо засна.</p></div></div>
-        <div class="panel actions" aria-label="Агуулгын бусад засварлагч">
+      <section class="view" id="view-home" aria-labelledby="h-home-all" hidden>
+        <div class="main__head"><div><h1 id="h-home-all">Нүүр хуудас</h1><p>Засах хэсгээ сонгоод бичвэр, зураг, холбоосоо шинэчилнэ үү.</p></div></div>
+        <div class="panel actions" aria-label="Нүүр хуудасны бусад тохиргоо">
           <a class="btn btn--outline btn--sm" href="#/home/hero">Эхний баннер ба зөвлөгөөний карт</a>
-          <a class="btn btn--outline btn--sm" href="#/settings">Утас, имэйл, ажлын цаг</a>
           <a class="btn btn--outline btn--sm" href="#/catalog">Үйлчилгээ ба багц</a>
-          <a class="btn btn--outline btn--sm" href="#/pages">Эмчилгээний хуудасны хяналт</a>
+          <a class="btn btn--outline btn--sm" href="#/settings">Холбоо барих ба захиалгын тохиргоо</a>
         </div>
-        <div id="contentEditorMount">
+        <div id="homeEditorMount">
         <form id="contentForm" novalidate>
-          <div class="panel field" id="contentPagePicker"><label for="contentPage">Хуудас</label><select id="contentPage"></select></div>
+          <div class="panel field" id="contentPagePicker" hidden><label for="contentPage">Хуудас</label><select id="contentPage"></select></div>
           <datalist id="contentPhotos"></datalist>
           <div class="actions" id="contentShortcuts" hidden>
             <button type="button" class="btn btn--outline btn--sm" data-content-photo="Эмчийн үзлэг, оношлогооны зураг">Эмчийн үзлэгийн зураг</button>
             <button type="button" class="btn btn--outline btn--sm" data-content-photo="Бидний тухай · Жижиг зураг">Бидний тухай · Жижиг зураг</button>
           </div>
-          <nav id="contentSectionNav" aria-label="Нүүр хуудасны хэсгүүд" hidden></nav>
+          <nav id="contentSectionNav" aria-label="Нүүр хуудасны хэсгүүд"></nav>
           <div id="contentSections"></div>
           <div id="contentPreviewBox" class="panel" hidden></div>
           <div class="actions" id="contentActions">
@@ -161,16 +158,6 @@
           </div>
         </form>
         </div>
-      </section>
-
-      <section class="view" id="view-home" aria-labelledby="h-home-all" hidden>
-        <div class="main__head"><div><h1 id="h-home-all">Нүүр хуудас</h1><p>Засах хэсгээ сонгоод бичвэр, зураг, холбоосоо шинэчилнэ үү.</p></div></div>
-        <div class="panel actions" aria-label="Нүүр хуудасны бусад тохиргоо">
-          <a class="btn btn--outline btn--sm" href="#/home/hero">Эхний баннер ба зөвлөгөөний карт</a>
-          <a class="btn btn--outline btn--sm" href="#/catalog">Үйлчилгээ ба багц</a>
-          <a class="btn btn--outline btn--sm" href="#/settings">Холбоо барих ба захиалгын тохиргоо</a>
-        </div>
-        <div id="homeEditorMount"></div>
       </section>
 
       <section class="view" id="view-home-hero" aria-labelledby="h-home" hidden>
@@ -530,8 +517,6 @@
   <script src="/admin/pages-status.js?v=4a0c2dfa"></script>
   <script src="/assets/js/home-render.js?v=a84824d3"></script>
   <script src="/admin/home-data.js?v=4ea81ec8"></script>
-  <script src="/admin/clinical-sources.js?v=86a5934a"></script>
-  <script src="/admin/content-pages.js?v=0778a65b"></script>
-  <script type="module" src="/admin/admin.js?v=4f29ca90"></script>
+  <script type="module" src="/admin/admin.js?v=625efb64"></script>
 </body>
 </html>

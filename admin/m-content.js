@@ -10,7 +10,7 @@ const form = $('#contentForm');
 const page = $('#contentPage');
 const sections = $('#contentSections');
 const sectionNav = $('#contentSectionNav');
-let homeMode = false;
+const homeMode = true;   // «Мэдээлэл засах» цэс хасагдсан — зөвхөн нүүр хуудсыг засна
 const status = $('#contentStatus');
 const saveButton = $('#contentSave');
 const retry = $('#contentRetry');
@@ -53,7 +53,7 @@ const lock = () => {
   retry.disabled = loading || saving;
 };
 const pageOptions = window.SKINAID_CONTENT_PAGES || [{ path: '/', label: 'Нүүр хуудас' }];
-for (const entry of pageOptions.filter(p => !/^\/emchilgee\/[^/]+/.test(p.path))) page.add(new Option(entry.label, entry.path));
+for (const entry of pageOptions.filter(p => p.path === '/')) page.add(new Option(entry.label, entry.path));
 const planned = document.createElement('optgroup');
 planned.label = 'Эмчээр хянуулах ноорог';
 for (const [slug, source] of Object.entries(clinicalSources)) planned.append(new Option(source.h1, 'draft:' + slug));
@@ -213,25 +213,7 @@ function render() {
   }
 }
 
-export async function mount(onHome) {
-  homeMode = onHome;
-  const target = onHome ? $('#homeEditorMount') : $('#contentEditorMount');
-  if (form.parentNode !== target) target.append(form);
-  $('#contentPagePicker').hidden = onHome;
-  sectionNav.hidden = !onHome;
-  if (onHome && page.value !== '/') {
-    if (saving || (dirty() && !await dialog({
-      title: 'Өөр хуудасны засвар байна',
-      confirm: 'Хаяад нүүр хуудас нээх',
-      cancel: 'Засвартаа буцах',
-      danger: true,
-    }))) {
-      if (location.hash === '#/home') location.hash = '#/content';
-      return;
-    }
-    if (!homeMode) return;
-    page.value = '/';
-  }
+export function mount() {
   if (ready && original?.path === page.value) render();
   else load();
 }
