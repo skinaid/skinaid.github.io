@@ -10,7 +10,7 @@ import { uploadControl, queueImage, imagePreview, queuedImages, writeImages, cle
 import { doc, getDocFromServer, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import { $, $$, db, session, errText } from './core.js?v=2c361933';
 import { registerForm, refreshDirty, snack, dialog } from './ui.js?v=720127aa';
-import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=0fc2ebc3';
+import { contentFields, parseContent, safeValue, pageKey, MAX_PAYLOAD, MAX_VALUE, FAQ_KEY, faqItems, validFaq, VIDEO_KEY, youtubeId, validVideos, applyVideos, applyContent, applyFaq, cardLists, validCards, applyCards, restoreContent } from '../assets/js/site-content.js?v=c6faf93c';
 import { findClaims } from './claims.js?v=b71d5c91';
 
 const PATH = '/';
@@ -31,6 +31,9 @@ let baseline = {};
 let draft = {};
 let original = null;
 const faqList = { key: FAQ_KEY, group: 'Түгээмэл асуулт', name: 'Асуулт', fields: [['question', 'Асуулт'], ['answer', 'Хариулт']] };
+const videoList = { key: VIDEO_KEY, group: 'Видео бичлэг', name: 'Бичлэг', fields: [['url', 'YouTube холбоос'], ['title', 'Гарчиг', true]] };
+/** Жагсаалт бүрийн шалгалт (site-content.js) */
+const validOf = (spec) => spec === faqList ? validFaq : spec === videoList ? validVideos : (items) => validCards(spec, items);
 let lists = [];
 let listDefaults = {};
 let sourceDoc = null;
@@ -151,6 +154,7 @@ async function renderPreview() {
   applyContent(copyFields, draft);
   for (const list of cardLists) applyCards(copy, list, draft[list.key]);
   if (draft[FAQ_KEY]) applyFaq(copy, draft[FAQ_KEY]);
+  applyVideos(copy, (draft[VIDEO_KEY] || []).filter((item) => validVideos([item])));   // бичиж дуусаагүй мөрийг алгасна
   for (const img of copy.querySelectorAll('img[src]')) {
     const src = img.getAttribute('src');
     const local = imagePreview(src);
@@ -324,7 +328,10 @@ function fieldRow(field, section) {
 function renderList(body, spec) {
   const block = make('div', 'ce-list');
   const isFaq = spec.key === FAQ_KEY;
-  block.append(make('h3', 'ce-list__title', isFaq ? 'Асуулт, хариултууд' : 'Нэмэлт ' + spec.name.toLowerCase()));
+  const isVideo = spec === videoList;
+  const ordered = isFaq || isVideo;   // дарааллыг «Дээш / Доош»-оор (картууд байрлалын тоогоор)
+  block.append(make('h3', 'ce-list__title', isFaq ? 'Асуулт, хариултууд' : isVideo ? 'YouTube бичлэгүүд' : 'Нэмэлт ' + spec.name.toLowerCase()));
+  if (isVideo) block.append(make('p', 'hint', 'YouTube дээрх бичлэгийнхээ холбоосыг хуулж тавина (youtube.com/watch?v=…, youtu.be/…, Shorts). Бичлэг нэмэхэд сайтад «Видео бичлэг» хэсэг гарч ирнэ; бүгдийг нуувал эсвэл устгавал хэсэг нуугдана.'));
   const editor = make('div');
   editor.id = 'editor-' + spec.key;
   block.append(editor);
@@ -335,19 +342,38 @@ function renderList(body, spec) {
     items.forEach((item, i) => {
       const row = make('fieldset', 'ce-item');
       row.append(make('legend', '', spec.name + ' ' + (i + 1)));
-      const columns = isFaq ? spec.fields : [...spec.fields, ['position', 'Харагдах байрлал']];
+      const columns = ordered ? spec.fields : [...spec.fields, ['position', 'Харагдах байрлал']];
       for (const [key, label, optional] of columns) {
         const wrapper = make('label', 'field', label + (optional ? ' (заавал биш)' : ''));
         const input = make(['answer', 'text'].includes(key) ? 'textarea' : 'input');
         input.value = item[key];
-        input.maxLength = key === 'question' ? 240 : MAX_VALUE;
+        input.maxLength = key === 'question' ? 240 : isVideo ? (key === 'url' ? 200 : 120) : MAX_VALUE;
         if (key === 'image') input.setAttribute('list', 'contentPhotos');
         if (key === 'position') { input.type = 'number'; input.min = '1'; input.max = '99'; }
+        let check = null;
+        if (isVideo && key === 'url') {
+          input.inputMode = 'url';
+          input.placeholder = 'https://www.youtube.com/watch?v=…';
+          const thumb = make('img', 'ce-video__thumb');
+          thumb.alt = '';
+          thumb.referrerPolicy = 'no-referrer';
+          const note = make('p', 'hint');
+          check = () => {
+            const id = youtubeId(input.value);
+            thumb.hidden = !id;
+            if (id) thumb.src = 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+            else thumb.removeAttribute('src');
+            note.classList.toggle('is-err', !id && !!input.value.trim());
+            note.textContent = id ? '' : input.value.trim() ? 'YouTube-ийн холбоос танигдсангүй. Бичлэгийн «Хуваалцах» товчноос холбоосыг хуулна уу.' : '';
+          };
+          wrapper.append(input, note, thumb);
+        }
         input.addEventListener('input', () => {
           item[key] = key === 'position' ? input.valueAsNumber : input.value;
+          if (check) check();
           updateState();
         });
-        wrapper.append(input);
+        if (check) check(); else wrapper.append(input);
         row.append(wrapper);
         if (key === 'image') row.append(uploadControl(input, null, { label: 'Компьютер / утаснаас зураг оруулах' }));
       }
@@ -359,7 +385,7 @@ function renderList(body, spec) {
       hide.append(checkbox, ' Сайтаас нуух');
       const actions = make('div', 'actions');
       actions.append(hide);
-      if (isFaq) {
+      if (ordered) {
         const move = (next) => { [items[i], items[next]] = [items[next], items[i]]; redraw(next); };
         actions.append(button('↑ Дээш', () => move(i - 1), i === 0), button('↓ Доош', () => move(i + 1), i + 1 === items.length));
       }
@@ -369,11 +395,11 @@ function renderList(body, spec) {
     });
     const add = button('+ ' + spec.name + ' нэмэх', () => {
       const next = Object.fromEntries(spec.fields.map(([key]) => [key, '']));
-      if (!isFaq) next.position = items.length + sourceDoc.querySelectorAll(spec.grid + ' > ' + spec.item).length + 1;
+      if (!ordered) next.position = items.length + sourceDoc.querySelectorAll(spec.grid + ' > ' + spec.item).length + 1;
       if (spec.key === 'service-cards') next.cta = 'Дэлгэрэнгүй';
       items.push({ ...next, hidden: false });
       redraw(items.length - 1);
-    }, items.length >= 30);
+    }, items.length >= (isVideo ? 12 : 30));
     const foot = make('div', 'actions');
     foot.append(add);
     if (isFaq) foot.append(button('Анхны асуултуудаар дүүргэх', () => {
@@ -555,11 +581,11 @@ export async function load() {
       if (!stored || typeof stored !== 'object' || Array.isArray(stored) || original.raw.length > MAX_PAYLOAD) throw new Error('content-format');
     }
     baseline = parseContent(original.raw);
-    lists = [faqList, ...cardLists];
+    lists = [faqList, videoList, ...cardLists];
     listDefaults = Object.fromEntries(lists.map((spec) => [spec.key, spec === faqList ? faqItems(source) : []]));
     for (const spec of lists) {
       const stored = baseline[spec.key];
-      if (stored !== undefined && !(spec === faqList ? validFaq(stored) : validCards(spec, stored))) throw new Error('content-format');
+      if (stored !== undefined && !validOf(spec)(stored)) throw new Error('content-format');
     }
     draft = structuredClone(baseline);
     ready = true;
@@ -599,7 +625,7 @@ async function save() {
   }
   for (const spec of lists) {
     const items = listValue(draft, spec);
-    const valid = spec === faqList ? validFaq : (list) => validCards(spec, list);
+    const valid = validOf(spec);
     if (!valid(items)) {
       const editor = document.getElementById('editor-' + spec.key);
       search.value = '';
@@ -607,7 +633,7 @@ async function save() {
       openAll(editor);
       const row = editor.querySelectorAll('fieldset')[items.findIndex((item) => !valid([item]))];
       setTimeout(() => { row?.scrollIntoView({ block: 'center' }); row?.querySelector('input, textarea')?.focus(); }, 30);
-      message(spec.name + ' · Бичвэр, холбоос болон байрлалыг шалгана уу.');
+      message(spec === videoList ? 'Бичлэг · YouTube-ийн холбоосыг шалгана уу.' : spec.name + ' · Бичвэр, холбоос болон байрлалыг шалгана уу.');
       return;
     }
     if (same(items, listDefaults[spec.key])) delete values[spec.key];

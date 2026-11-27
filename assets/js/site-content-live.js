@@ -1,4 +1,4 @@
-import { parseContent, renderPublicContent, restoreContent } from './site-content.js?v=0fc2ebc3';
+import { parseContent, renderPublicContent, restoreContent } from './site-content.js?v=c6faf93c';
 
 const baked = document.querySelector('script[data-content-snapshot]');
 const snapshot = baked ? JSON.parse(baked.textContent) : {};
@@ -18,7 +18,7 @@ function apply(settings) {
 document.addEventListener('skinaid:settings', (event) => apply(event.detail));
 if (window.SkinAidBackend?.settings) apply(window.SkinAidBackend.settings);
 if (!document.querySelector('#bookForm')) {
-  const loadContent = () => import('./backend.js?v=9ce605f7').catch(() => {});
+  const loadContent = () => import('./backend.js?v=bbacfcef').catch(() => {});
   if (document.readyState === 'complete') loadContent();
   else window.addEventListener('load', loadContent, { once: true });
 }

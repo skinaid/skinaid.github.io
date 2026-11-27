@@ -217,6 +217,26 @@
     });
   });
 
+  /* ---------- Видео бичлэг: зураг дээр дарахад YouTube тоглуулагчийг газар дээр нь нээнэ ---------- */
+  document.addEventListener('click', (event) => {
+    const card = event.target.closest && event.target.closest('a.video[data-video-id]');
+    if (!card || event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
+    const id = card.dataset.videoId;
+    if (!/^[\w-]{11}$/.test(id)) return;
+    event.preventDefault();
+    const box = document.createElement('div');
+    box.className = card.className;
+    const frame = document.createElement('iframe');
+    frame.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&playsinline=1';
+    frame.title = card.getAttribute('aria-label') || 'Видео бичлэг';
+    frame.allow = 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen';
+    frame.allowFullscreen = true;
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    box.append(frame);
+    card.replaceWith(box);
+    frame.focus();
+  });
+
   /* ---------- FAQ accordion ---------- */
   document.addEventListener('click', (event) => {
     const q = event.target.closest('.faq__q');
@@ -397,7 +417,7 @@
   let backendPromise = null;
   const loadBackend = () => {
     if (!backendPromise) {
-      backendPromise = import('/assets/js/backend.js?v=9ce605f7')
+      backendPromise = import('/assets/js/backend.js?v=bbacfcef')
         .then(() => window.SkinAidBackend || null)
         .catch(() => { document.dispatchEvent(new Event('skinaid:backend-failed')); return null; });
     }

@@ -4,13 +4,13 @@ export const MAX_PAYLOAD = 80000;
 const groups = {
   header: 'Дээд цэс', footer: 'Доод хэсэг', hero: 'Эхний дэлгэц',
   services: 'Үйлчилгээ', promo: 'Урамшуулал', treatments: 'Онцлох эмчилгээ',
-  about: 'Бидний тухай', process: 'Үйлчлүүлэх дараалал', reviews: 'Сэтгэгдэл',
+  about: 'Бидний тухай', videos: 'Видео бичлэг', process: 'Үйлчлүүлэх дараалал', reviews: 'Сэтгэгдэл',
   faq: 'Түгээмэл асуулт', blog: 'Зөвлөгөө', contact: 'Холбоо барих', cta: 'Цаг захиалах уриалга', other: 'Бусад мэдээлэл',
 };
 const attrs = { map: 'Google Maps холбоос', position: 'Дараалал (0 бол нуух)', title: 'Тайлбар', src: 'Зураг', alt: 'Зургийн тайлбар', href: 'Холбоос', placeholder: 'Талбарын жишээ', content: 'Хайлтын мэдээлэл' };
 const shared = 'header.header,footer.footer,.drawer,.mobile-bar';
 const textLabels = { H1: 'Үндсэн гарчиг', H2: 'Гарчиг', H3: 'Дэд гарчиг', P: 'Тайлбар', A: 'Холбоосын нэр', BUTTON: 'Товчны нэр', TITLE: 'Хуудасны гарчиг' };
-const skip = 'script,style,svg,noscript,template,[data-home],#treatList,#treatChips,[data-site],[data-count],#faq .faq__item,#ub-done,#ub-alert,#ub-service,#ub-slots,.form__ok,.sr-only,[data-pack-count],[data-pack] h3,.pack__price strong';
+const skip = 'script,style,svg,noscript,template,[data-home],#treatList,#treatChips,[data-site],[data-count],#faq .faq__item,[data-videos],#ub-done,#ub-alert,#ub-service,#ub-slots,.form__ok,.sr-only,[data-pack-count],[data-pack] h3,.pack__price strong';
 const htmlSpace = /[\t\n\r ]+/g;
 const clean = (s) => s.replace(htmlSpace, ' ').trim();
 function hash(value) {
@@ -197,6 +197,63 @@ export function applyFaq(doc, items) {
   }));
 }
 
+export const VIDEO_KEY = 'video-items';
+
+/** YouTube холбоосоос бичлэгийн ID (watch?v=, youtu.be/, shorts/, embed/, live/) — танихгүй бол null */
+export function youtubeId(value) {
+  if (typeof value !== 'string' || value.length > 200) return null;
+  let url;
+  try { url = new URL(value.trim()); } catch { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password) return null;
+  const host = url.hostname.replace(/^(?:www|m|music)\./, '');
+  const id = host === 'youtu.be' ? url.pathname.slice(1).split('/')[0] :
+    host === 'youtube.com' || host === 'youtube-nocookie.com' ?
+      (url.pathname === '/watch' ? url.searchParams.get('v') : (url.pathname.match(/^\/(?:shorts|embed|live)\/([^/]+)/) || [])[1]) : null;
+  return id && /^[\w-]{11}$/.test(id) ? id : null;
+}
+
+export function validVideos(items) {
+  return Array.isArray(items) && items.length <= 12 && items.every((item) =>
+    item && youtubeId(item.url) !== null && typeof item.title === 'string' && item.title.length <= 120 &&
+    typeof item.hidden === 'boolean');
+}
+
+/** «Видео бичлэг» хэсэг: бичлэг байвал харагдана, үгүй бол нуугдана. Зураг дээр дарахад main.js тоглуулагчийг нээнэ. */
+export function applyVideos(doc, items) {
+  const section = doc.querySelector('#videos');
+  const grid = section?.querySelector('[data-videos]');
+  if (!grid) return;
+  const visible = validVideos(items) ? items.filter((item) => !item.hidden) : [];
+  grid.replaceChildren(...visible.map((item) => {
+    const id = youtubeId(item.url);
+    const title = item.title.trim();
+    const card = doc.createElement('a');
+    card.className = /\/shorts\//.test(item.url) ? 'video video--short' : 'video';
+    card.setAttribute('href', 'https://www.youtube.com/watch?v=' + id);
+    card.setAttribute('target', '_blank');
+    card.setAttribute('rel', 'noopener');
+    card.setAttribute('data-video-id', id);
+    card.setAttribute('aria-label', (title || 'Видео бичлэг') + ' — тоглуулах');
+    const img = doc.createElement('img');
+    img.setAttribute('src', 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg');
+    img.setAttribute('alt', '');
+    img.setAttribute('loading', 'lazy');
+    img.setAttribute('referrerpolicy', 'no-referrer');
+    const play = doc.createElement('span');
+    play.className = 'video__play';
+    play.setAttribute('aria-hidden', 'true');
+    card.append(img, play);
+    if (title) {
+      const caption = doc.createElement('span');
+      caption.className = 'video__title';
+      caption.textContent = title;
+      card.append(caption);
+    }
+    return card;
+  }));
+  section.hidden = !visible.length;
+}
+
 // Additional cards share the existing section grid and its original cards.
 export const cardLists = [
   { key: 'service-cards', group: groups.services, name: 'Үйлчилгээний карт', grid: '.bento', item: '.svc',
@@ -263,6 +320,7 @@ export function renderPublicContent(doc, path, values, common, remember = false)
   applyContent(fields, changes, remember);
   if (home) {
     for (const list of cardLists) applyCards(doc, list, values[list.key]);
+    applyVideos(doc, values[VIDEO_KEY]);
     if (validFaq(values[FAQ_KEY])) {
       const faq = doc.querySelector('#faq .faq');
       if (remember && faq) {
@@ -290,6 +348,7 @@ export function restoreContent(doc) {
     el.removeAttribute('data-content-original');
   }
   doc.querySelectorAll('[data-added-card]').forEach(el => el.remove());
+  applyVideos(doc, []);
   for (const parent of new Set([...doc.querySelectorAll('[data-content-order]')].map(el => el.parentElement))) {
     for (const el of [...parent.children].sort((a, b) => Number(a.dataset.contentOrder) - Number(b.dataset.contentOrder))) {
       el.removeAttribute('data-content-order');
